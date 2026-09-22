@@ -38,6 +38,7 @@ import { catalogKind } from '../src/shared/catalogKind'
 import { parseCrashDump, parseModLoaderLog } from '../src/main/diagnostics/modloaderLog'
 import { limitAdjusterNames, parseStreamIni, SAFE_STREAMING_MEMORY_MB } from '../src/main/game/streamIni'
 import { pluginEvidence } from '../src/main/formats/strings'
+import { assertGameNotRunning, gameExeNames, gameRunningVerdict, type RunningProcess } from '../src/main/game/running'
 import { signatureForArchive } from '../src/main/knowledge/signature'
 
 let failures = 0
@@ -527,6 +528,21 @@ const crashLog = [
 const mlCrash = parseCrashDump(crashLog)
 check('modloader.log: a crash dump is recognised', !!mlCrash, mlCrash)
 check('modloader.log: the faulting address is read from the dump', mlCrash?.address === '0x005B8E55', mlCrash?.address)
+// This dump reports the address the process faulted at - 0x400000 is already in
+// it. Treating it as a fault offset is what rendered this crash as 0x009B8E55.
+check('modloader.log: the dump address is marked as already absolute', mlCrash?.addressIsAbsolute === true, mlCrash)
+const mlAddressing = describeAbsoluteAddress(mlCrash?.module ?? '', mlCrash?.address ?? '')
+check(
+  'modloader.log: the crash address is shown as recorded, not re-based',
+  mlAddressing.display === '0x005B8E55' && mlAddressing.lookupAddress === '0x005B8E55',
+  mlAddressing
+)
+check(
+  'modloader.log: treating it as an offset would have produced 0x009B8E55',
+  resolveCrashAddress(mlCrash?.module ?? '', mlCrash?.address ?? '').display === '0x009B8E55' &&
+    mlAddressing.display !== '0x009B8E55',
+  resolveCrashAddress(mlCrash?.module ?? '', mlCrash?.address ?? '').display
+)
 check('modloader.log: the faulting module is read', mlCrash?.module === 'gta_sa.exe', mlCrash?.module)
 check('modloader.log: the backtrace is kept, innermost frame first', mlCrash?.backtrace.length === 2, mlCrash?.backtrace)
 check(
@@ -965,6 +981,73 @@ check(
     !isOwned(new Set(['modloader/vhud/data/radar.xml']), 'modloader/VHudExtra')
 )
 check('ownedPaths: slashes and case fold to one spelling', ownedKey('\\Scripts\\MixSets.ASI\\') === 'scripts/mixsets.asi')
+
+// --- the game is running ---------------------------------------------------
+// Mod Loader hot-reloads modloader\, so a write while the game is live crashes
+// it. The verdict below is the whole decision; the process table it reads is
+// injected here instead of being shelled out for.
+const saInstall = { path: 'C:\\Games\\GTA San Andreas', kind: 'sa' as const }
+const proc = (name: string, imagePath: string | null, pid = 4242): RunningProcess => ({ name, pid, imagePath })
+
+check('running: nothing running is a pass', gameRunningVerdict(saInstall, []).allowed)
+check('running: an unrelated process is a pass', gameRunningVerdict(saInstall, [proc('notepad.exe', 'C:\\Windows\\notepad.exe')]).allowed)
+
+const live = gameRunningVerdict(saInstall, [proc('gta_sa.exe', 'C:\\Games\\GTA San Andreas\\gta_sa.exe')])
+check('running: this install\'s exe refuses and names itself', !live.allowed && live.exe === 'gta_sa.exe' && !live.assumed, live)
+
+check(
+  'running: the same exe from another folder is not this game',
+  gameRunningVerdict(saInstall, [proc('gta_sa.exe', 'D:\\Other\\GTA San Andreas\\gta_sa.exe')]).allowed
+)
+check(
+  'running: a folder whose name only starts the same is not this game',
+  gameRunningVerdict(saInstall, [proc('gta_sa.exe', 'C:\\Games\\GTA San Andreas 2\\gta_sa.exe')]).allowed
+)
+check(
+  'running: case and slashes fold to one spelling',
+  !gameRunningVerdict({ path: 'c:/games/gta san andreas/', kind: 'sa' }, [
+    proc('GTA_SA.EXE', 'C:\\Games\\GTA San Andreas\\gta_sa.exe')
+  ]).allowed
+)
+
+// tasklist reports no path at all, and Get-Process withholds it for a process
+// running elevated. A name match that cannot be placed fails closed.
+const unplaceable = gameRunningVerdict(saInstall, [proc('gta_sa.exe', null)])
+check('running: a name match with no path refuses, and says it assumed', !unplaceable.allowed && unplaceable.assumed, unplaceable)
+
+// Every target the app supports, not a hardcoded gta_sa.exe.
+check('running: III is matched by gta3.exe', !gameRunningVerdict({ path: 'C:\\GTA3', kind: 'iii' }, [proc('gta3.exe', 'C:\\GTA3\\gta3.exe')]).allowed)
+check(
+  'running: Vice City is matched by either of its two exe names',
+  !gameRunningVerdict({ path: 'C:\\VC', kind: 'vc' }, [proc('gta_vc.exe', 'C:\\VC\\gta_vc.exe')]).allowed &&
+    !gameRunningVerdict({ path: 'C:\\VC', kind: 'vc' }, [proc('gta-vc.exe', 'C:\\VC\\gta-vc.exe')]).allowed
+)
+check(
+  'running: SA:DE is matched by the exe nested under Gameface\\',
+  gameExeNames('sade').includes('sanandreas.exe') &&
+    !gameRunningVerdict({ path: 'C:\\SADE', kind: 'sade' }, [
+      proc('SanAndreas.exe', 'C:\\SADE\\Gameface\\Binaries\\Win64\\SanAndreas.exe')
+    ]).allowed
+)
+check('running: a III exe does not block a San Andreas install', gameRunningVerdict(saInstall, [proc('gta3.exe', 'C:\\GTA3\\gta3.exe')]).allowed)
+
+// The refusal itself: it throws, and the message names the process.
+const listerRunning = async (): Promise<RunningProcess[]> => [proc('gta_sa.exe', 'C:\\Games\\GTA San Andreas\\gta_sa.exe')]
+const listerIdle = async (): Promise<RunningProcess[]> => []
+let refusal: string | null = null
+try {
+  await assertGameNotRunning(saInstall, listerRunning)
+} catch (e) {
+  refusal = (e as Error).message
+}
+check('running: assertGameNotRunning throws and names the process', !!refusal && refusal.includes('gta_sa.exe'), refusal)
+let closedThrew = false
+try {
+  await assertGameNotRunning(saInstall, listerIdle)
+} catch {
+  closedThrew = true
+}
+check('running: assertGameNotRunning passes when the game is closed', !closedThrew)
 
 fs.rmSync(tmp, { recursive: true, force: true })
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`)

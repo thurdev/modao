@@ -2,7 +2,7 @@ import path from 'node:path'
 import fsp from 'node:fs/promises'
 import { getDb } from '../db'
 import { Paths } from '../util/paths'
-import { copyRecursive, exists, isDirectory, isLink, linkOrCopyFile, sha256File } from '../util/fsx'
+import { copyRecursive, exists, isDirectory, isLink, linkOrCopyFile, sha256File, walk } from '../util/fsx'
 import { requireActiveGame } from '../game/detect'
 import { storeDir, storeKey } from '../store/contentStore'
 import type {
@@ -227,11 +227,11 @@ export async function planSwitch(toProfileId: number): Promise<SwitchPlan> {
   // Folding them in hid the one case that matters: a file of the user's at a
   // path the incoming profile is about to write. It was filtered out of the
   // report and then destroyed without ever being named.
-  const unmanaged = await unmanagedFiles(
-    game.path,
-    new Set([...outgoing.map((p) => p.relativePath.toLowerCase()), ...adoptedInPlace])
-  )
-  const willBeOverwritten = unmanaged.filter((rel) => fromStore.has(rel.toLowerCase()))
+  const known = new Set([...outgoing.map((p) => p.relativePath.toLowerCase()), ...adoptedInPlace])
+  const loose = await unmanagedFiles(game.path, known)
+  const displacedFolders = await unmanagedFolderFiles(game.path, known, fromStore)
+  const unmanaged = [...loose, ...displacedFolders].sort()
+  const willBeOverwritten = [...loose.filter((rel) => fromStore.has(rel.toLowerCase())), ...displacedFolders].sort()
 
   const priorities: Record<string, number> = {}
   for (const row of targetRows) {
@@ -265,6 +265,9 @@ export async function planSwitch(toProfileId: number): Promise<SwitchPlan> {
  * be left in place. Those come back in `willBeOverwritten` as well as here:
  * they are snapshotted with the rest of the switch and copied to quarantine
  * before the mod takes the path, so the file survives either way.
+ *
+ * This covers loose plugins; `unmanagedFolderFiles` covers a real
+ * `modloader\<Folder>\` an incoming junction would take the place of.
  */
 async function unmanagedFiles(gamePath: string, known: Set<string>): Promise<string[]> {
   const out: string[] = []
@@ -281,6 +284,39 @@ async function unmanagedFiles(gamePath: string, known: Set<string>): Promise<str
       if (known.has(rel.toLowerCase())) continue
       out.push(rel)
     }
+  }
+  return out.sort()
+}
+
+/**
+ * The contents of a real `modloader\<Folder>\` that an incoming junction is
+ * about to take the place of.
+ *
+ * A mod folder Modão materialised is a junction, and dropping a junction
+ * destroys nothing - the payload is in the store. A REAL directory there is
+ * either a folder some managed install claims, in which case `known` holds
+ * files inside it, or it is the user's own: built by hand, or left by another
+ * tool. That last one is what `createJunction` recursed straight over, because
+ * `removeLinkOrDir` is `fsp.rm(recursive, force)`.
+ *
+ * Reported file by file rather than as one folder, because that is the
+ * granularity the snapshot, the journal manifest and the restore all work at -
+ * `snapshotFiles` skips a directory outright.
+ */
+async function unmanagedFolderFiles(gamePath: string, known: Set<string>, fromStore: Set<string>): Promise<string[]> {
+  const root = path.join(gamePath, 'modloader')
+  if (!exists(root)) return []
+  const knownKeys = [...known]
+  const incomingKeys = [...fromStore]
+  const out: string[] = []
+  for (const e of await fsp.readdir(root, { withFileTypes: true })) {
+    const abs = path.join(root, e.name)
+    // A junction is Modão's own and reports as a link, not a directory, on Windows.
+    if (!e.isDirectory() || isLink(abs)) continue
+    const prefix = `modloader/${e.name.toLowerCase()}/`
+    if (knownKeys.some((k) => k.startsWith(prefix))) continue
+    if (!incomingKeys.some((k) => k.startsWith(prefix))) continue
+    for (const f of await walk(abs)) out.push(path.relative(gamePath, f.abs).replace(/\\/g, '/'))
   }
   return out.sort()
 }

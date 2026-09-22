@@ -529,6 +529,16 @@ export async function runE2E(): Promise<number> {
   await fsp.writeFile(ownMixSetsPath, ownMixSets)
   const ownMixSetsHash = await sha256File(ownMixSetsPath)
 
+  // The same collision one level up: a real modloader\<Folder>\ the user built
+  // by hand, where the arriving profile puts a junction of the same name.
+  // `createJunction` calls removeLinkOrDir, which is a recursive force remove,
+  // so the whole tree went without ever being named.
+  const handFolder = path.join(game, 'modloader', 'Animações de Kung Fu melhoradas')
+  const handRel = 'modloader/Animações de Kung Fu melhoradas/by-hand.ifp'
+  await fsp.mkdir(handFolder, { recursive: true })
+  await fsp.writeFile(path.join(handFolder, 'by-hand.ifp'), 'animations the user made themselves')
+  const handHash = await sha256File(path.join(handFolder, 'by-hand.ifp'))
+
   const collide = await planSwitch(risky.id)
   check(
     'a colliding unmanaged file is still reported as unmanaged',
@@ -538,6 +548,11 @@ export async function runE2E(): Promise<number> {
   check(
     'the dry run names the unmanaged file the switch would overwrite',
     collide.willBeOverwritten.includes('scripts/MixSets.asi'),
+    collide.willBeOverwritten
+  )
+  check(
+    'a real mod folder an incoming junction would replace is reported too',
+    collide.unmanaged.includes(handRel) && collide.willBeOverwritten.includes(handRel),
     collide.willBeOverwritten
   )
 
@@ -568,6 +583,33 @@ export async function runE2E(): Promise<number> {
     'the overwritten file is in the switch snapshot as well',
     !!collideEntry && fs.existsSync(collideEntry.backupPath) && (await sha256File(collideEntry.backupPath)) === ownMixSetsHash,
     collideEntry
+  )
+
+  // The folder half of the same story.
+  check(
+    'the junction did take the folder',
+    fs.existsSync(path.join(game, 'modloader', 'Animações de Kung Fu melhoradas', 'kungfu.ifp')),
+    await fsp.readdir(path.join(game, 'modloader'))
+  )
+  check(
+    'the displaced folder is listed as quarantined',
+    collided.quarantined.includes('modloader/Animações de Kung Fu melhoradas'),
+    collided.quarantined
+  )
+  const handCopies = (await walk(path.join(Paths.quarantine(), 'displaced'))).filter((f) =>
+    f.abs.toLowerCase().endsWith('by-hand.ifp')
+  )
+  const handHashes = await Promise.all(handCopies.map((f) => sha256File(f.abs)))
+  check(
+    'the hand-made folder is in quarantine, not recursively removed',
+    handHashes.includes(handHash),
+    handCopies.map((f) => f.abs)
+  )
+  const handEntry = collideJournal.manifest.find((m) => m.relativePath === handRel)
+  check(
+    'the displaced folder is in the switch snapshot, file by file',
+    !!handEntry && fs.existsSync(handEntry.backupPath) && (await sha256File(handEntry.backupPath)) === handHash,
+    handEntry
   )
 
   // And leaving the profile again hands the path back to its owner.
