@@ -1,3 +1,5 @@
+import type { CatalogMod } from '@shared/types'
+import { relevance } from '@shared/search'
 import type { IpcChannel } from '@shared/ipc'
 import type { Progress } from '@shared/types'
 import devCatalog from './devCatalog.json'
@@ -79,10 +81,10 @@ function installedMods(): unknown[] {
   }))
 }
 
-function catalogMods(): unknown[] {
+function catalogMods(): CatalogMod[] {
   // Real entries lifted from the bundled catalogue, so the dev server shows the
   // same prose, screenshots and paywall states the app actually renders.
-  return devCatalog as unknown[]
+  return devCatalog as unknown as CatalogMod[]
 }
 
 const RESPONSES: Partial<Record<IpcChannel, unknown>> = {
@@ -241,8 +243,22 @@ export function installDevBridge(): void {
     invoke(channel: IpcChannel, ...args: unknown[]): Promise<unknown> {
       if (channel === 'library:list') return Promise.resolve(installedMods())
       if (channel === 'catalog:list') {
-        const mods = catalogMods()
-        return Promise.resolve({ mods, categories: ['All', 'Mods Scripts etc', 'Graphics', 'Our creations'], total: mods.length })
+        // The mock runs the real ranking and the real paging: a screen that
+        // behaves differently here than in the app is not worth developing
+        // against.
+        const query = (args[0] ?? {}) as { search?: string; limit?: number; offset?: number }
+        const ranked = catalogMods()
+          .map((mod) => ({ mod, score: query.search ? relevance(mod, query.search) : 1 }))
+          .filter((entry) => entry.score > 0)
+          .sort((a, b) => b.score - a.score || b.mod.rating - a.mod.rating)
+          .map((entry) => entry.mod)
+        const offset = query.offset ?? 0
+        const page = query.limit ? ranked.slice(offset, offset + query.limit) : ranked.slice(offset)
+        return Promise.resolve({
+          mods: page,
+          categories: ['All', 'Mods Scripts etc', 'Graphics', 'Our creations'],
+          total: ranked.length
+        })
       }
       if (channel === 'profiles:active') return Promise.resolve(PROFILES[0])
       if (channel === 'game:active') return Promise.resolve((RESPONSES['game:list'] as unknown[])[0])

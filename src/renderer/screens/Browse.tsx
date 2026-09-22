@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { CatalogMod } from '@shared/types'
 import { api, formatBytes, formatDate } from '../api'
@@ -13,6 +13,19 @@ import { itemVariants, listVariants } from '../lib/motion'
 
 type Sort = 'rating' | 'updated' | 'title' | 'author'
 
+/** Cards per page. Enough to fill a window, few enough to stay instant. */
+const PAGE_SIZE = 36
+
+/** Waits for a pause in typing before letting a value through. */
+function useDebounced<T>(value: T, delayMs: number): T {
+  const [settled, setSettled] = useState(value)
+  useEffect(() => {
+    const timer = setTimeout(() => setSettled(value), delayMs)
+    return () => clearTimeout(timer)
+  }, [value, delayMs])
+  return settled
+}
+
 export function BrowseScreen(): JSX.Element {
   const t = useT()
   const { profile, game, settings, pushToast, setPlan, setPlanBusy, planBusy, setScreen } = useApp()
@@ -22,7 +35,77 @@ export function BrowseScreen(): JSX.Element {
   const [detail, setDetail] = useState<CatalogMod | null>(null)
   const [manual, setManual] = useState<CatalogMod | null>(null)
 
-  const catalog = useAsync(() => api.catalog({ search, category, sort }), [search, category, sort])
+  /**
+   * The catalogue holds thousands of mods. Rendering them all at once is what
+   * made this screen crawl, so it arrives a page at a time and the next page is
+   * fetched when the end of the list comes into view.
+   */
+  const [mods, setMods] = useState<CatalogMod[]>([])
+  const [total, setTotal] = useState(0)
+  const [categories, setCategories] = useState<string[]>(['All'])
+  const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const sentinel = useRef<HTMLDivElement | null>(null)
+
+  // A keystroke should not start a query: typing "vehfuncs" would start eight.
+  const query = useDebounced(search, 180)
+
+  const loadPage = useCallback(
+    async (offset: number) => {
+      const page = await api.catalog({ search: query, category, sort, limit: PAGE_SIZE, offset })
+      setCategories(page.categories)
+      setTotal(page.total)
+      setMods((current) => (offset === 0 ? page.mods : [...current, ...page.mods]))
+    },
+    [query, category, sort]
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    loadPage(0)
+      .catch((e) => {
+        if (!cancelled) setError((e as Error).message)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [loadPage])
+
+  useEffect(() => {
+    const node = sentinel.current
+    if (!node) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting) return
+        setMods((current) => {
+          if (current.length >= total || loadingMore) return current
+          setLoadingMore(true)
+          void loadPage(current.length)
+            .catch(() => undefined)
+            .finally(() => setLoadingMore(false))
+          return current
+        })
+      },
+      // Start fetching before the user reaches the bottom, so the list does not
+      // visibly stop.
+      { rootMargin: '600px' }
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [loadPage, total, loadingMore])
+
+  const catalog = {
+    data: { mods, categories, total },
+    loading,
+    error,
+    reload: () => void loadPage(0)
+  }
   const seed = useAsync(() => api.seedInfo(), [])
 
   /**
@@ -66,8 +149,6 @@ export function BrowseScreen(): JSX.Element {
       setPlanBusy(false)
     }
   }
-
-  const mods = catalog.data?.mods ?? []
 
   return (
     <>
@@ -131,7 +212,13 @@ export function BrowseScreen(): JSX.Element {
       ) : (
         <motion.div className="grid cards" variants={listVariants} initial="initial" animate="animate">
           {mods.map((m) => (
-            <motion.article key={m.id} className="card pad col" variants={itemVariants} layout style={{ gap: 11 }}>
+            /*
+             * No layout animation here: with a list that grows as you scroll,
+             * `layout` makes every card on screen re-measure on each page, which
+             * is most of what made this screen stutter. The staggered fade-in is
+             * kept - it costs nothing and only runs once per card.
+             */
+            <motion.article key={m.id} className="card pad col" variants={itemVariants} style={{ gap: 11 }}>
               <div className="row between top">
                 <div style={{ minWidth: 0 }}>
                   <strong className="ellipsis">{m.title}</strong>
@@ -183,6 +270,18 @@ export function BrowseScreen(): JSX.Element {
           ))}
         </motion.div>
       )}
+
+      {mods.length > 0 ? (
+        <div ref={sentinel} className="row" style={{ justifyContent: 'center', padding: '18px 0 4px' }}>
+          <span className="faint num">
+            {loadingMore
+              ? t('browse.loadingMore')
+              : mods.length >= total
+                ? t('browse.allShown', { count: total })
+                : t('browse.showingSome', { shown: mods.length, total })}
+          </span>
+        </div>
+      ) : null}
 
       <AnimatePresence>
         {manual ? (

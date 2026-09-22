@@ -6,6 +6,7 @@ import { Paths } from '../util/paths'
 import { exists } from '../util/fsx'
 import { computeRating, ratingInputsFor } from './rating'
 import { gamesOfMod, type GameKind } from '@shared/games'
+import { relevance } from '@shared/search'
 import { activeGame } from '../game/detect'
 
 interface SeedMod {
@@ -200,6 +201,8 @@ export interface CatalogQuery {
   installedOnly?: boolean
   profileId?: number | null
   limit?: number
+  /** How many rows to skip, for the endless list the UI scrolls. */
+  offset?: number
   /** Only posts for this game. Defaults to the active install's game. */
   game?: GameKind | 'all'
 }
@@ -224,11 +227,9 @@ export function listCatalog(q: CatalogQuery): { mods: CatalogMod[]; categories: 
   const db = getDb()
   const where: string[] = []
   const params: unknown[] = []
-  if (q.search) {
-    where.push('(lower(title) LIKE ? OR lower(author) LIKE ? OR lower(description) LIKE ?)')
-    const s = `%${q.search.toLowerCase()}%`
-    params.push(s, s, s)
-  }
+  // Filtering happens in JS: SQL LIKE cannot ignore accents, and "animacoes"
+  // has to find "Animações" in a catalogue written in Portuguese.
+
   if (q.category && q.category !== 'All') {
     where.push('category = ?')
     params.push(q.category)
@@ -250,11 +251,18 @@ export function listCatalog(q: CatalogQuery): { mods: CatalogMod[]; categories: 
     a.localeCompare(b)
   )
 
-  let mods = rows.filter(forThisGame).map((r) => toCatalogMod(r, q.profileId ?? null))
+  const scored = rows
+    .filter(forThisGame)
+    .map((r) => ({ row: r, score: q.search ? relevance(r, q.search) : 1 }))
+    .filter((entry) => entry.score > 0)
+
+  let mods = scored.map((entry) => ({ ...toCatalogMod(entry.row, q.profileId ?? null), score: entry.score }))
   if (q.installedOnly) mods = mods.filter((m) => m.installed)
 
   const sort = q.sort ?? 'rating'
   mods.sort((a, b) => {
+    // A search is answered by relevance first; the chosen sort breaks ties.
+    if (q.search && a.score !== b.score) return b.score - a.score
     if (sort === 'title') return a.title.localeCompare(b.title)
     if (sort === 'author') return a.author.localeCompare(b.author) || a.title.localeCompare(b.title)
     if (sort === 'updated') return (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '')
@@ -262,8 +270,10 @@ export function listCatalog(q: CatalogQuery): { mods: CatalogMod[]; categories: 
   })
 
   const total = mods.length
-  if (q.limit) mods = mods.slice(0, q.limit)
-  return { mods, categories: ['All', ...categories], total }
+  const offset = Math.max(0, q.offset ?? 0)
+  const page = q.limit ? mods.slice(offset, offset + q.limit) : mods.slice(offset)
+  // The score ranked the page; it is not something the UI needs to carry.
+  return { mods: page.map(({ score: _score, ...mod }) => mod), categories: ['All', ...categories], total }
 }
 
 export function getCatalogMod(modId: number, profileId: number | null): CatalogMod | null {

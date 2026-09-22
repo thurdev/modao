@@ -7,6 +7,9 @@
  */
 export const browse = {
   pt: {
+    loadingMore: 'Carregando mais…',
+    allShown: '{count} mods · tudo carregado',
+    showingSome: 'mostrando {shown} de {total}',
     intro:
       'Um cliente de descoberta do MixMods, não um espelho. As páginas ficam guardadas localmente e são relidas no máximo uma vez por dia, um pedido por segundo, respeitando o robots.txt. Lançamentos de acesso antecipado (Patreon) levam à página do próprio autor e nunca são baixados por aqui.',
     searchPlaceholder: 'Buscar por título, autor ou descrição…',
@@ -78,6 +81,9 @@ export const browse = {
     gameChipTitle: 'Também para {game}'
   },
   en: {
+    loadingMore: 'Loading more…',
+    allShown: '{count} mods · all loaded',
+    showingSome: 'showing {shown} of {total}',
     intro:
       'A discovery client for MixMods, not a mirror. Pages are cached locally and re-read at most once a day, one request per second, honouring robots.txt. Paywalled early access (Patreon) releases link to the author’s own page and are never downloaded here.',
     searchPlaceholder: 'Search title, author or description…',

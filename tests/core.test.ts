@@ -31,6 +31,7 @@ import { describeFsError, isProtectedLocation } from '../src/main/game/access'
 import { setMainLanguage } from '../src/main/util/i18n'
 import { translate } from '../src/shared/i18n'
 import { classifyDownload, looksLikeArchive, normalizeForFetch } from '../src/shared/download'
+import { foldText, relevance } from '../src/shared/search'
 import { parseCrashDump, parseModLoaderLog } from '../src/main/diagnostics/modloaderLog'
 import { limitAdjusterNames, parseStreamIni, SAFE_STREAMING_MEMORY_MB } from '../src/main/game/streamIni'
 import { pluginEvidence } from '../src/main/formats/strings'
@@ -779,6 +780,37 @@ check(
   generic.instructions[0]?.destination === 'modloader-folder',
   generic.instructions[0]
 )
+
+// --- search has to answer what was typed -------------------------------------
+// Typing a mod name against three thousand rows and getting them in rating
+// order means hunting for the one you named.
+const catalogRows = [
+  { title: '[SA] VehFuncs v2.5.5', slug: 'sa-vehfuncs', author: 'Junior_Djjr', category: 'Carros', description: 'Funcionalidades para carros' },
+  { title: '[SA] VehFuncs Addon Pack', slug: 'sa-vehfuncs-addon', author: 'Community', category: 'Carros', description: 'Addons' },
+  { title: '[SA] Animações de Kung Fu melhoradas', slug: 'sa-kung-fu', author: 'Junior_Djjr', category: 'Animações', description: 'Anima o kung fu' },
+  { title: '[SA] Real Vehicles Pack', slug: 'sa-rvp', author: 'Outro', category: 'Carros', description: 'Usa o VehFuncs junto' }
+]
+const ranked = (query: string): string[] =>
+  catalogRows
+    .map((r) => ({ r, score: relevance(r, query) }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map((x) => x.r.slug)
+
+check('search: the exact mod typed comes first', ranked('vehfuncs')[0] === 'sa-vehfuncs', ranked('vehfuncs'))
+check('search: a mod that only mentions it in the description ranks below', ranked('vehfuncs').indexOf('sa-rvp') > 0, ranked('vehfuncs'))
+check('search: the game tag in the title is not in the way', relevance(catalogRows[0], 'vehfuncs v2.5.5') > 0)
+check(
+  'search: typing without accents finds the accented title',
+  ranked('animacoes')[0] === 'sa-kung-fu',
+  ranked('animacoes')
+)
+check('search: accents typed properly work too', ranked('animações')[0] === 'sa-kung-fu', ranked('animações'))
+check('search: every word has to match, so two words narrow the result', ranked('vehfuncs addon').length === 1, ranked('vehfuncs addon'))
+check('search: an author name finds their mods', ranked('junior_djjr').length === 2, ranked('junior_djjr'))
+check('search: a word that appears nowhere finds nothing', ranked('helicoptero').length === 0, ranked('helicoptero'))
+check('search: an empty query keeps everything', relevance(catalogRows[0], '') > 0)
+check('search: folding strips case, accents and punctuation', foldText('Animações (v2.5)!') === 'animacoes v2 5', foldText('Animações (v2.5)!'))
 
 // --- download links ----------------------------------------------------------
 // Which links Modão can fetch on its own decides whether "Install" installs

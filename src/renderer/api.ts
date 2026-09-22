@@ -131,7 +131,14 @@ export const api = {
   setSubModEnabled: (installId: number, rel: string, enabled: boolean) =>
     call<void>('library:subModSetEnabled', installId, rel, enabled),
 
-  catalog: (query: { search?: string; category?: string; sort?: string; installedOnly?: boolean; limit?: number }) =>
+  catalog: (query: {
+    search?: string
+    category?: string
+    sort?: string
+    installedOnly?: boolean
+    limit?: number
+    offset?: number
+  }) =>
     call<{ mods: CatalogMod[]; categories: string[]; total: number }>('catalog:list', query),
   catalogMod: (modId: number) => call<CatalogMod | null>('catalog:get', modId),
   refreshMod: (modId: number) => call<CatalogMod | null>('catalog:refresh', modId),
