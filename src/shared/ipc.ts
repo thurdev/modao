@@ -1,0 +1,250 @@
+import type { GameKind } from './games'
+import type {
+  AppSettings,
+  BisectSession,
+  CacheKind,
+  CatalogMod,
+  CrashIncident,
+  CrashReport,
+  ExistingSavesReport,
+  FileConflict,
+  GameInstall,
+  HealthReport,
+  SwitchJournal,
+  SwitchPlan,
+  SwitchVerification,
+  IfpAnalysis,
+  ImgAnalysis,
+  InstallPlan,
+  InstalledMod,
+  LogEntry,
+  PeInfo,
+  Profile,
+  Progress,
+  SaveSnapshot,
+  StorageReport,
+  UnmanagedReport,
+  WriteAccess,
+  TxdAnalysis
+} from './types'
+
+/** Every IPC channel the renderer may call. Keep this list narrow and typed. */
+export interface ModãoApi {
+  app: {
+    settings(): Promise<AppSettings>
+    setSetting(key: keyof AppSettings, value: unknown): Promise<AppSettings>
+    openExternal(url: string): Promise<void>
+    revealPath(path: string): Promise<void>
+    version(): Promise<{ app: string; electron: string; node: string }>
+    storage(): Promise<StorageReport>
+    clearCache(kind: CacheKind): Promise<{ freed: number }>
+    /** Whether the app is elevated, and whether this game folder needs it. */
+    elevation(): Promise<{ running: boolean; needed: boolean; remembered: boolean; reason: string | null; protectedPath: boolean }>
+    /** Relaunch through the Windows UAC prompt; optionally remember the choice. */
+    relaunchElevated(remember: boolean): Promise<void>
+    /** Re-run the write probe after the user changed permissions or moved the game. */
+    recheckAccess(): Promise<WriteAccess>
+  }
+  game: {
+    list(): Promise<GameInstall[]>
+    detect(): Promise<{ path: string; kind: GameKind; name: string }[]>
+    add(path: string, kind?: GameKind): Promise<GameInstall>
+    pickFolder(): Promise<string | null>
+    setActive(id: number): Promise<GameInstall>
+    active(): Promise<GameInstall | null>
+    adopt(gameId: number, profileName: string): Promise<{ profileId: number; adopted: number; report: string[] }>
+    /** Index whatever is in the game folder into an existing profile. */
+    adoptInto(profileId: number): Promise<{ profileId: number; adopted: number; report: string[] }>
+    /** What the game folder holds that this profile does not track yet. */
+    unmanaged(profileId: number): Promise<UnmanagedReport>
+    remove(id: number): Promise<void>
+    launch(): Promise<{ launched: boolean; message: string }>
+  }
+  profiles: {
+    list(): Promise<Profile[]>
+    active(): Promise<Profile | null>
+    create(input: { name: string; color: string; notes: string; copyFrom?: number }): Promise<Profile>
+    update(id: number, patch: { name?: string; color?: string; notes?: string }): Promise<Profile>
+    remove(id: number): Promise<void>
+    activate(id: number): Promise<{
+      profile: Profile
+      elapsedMs: number
+      log: string[]
+      journalId: number | null
+      verification: SwitchVerification | null
+    }>
+    /** What a switch would do, file by file. Changes nothing. */
+    switchPlan(id: number): Promise<SwitchPlan>
+    /** Re-runs the post-switch checks for the active profile. */
+    verify(id: number): Promise<SwitchVerification>
+    /** Rolls the last switch back using its verified backup. */
+    restorePrevious(journalId?: number): Promise<{ log: string[]; restored: number }>
+    /** Recorded switches, newest first. */
+    switchHistory(): Promise<SwitchJournal[]>
+    duplicate(id: number, name: string): Promise<Profile>
+    exportArchive(id: number): Promise<string | null>
+    importArchive(): Promise<{
+      profileId: number
+      resolved: number
+      needsDownload: string[]
+      unresolved: string[]
+    } | null>
+  }
+  library: {
+    list(profileId: number): Promise<InstalledMod[]>
+    setEnabled(installId: number, enabled: boolean): Promise<void>
+    setPriority(installId: number, priority: number): Promise<void>
+    uninstall(installId: number): Promise<{ restored: number; quarantined: string[] }>
+    rollbackPreview(installId: number): Promise<{ relativePath: string; action: string }[]>
+    readme(installId: number): Promise<string | null>
+    subModSetEnabled(installId: number, relativePath: string, enabled: boolean): Promise<void>
+  }
+  catalog: {
+    list(query: {
+      search?: string
+      category?: string
+      sort?: 'rating' | 'updated' | 'title' | 'author'
+      installedOnly?: boolean
+      limit?: number
+    }): Promise<{ mods: CatalogMod[]; categories: string[]; total: number }>
+    get(modId: number): Promise<CatalogMod | null>
+    refresh(modId: number): Promise<CatalogMod | null>
+    crawl(): Promise<{ started: boolean; taskId: string; message: string }>
+    seedInfo(): Promise<{ count: number; lastCrawl: string | null; crawlEnabled: boolean }>
+    reseed(): Promise<{ count: number }>
+  }
+  install: {
+    planFromCatalog(modVersionId: number, profileId: number): Promise<InstallPlan>
+    planFromFile(profileId: number): Promise<InstallPlan | null>
+    choose(planId: string, groupId: string, optionId: string): Promise<InstallPlan>
+    setDestination(planId: string, sourcePath: string, destination: string): Promise<InstallPlan>
+    apply(planId: string, profileId: number): Promise<{ installId: number; written: number; backedUp: number }>
+    discard(planId: string): Promise<void>
+  }
+  conflicts: {
+    list(profileId: number): Promise<FileConflict[]>
+    preview(profileId: number, changes: { installId: number; priority: number }[]): Promise<FileConflict[]>
+    applyPriorities(profileId: number, changes: { installId: number; priority: number }[]): Promise<void>
+  }
+  analyze: {
+    txd(path: string): Promise<TxdAnalysis>
+    ifp(path: string): Promise<IfpAnalysis>
+    img(path: string): Promise<ImgAnalysis>
+    pe(path: string): Promise<PeInfo>
+    profileTextures(profileId: number): Promise<TxdAnalysis[]>
+  }
+  saves: {
+    list(profileId: number): Promise<SaveSnapshot[]>
+    snapshot(profileId: number, label: string): Promise<SaveSnapshot>
+    restore(snapshotId: number): Promise<void>
+    currentSlots(profileId: number): Promise<SaveSnapshot | null>
+    detectExisting(): Promise<ExistingSavesReport>
+    importExisting(profileId: number, label: string): Promise<{ snapshotId: number; slots: number }>
+  }
+  health: {
+    run(profileId: number): Promise<HealthReport>
+    crashes(profileId: number): Promise<CrashReport[]>
+    /** The same records grouped into one entry per dead process. */
+    incidents(profileId: number): Promise<CrashIncident[]>
+    scanCrashes(profileId: number): Promise<{ found: number; added: number; hangSuspected: boolean; message: string }>
+    resolveCrash(id: number, resolved: boolean): Promise<void>
+    lookupAddress(address: string): Promise<{ address: string; cause: string | null; solution: string | null }>
+    logs(): Promise<LogEntry[]>
+    bisectStart(profileId: number): Promise<BisectSession>
+    bisectResult(sessionId: string, result: 'good' | 'bad'): Promise<BisectSession>
+    bisectAbort(sessionId: string): Promise<void>
+    bisectCurrent(profileId: number): Promise<BisectSession | null>
+  }
+  tasks: {
+    cancel(taskId: string): Promise<void>
+    onProgress(cb: (p: Progress) => void): () => void
+    onToast(cb: (t: { kind: 'info' | 'error' | 'success'; message: string }) => void): () => void
+  }
+}
+
+/** Flat channel list, derived at runtime from the shape above. */
+export const IPC_CHANNELS = [
+  'app:settings',
+  'app:setSetting',
+  'app:openExternal',
+  'app:revealPath',
+  'app:version',
+  'app:storage',
+  'app:clearCache',
+  'app:elevation',
+  'app:relaunchElevated',
+  'app:recheckAccess',
+  'game:list',
+  'game:detect',
+  'game:add',
+  'game:pickFolder',
+  'game:setActive',
+  'game:active',
+  'game:adopt',
+  'game:adoptInto',
+  'game:unmanaged',
+  'game:remove',
+  'game:launch',
+  'profiles:list',
+  'profiles:active',
+  'profiles:create',
+  'profiles:update',
+  'profiles:remove',
+  'profiles:activate',
+  'profiles:switchPlan',
+  'profiles:verify',
+  'profiles:restorePrevious',
+  'profiles:switchHistory',
+  'profiles:duplicate',
+  'profiles:exportArchive',
+  'profiles:importArchive',
+  'library:list',
+  'library:setEnabled',
+  'library:setPriority',
+  'library:uninstall',
+  'library:rollbackPreview',
+  'library:readme',
+  'library:subModSetEnabled',
+  'catalog:list',
+  'catalog:get',
+  'catalog:refresh',
+  'catalog:crawl',
+  'catalog:seedInfo',
+  'catalog:reseed',
+  'install:planFromCatalog',
+  'install:planFromFile',
+  'install:choose',
+  'install:setDestination',
+  'install:apply',
+  'install:discard',
+  'conflicts:list',
+  'conflicts:preview',
+  'conflicts:applyPriorities',
+  'analyze:txd',
+  'analyze:ifp',
+  'analyze:img',
+  'analyze:pe',
+  'analyze:profileTextures',
+  'saves:list',
+  'saves:snapshot',
+  'saves:restore',
+  'saves:currentSlots',
+  'saves:detectExisting',
+  'saves:importExisting',
+  'health:run',
+  'health:crashes',
+  'health:incidents',
+  'health:scanCrashes',
+  'health:resolveCrash',
+  'health:lookupAddress',
+  'health:logs',
+  'health:bisectStart',
+  'health:bisectResult',
+  'health:bisectAbort',
+  'health:bisectCurrent',
+  'tasks:cancel'
+] as const
+
+export type IpcChannel = (typeof IPC_CHANNELS)[number]
+export const EVENT_PROGRESS = 'event:progress'
+export const EVENT_TOAST = 'event:toast'
