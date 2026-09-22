@@ -56,6 +56,14 @@ export const health = {
     bisectPreparing: 'Preparando…',
     bisectStep: 'Passo {step}',
     bisectLaunchNow: 'Abra o jogo agora e depois conte pro Modão o que aconteceu.',
+    bisectLoaded_one: '{count} mod está carregado nesta rodada.',
+    bisectLoaded_other: '{count} mods estão carregados nesta rodada.',
+    bisectNoFiles: 'Nada é movido: o Modão usa o próprio ExcludeAllMods do Mod Loader, então as pastas ficam onde estão.',
+    bisectCareTitle: 'Três coisas que o método exige',
+    bisectCareMany: 'Mais de um mod pode ser culpado ao mesmo tempo. Achar um não garante que acabou.',
+    bisectCareAddress:
+      'Endereço de crash diferente NÃO é progresso — é outro crash. Confira de novo com o jogo aberto do zero.',
+    bisectCareOneChange: 'Teste a cada mudança, uma de cada vez. Mexer em várias coisas junto invalida a rodada.',
     bisectItRanFine: 'Abriu normal',
     bisectItFailed: 'Falhou de novo',
     bisectNoSingleMod:
@@ -116,6 +124,14 @@ export const health = {
     bisectPreparing: 'Preparing…',
     bisectStep: 'Step {step}',
     bisectLaunchNow: 'Launch the game now, then tell Modão what happened.',
+    bisectLoaded_one: '{count} mod is loaded for this run.',
+    bisectLoaded_other: '{count} mods are loaded for this run.',
+    bisectNoFiles: "Nothing is moved: Modão uses Mod Loader's own ExcludeAllMods, so the folders stay where they are.",
+    bisectCareTitle: 'Three things the method demands',
+    bisectCareMany: 'More than one mod can be guilty at the same time. Finding one does not mean you are done.',
+    bisectCareAddress:
+      'A different crash address is NOT progress - it is a different crash. Re-verify from a fresh boot.',
+    bisectCareOneChange: 'Test after every single change, one at a time. Batching edits invalidates the round.',
     bisectItRanFine: 'It ran fine',
     bisectItFailed: 'It failed again',
     bisectNoSingleMod:

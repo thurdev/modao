@@ -56,7 +56,7 @@ import { DEFAULT_LANGUAGE, isLanguage } from '@shared/i18n'
 import { setMainLanguage, t } from './util/i18n'
 import { lookup } from './diagnostics/crashlist'
 import { collectLogs } from './diagnostics/logs'
-import { abortBisect, applyBisectStep, currentBisect, recordResult, startBisect } from './diagnostics/bisect'
+import { abortBisect, currentBisect, recordResult, startBisect } from './diagnostics/bisect'
 
 const tasks = new Map<string, AbortController>()
 
@@ -719,9 +719,10 @@ export function registerIpc(): void {
   })
   ipcMain.handle('health:logs', () => collectLogs())
   ipcMain.handle('health:bisectStart', async (_e, profileId: number) => {
-    const session = startBisect(requireProfile(profileId))
-    await applyBisectStep(session.id)
-    return session
+    requireWritableGame()
+    // The session applies its own first step: it turns mods off through the ini
+    // rather than moving files, so there is nothing else to do here.
+    return startBisect(requireProfile(profileId))
   })
   ipcMain.handle('health:bisectResult', (_e, sessionId: string, result: 'good' | 'bad') => recordResult(sessionId, result))
   ipcMain.handle('health:bisectAbort', (_e, sessionId: string) => abortBisect(sessionId))

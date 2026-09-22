@@ -14,7 +14,9 @@ import {
   decodeIni,
   encodeIni,
   looksLikeUtf8,
-  unmappableInWin1252
+  unmappableInWin1252,
+  applyIgnoreState,
+  readIgnoreState
 } from '../src/main/game/modloaderIni'
 import { groupIncidents, parseModuleName, resolveCrashAddress } from '../src/shared/crash'
 import type { CrashReport } from '../src/shared/types'
@@ -636,6 +638,31 @@ check(
 check(
   "readme deps: the author's own line is kept, for showing beside the parse",
   declared.every((d) => d.line.length > 0)
+)
+
+// --- safe mode, the way Mod Loader does it ----------------------------------
+// Bisection must not move files: chasing a crash by moving gigabytes risks
+// creating a second problem while looking for the first. Mod Loader already has
+// the switch - ExcludeAllMods plus an [IncludeMods] list.
+const safeIni = parseIni(['; keep me', '[Config]', 'IgnoreAllFiles=0', '', '[IncludeMods]', 'Old Cars'].join(CRLF))
+applyIgnoreState(safeIni, { excludeAll: true, include: ['SilentPatch', 'Proper Shaders'], ignore: ['Broken Mod'] })
+const safeText = stringifyIni(safeIni)
+check('safe mode: ExcludeAllMods is written where Mod Loader reads it', /\[Folder\.Config\][\s\S]*ExcludeAllMods=true/.test(safeText), safeText)
+check('safe mode: the mods under test are the include list', /\[IncludeMods\][\s\S]*SilentPatch[\s\S]*Proper Shaders/.test(safeText), safeText)
+check('safe mode: a previous include is replaced, not appended to', !/Old Cars/.test(safeText), safeText)
+check('safe mode: the ignore list is written too', /\[IgnoreMods\][\s\S]*Broken Mod/.test(safeText), safeText)
+check('safe mode: user comments survive', safeText.includes('; keep me'))
+
+const readBack = readIgnoreState(parseIni(safeText))
+check('safe mode: the state reads back as written', readBack.excludeAll && readBack.include.length === 2 && readBack.ignore.length === 1, readBack)
+
+const restored = parseIni(safeText)
+applyIgnoreState(restored, { excludeAll: false, include: [], ignore: [] })
+const restoredState = readIgnoreState(parseIni(stringifyIni(restored)))
+check(
+  'safe mode: restoring puts every mod back',
+  restoredState.excludeAll === false && restoredState.include.length === 0,
+  restoredState
 )
 
 // --- download links ----------------------------------------------------------

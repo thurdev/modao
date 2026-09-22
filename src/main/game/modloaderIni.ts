@@ -220,3 +220,58 @@ export function resolveWinner<T extends { priority: number; folder: string; enab
   if (eligible.length === 0) return null
   return [...eligible].sort((a, b) => b.priority - a.priority || a.folder.localeCompare(b.folder))[0]
 }
+
+/**
+ * Mod Loader's own way of turning mods off without touching a single file.
+ *
+ * `ExcludeAllMods=true` plus an `[IncludeMods]` list is a one-switch safe mode:
+ * the folders stay exactly where they are and Mod Loader simply does not read
+ * them. That is the mechanism to use for bisection - moving files to find a
+ * crash risks creating a different problem than the one being chased.
+ */
+export interface IgnoreState {
+  excludeAll: boolean
+  include: string[]
+  ignore: string[]
+}
+
+const EXCLUDE_KEY = 'ExcludeAllMods'
+
+export function readIgnoreState(ini: ParsedIni): IgnoreState {
+  const config = readKeys(getSection(ini, 'Config'))
+  const folder = readKeys(getSection(ini, 'Folder.Config'))
+  const raw = (folder[EXCLUDE_KEY] ?? config[EXCLUDE_KEY] ?? 'false').trim().toLowerCase()
+  return {
+    excludeAll: raw === 'true' || raw === '1',
+    include: listSection(ini, 'IncludeMods'),
+    ignore: listSection(ini, 'IgnoreMods')
+  }
+}
+
+/** A Mod Loader list section holds bare folder names, one per line. */
+function listSection(ini: ParsedIni, name: string): string[] {
+  const section = getSection(ini, name)
+  if (!section) return []
+  return section.lines
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith(';') && !l.startsWith('#'))
+    .map((l) => l.replace(/\s*=.*$/, '').trim())
+    .filter(Boolean)
+}
+
+function writeListSection(ini: ParsedIni, name: string, values: string[]): void {
+  const section = upsertSection(ini, name)
+  const comments = section.lines.filter((l) => l.trim().startsWith(';') || l.trim().startsWith('#'))
+  section.lines = [...comments, ...values]
+}
+
+/**
+ * Applies a safe mode: only `include` is loaded, everything else is left in
+ * place and ignored. Passing an empty include list loads nothing at all.
+ */
+export function applyIgnoreState(ini: ParsedIni, state: IgnoreState): ParsedIni {
+  setKey(upsertSection(ini, 'Folder.Config'), EXCLUDE_KEY, state.excludeAll ? 'true' : 'false')
+  writeListSection(ini, 'IncludeMods', state.include)
+  writeListSection(ini, 'IgnoreMods', state.ignore)
+  return ini
+}

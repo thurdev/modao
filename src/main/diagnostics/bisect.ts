@@ -1,34 +1,78 @@
 import crypto from 'node:crypto'
+import path from 'node:path'
 import type { BisectSession } from '@shared/types'
 import { getDb } from '../db'
-import { remateriliseInstall } from '../profiles/materialize'
+import { requireActiveGame } from '../game/detect'
+import { applyIgnoreState, readIgnoreState, readIniFile, writeIniFile, type IgnoreState } from '../game/modloaderIni'
 
 /**
  * Guided bisect: halve the enabled mod set, launch, record the result, repeat.
- * The bookkeeping - which half was tested, what is still suspect, what is
- * already cleared - is exactly what humans do badly by hand.
+ * Around five rounds finds one culprit among a hundred mods, and the
+ * bookkeeping - which half was tested, what is cleared, what is still suspect -
+ * is exactly what people do badly by hand.
+ *
+ * Nothing is moved. Mod Loader has its own switch for this: ExcludeAllMods plus
+ * an [IncludeMods] list leaves every folder where it is and simply does not
+ * read the ones under suspicion. Moving files to chase a crash risks creating a
+ * second problem while looking for the first, and the app's own switch would
+ * unlink and relink gigabytes at every step.
+ *
+ * Two things the method itself demands, and both are surfaced in the UI:
+ * more than one mod can be guilty at once, and a crash address that CHANGES is
+ * not progress - it is a different crash, which has to be re-verified from a
+ * fresh boot.
  */
 const SESSIONS = new Map<string, BisectSession>()
 
-export function startBisect(profileId: number): BisectSession {
-  const installs = (
-    getDb().prepare('SELECT id FROM install WHERE profile_id = ? AND enabled = 1 ORDER BY id').all(profileId) as { id: number }[]
-  ).map((r) => r.id)
+/** What the ini said before the session started, restored when it ends. */
+const ORIGINAL_STATE = new Map<string, { ignore: IgnoreState; iniPath: string }>()
+
+interface InstallRow {
+  id: number
+  folder_name: string | null
+}
+
+function enabledInstalls(profileId: number): InstallRow[] {
+  return getDb()
+    .prepare('SELECT id, folder_name FROM install WHERE profile_id = ? AND enabled = 1 ORDER BY id')
+    .all(profileId) as InstallRow[]
+}
+
+function folderOf(profileId: number, installId: number): string | null {
+  const row = getDb().prepare('SELECT folder_name FROM install WHERE id = ?').get(installId) as
+    | { folder_name: string | null }
+    | undefined
+  void profileId
+  return row?.folder_name ?? null
+}
+
+export async function startBisect(profileId: number): Promise<BisectSession> {
+  const installs = enabledInstalls(profileId)
   if (installs.length < 2) throw new Error('Bisect needs at least two enabled mods.')
+
+  const game = requireActiveGame()
+  const iniPath = path.join(game.path, 'modloader', 'modloader.ini')
+  const ini = await readIniFile(iniPath)
+
   const session: BisectSession = {
     id: crypto.randomUUID(),
     profileId,
     status: 'running',
     step: 0,
-    candidates: installs,
+    candidates: installs.map((i) => i.id),
     testing: [],
     knownGood: [],
     knownBad: [],
     culprit: null,
     history: []
   }
+  // Remember what the user had, not what the app assumes they had: restoring
+  // "everything on" would silently re-enable mods they turned off themselves.
+  ORIGINAL_STATE.set(session.id, { ignore: readIgnoreState(ini), iniPath })
   SESSIONS.set(session.id, session)
-  return nextStep(session)
+  nextStep(session)
+  await applyBisectStep(session.id)
+  return session
 }
 
 export function currentBisect(profileId: number): BisectSession | null {
@@ -49,18 +93,29 @@ function nextStep(session: BisectSession): BisectSession {
   return session
 }
 
-/** Applies the current step: only the mods under test stay enabled. */
+/**
+ * Applies the current step through the ini: the mods under test, plus anything
+ * already cleared, are the only ones Mod Loader reads.
+ */
 export async function applyBisectStep(sessionId: string): Promise<void> {
   const session = SESSIONS.get(sessionId)
   if (!session) throw new Error('That bisect session has expired.')
-  const db = getDb()
-  const all = db.prepare('SELECT id FROM install WHERE profile_id = ?').all(session.profileId) as { id: number }[]
-  const testing = new Set([...session.testing, ...session.knownGood])
-  for (const row of all) {
-    const shouldEnable = testing.has(row.id)
-    db.prepare('UPDATE install SET enabled = ? WHERE id = ?').run(shouldEnable ? 1 : 0, row.id)
-    await remateriliseInstall(row.id)
+  const original = ORIGINAL_STATE.get(sessionId)
+  if (!original) throw new Error('That bisect session lost track of what it changed; abort it and start again.')
+
+  const load = new Set<string>()
+  for (const id of [...session.testing, ...session.knownGood]) {
+    const folder = folderOf(session.profileId, id)
+    if (folder) load.add(folder)
   }
+
+  const ini = await readIniFile(original.iniPath)
+  applyIgnoreState(ini, {
+    excludeAll: true,
+    include: [...load].sort((a, b) => a.localeCompare(b)),
+    ignore: original.ignore.ignore
+  })
+  await writeIniFile(original.iniPath, ini)
 }
 
 export async function recordResult(sessionId: string, result: 'good' | 'bad'): Promise<BisectSession> {
@@ -77,6 +132,7 @@ export async function recordResult(sessionId: string, result: 'good' | 'bad'): P
   }
   nextStep(session)
   if (session.status === 'running') await applyBisectStep(sessionId)
+  else await restore(sessionId)
   return session
 }
 
@@ -84,14 +140,20 @@ export async function abortBisect(sessionId: string): Promise<void> {
   const session = SESSIONS.get(sessionId)
   if (!session) return
   session.status = 'aborted'
-  // Restore every mod the session touched.
-  const db = getDb()
-  const all = db.prepare('SELECT id FROM install WHERE profile_id = ?').all(session.profileId) as { id: number }[]
-  for (const row of all) {
-    db.prepare('UPDATE install SET enabled = 1 WHERE id = ?').run(row.id)
-    await remateriliseInstall(row.id)
+  await restore(sessionId)
+}
+
+/** Puts the ini back exactly as the session found it. */
+async function restore(sessionId: string): Promise<void> {
+  const original = ORIGINAL_STATE.get(sessionId)
+  if (original) {
+    const ini = await readIniFile(original.iniPath)
+    applyIgnoreState(ini, original.ignore)
+    await writeIniFile(original.iniPath, ini)
+    ORIGINAL_STATE.delete(sessionId)
   }
-  SESSIONS.delete(sessionId)
+  const session = SESSIONS.get(sessionId)
+  if (session?.status === 'aborted') SESSIONS.delete(sessionId)
 }
 
 export function describeBisect(session: BisectSession): string {
@@ -100,5 +162,5 @@ export function describeBisect(session: BisectSession): string {
       ? `Converged: install #${session.culprit} is the culprit.`
       : 'Converged without a culprit - the fault is not in the mod set.'
   }
-  return `Step ${session.step}: ${session.testing.length} mod(s) enabled, ${session.candidates.length} still suspect. Launch the game and report the result.`
+  return `Step ${session.step}: ${session.testing.length} mod(s) loaded, ${session.candidates.length} still suspect. Launch the game and report the result.`
 }

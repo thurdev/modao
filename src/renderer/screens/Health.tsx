@@ -501,12 +501,20 @@ function Bisect(props: { profileId: number; pushToast: ToastFn }): JSX.Element {
                 <span className="step-num num">{active.step}</span>
                 <div className="col" style={{ gap: 2 }}>
                   <strong>{t('health.bisectLaunchNow')}</strong>
-                  <span className="faint">
-                    {active.testing.length} mod{active.testing.length === 1 ? '' : 's'} are enabled for this run.
-                  </span>
+                  <span className="faint">{t('health.bisectLoaded', { count: active.testing.length })}</span>
                 </div>
               </motion.div>
             </motion.div>
+
+            <div className="notice" data-kind="warn" style={{ marginBottom: 12 }}>
+              <span className="notice-mark" />
+              <div className="col" style={{ gap: 4 }}>
+                <strong>{t('health.bisectCareTitle')}</strong>
+                <span className="faint">{t('health.bisectCareMany')}</span>
+                <span className="faint">{t('health.bisectCareAddress')}</span>
+                <span className="faint">{t('health.bisectCareOneChange')}</span>
+              </div>
+            </div>
 
             <div className="row wrap">
               <Button
