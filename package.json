@@ -1,6 +1,6 @@
 {
   "name": "modao",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Modão — gerenciador de mods nativo do Mod Loader para GTA (San Andreas, III, Vice City e SA:DE)",
   "main": "out/main/index.js",
   "author": "thurdev",
