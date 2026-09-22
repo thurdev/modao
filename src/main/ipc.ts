@@ -13,9 +13,15 @@ import { log, logError } from './util/log'
 import { getDb, getSetting, setSetting } from './db'
 import { Paths } from './util/paths'
 import { dirSize, exists, walk } from './util/fsx'
-import { activeGame, addGame, detectCandidates, listGames, requireActiveGame, setActiveGame } from './game/detect'
-import { describeFsError, forgetWriteAccess, isProtectedLocation, probeWriteAccess } from './game/access'
-import { assertGameNotRunning } from './game/running'
+import { activeGame, addGame, detectCandidates, gameTarget, listGames, requireActiveGame, setActiveGame } from './game/detect'
+import {
+  describeFsError,
+  forgetWriteAccess,
+  isProtectedLocation,
+  probeWriteAccess,
+  writeAccessUnlessGameRunning
+} from './game/access'
+import { assertGameNotRunning, forgetRunningProcesses, whenGameClosed } from './game/running'
 import { readPe } from './game/pe'
 import {
   activateProfile,
@@ -180,10 +186,23 @@ function handle(channel: IpcChannel, fn: (...args: never[]) => unknown): void {
  * need it at all - only the ones sitting in a Windows-protected folder do. So
  * Modão asks once, remembers the answer for that game, and keeps pointing at
  * the better fix: move the game out of Program Files.
+ *
+ * This is read-shaped but the access probe underneath it is a write - it
+ * creates and deletes a file inside modloader\. So it never probes while the
+ * game is up: the last answer stands, and with no last answer there is simply
+ * nothing to report. The banner this feeds is about a permission problem the
+ * user hits when they install something, and they cannot install right now
+ * anyway.
  */
-export function elevationState(): { running: boolean; needed: boolean; remembered: boolean; reason: string | null; protectedPath: boolean } {
-  const game = activeGame()
-  const access = game ? probeWriteAccess(game.path) : null
+export async function elevationState(): Promise<{
+  running: boolean
+  needed: boolean
+  remembered: boolean
+  reason: string | null
+  protectedPath: boolean
+}> {
+  const game = gameTarget()
+  const access = game ? await writeAccessUnlessGameRunning(game) : null
   return {
     running: isElevated(),
     needed: !!access && !access.writable && access.needsElevation,
@@ -269,9 +288,14 @@ function requireWritableGame(): void {
  * modloader\, so the probe above succeeds and the write lands in a folder Mod
  * Loader is watching. It hot-reloads it and the game dies mid-session. This is
  * a refusal, not a warning: there is no safe way to continue.
+ *
+ * The install is read through `gameTarget`, which does no write-access probe:
+ * `requireActiveGame()` would have run one, and that probe writes a file into
+ * modloader\ - the check would have triggered the write it exists to prevent.
+ * A game id names the install to check when it is not the active one yet.
  */
-async function requireGameClosed(): Promise<void> {
-  await assertGameNotRunning(requireActiveGame())
+async function requireGameClosed(gameId?: number): Promise<void> {
+  await assertGameNotRunning(gameTarget(gameId) ?? requireActiveGame())
 }
 
 /**
@@ -377,11 +401,14 @@ export function registerIpc(): void {
   })
   ipcMain.handle('game:active', () => activeGame())
   ipcMain.handle('game:adopt', async (_e, gameId: number, profileName: string) => {
-    setActiveGame(gameId)
-    // Adoption rewrites modloader.ini with the priorities it found, so it is a
-    // write like any other. The access probe is deliberately not run: adopting
-    // is how a read-only install gets indexed in the first place.
-    await requireGameClosed()
+    // Checked before anything at all, the active-game pointer included: a
+    // refusal has to leave the app exactly as it was, which is what its message
+    // promises. The install is named by id because it is not the active one
+    // yet. Adoption rewrites modloader.ini with the priorities it found, so it
+    // is a write like any other; the access probe is deliberately not run,
+    // since adopting is how a read-only install gets indexed in the first place.
+    const target = gameTarget(gameId) ?? requireActiveGame()
+    await whenGameClosed(target, () => setActiveGame(gameId))
     const task = newTask('Adopting existing install')
     try {
       const result = await adoptInstall(profileName, (d, t) => progress(task.id, 'Adopting existing install', 'indexing', d, t))
@@ -424,6 +451,10 @@ export function registerIpc(): void {
     const profile = await activeProfile()
     if (profile) getDb().prepare('UPDATE profile SET last_played_at = ? WHERE id = ?').run(new Date().toISOString(), profile.id)
     const ok = await shell.openPath(exe)
+    // The process table just changed. The running check caches it for two
+    // seconds, which is exactly long enough for a user to alt-tab back and
+    // click something while the guard still believes the game is closed.
+    forgetRunningProcesses()
     if (ok === '') armCrashScan(profile?.id ?? null)
     return { launched: ok === '', message: ok || `Launched ${exe}` }
   })

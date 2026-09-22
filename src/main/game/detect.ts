@@ -220,6 +220,25 @@ export function requireActiveGame(): GameInstall {
   return g
 }
 
+/**
+ * Where an install is and which game it is, and nothing else.
+ *
+ * `toGameInstall` below runs a write-access probe, and that probe creates a
+ * file inside modloader\ - the folder Mod Loader watches. Anything that needs
+ * to know about an install *before* deciding whether writing to it is safe has
+ * to read it without that probe, or the check would trigger the very write it
+ * exists to prevent. With no id, the active install.
+ */
+export function gameTarget(id?: number): { id: number; path: string; kind: GameKind } | null {
+  const db = getDb()
+  const row = (
+    id === undefined
+      ? db.prepare('SELECT id, path, kind FROM game_install WHERE is_active = 1').get()
+      : db.prepare('SELECT id, path, kind FROM game_install WHERE id = ?').get(id)
+  ) as { id: number; path: string; kind: string } | undefined
+  return row ? { id: row.id, path: row.path, kind: gameDefinition(row.kind).kind } : null
+}
+
 export function toGameInstall(row: GameRow): GameInstall {
   const store = Paths.store()
   const same = sameVolume(store, row.path)

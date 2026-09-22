@@ -35,7 +35,13 @@ import {
 } from '../src/main/install/readme'
 import { classifyTree } from '../src/main/install/classify'
 import { displaceForeign, isOwned, ownedKey } from '../src/main/store/displace'
-import { describeFsError, isProtectedLocation } from '../src/main/game/access'
+import {
+  describeFsError,
+  forgetWriteAccess,
+  isProtectedLocation,
+  probeWriteAccess,
+  writeAccessUnlessGameRunning
+} from '../src/main/game/access'
 import { setMainLanguage } from '../src/main/util/i18n'
 import { translate } from '../src/shared/i18n'
 import { classifyDownload, looksLikeArchive, normalizeForFetch } from '../src/shared/download'
@@ -45,7 +51,15 @@ import { catalogKind } from '../src/shared/catalogKind'
 import { parseCrashDump, parseModLoaderLog } from '../src/main/diagnostics/modloaderLog'
 import { limitAdjusterNames, parseStreamIni, SAFE_STREAMING_MEMORY_MB } from '../src/main/game/streamIni'
 import { pluginEvidence } from '../src/main/formats/strings'
-import { assertGameNotRunning, gameExeNames, gameRunningVerdict, type RunningProcess } from '../src/main/game/running'
+import {
+  assertGameNotRunning,
+  forgetRunningProcesses,
+  gameExeNames,
+  gameRunningVerdict,
+  rememberGameRunning,
+  whenGameClosed,
+  type RunningProcess
+} from '../src/main/game/running'
 import { signatureForArchive } from '../src/main/knowledge/signature'
 
 let failures = 0
@@ -1428,6 +1442,79 @@ check(
     addressNote: null
   }).crashAddress === '0x004C0C63'
 )
+
+// --- the access probe must not write while the game is up -------------------
+// probeWriteAccess establishes write access by creating and deleting a file
+// inside modloader\ - the folder Mod Loader watches. app:elevation and
+// game:list reach it without meaning to write anything at all, so with the game
+// up it has to answer from what it already knows and touch nothing.
+const probeRoot = path.join(tmp, 'probe-game')
+const probeModloader = path.join(probeRoot, 'modloader')
+fs.mkdirSync(probeModloader, { recursive: true })
+const probeGame = { path: probeRoot, kind: 'sa' as const }
+// The process has to be running out of *this* folder, or the verdict is
+// "somebody else's install" and the probe is allowed to run after all.
+const listerRunningHere = async (): Promise<RunningProcess[]> => [proc('gta_sa.exe', path.join(probeRoot, 'gta_sa.exe'))]
+
+forgetWriteAccess()
+forgetRunningProcesses()
+const closedAccess = await writeAccessUnlessGameRunning(probeGame, listerIdle)
+check('probe: with the game closed it probes and answers', closedAccess?.writable === true, closedAccess)
+check('probe: the probe file is never left behind', fs.readdirSync(probeModloader).length === 0)
+
+// Nothing known and the game up: "not known", rather than an answer invented by
+// writing into a folder Mod Loader is watching. A probe here would have
+// returned an ENOENT verdict, so null is proof that none was run.
+fs.rmSync(probeRoot, { recursive: true, force: true })
+forgetWriteAccess()
+forgetRunningProcesses()
+const unknownAccess = await writeAccessUnlessGameRunning(probeGame, listerRunningHere)
+check('probe: nothing known and the game running answers nothing', unknownAccess === null, unknownAccess)
+check('probe: and it did not create anything to find out', !fs.existsSync(probeRoot))
+
+// With an earlier answer on record, that answer is what is served.
+fs.mkdirSync(probeModloader, { recursive: true })
+forgetRunningProcesses()
+await writeAccessUnlessGameRunning(probeGame, listerIdle)
+forgetRunningProcesses()
+const runningAccess = await writeAccessUnlessGameRunning(probeGame, listerRunningHere)
+check(
+  'probe: with the game running the earlier answer is served',
+  runningAccess?.writable === true && fs.readdirSync(probeModloader).length === 0,
+  runningAccess
+)
+
+// The same rule has to reach the synchronous callers that cannot await - every
+// activeGame() behind toGameInstall. A forced probe is still a write.
+fs.rmSync(probeRoot, { recursive: true, force: true })
+forgetWriteAccess()
+rememberGameRunning(probeRoot, true)
+const forced = probeWriteAccess(probeRoot, true)
+check('probe: a forced sync probe is suppressed while the game is running', forced.writable === true && !fs.existsSync(probeRoot), forced)
+forgetRunningProcesses()
+const afterwards = probeWriteAccess(probeRoot, true)
+check('probe: once the game is gone the sync probe runs again', afterwards.writable === false && afterwards.code === 'ENOENT', afterwards)
+forgetWriteAccess()
+forgetRunningProcesses()
+
+// --- a refusal changes nothing ----------------------------------------------
+// game:adopt used to point the app at the install before checking on it, so a
+// refusal still moved the active-game pointer while telling the user nothing
+// had changed. The mutation runs through whenGameClosed now.
+let activeGameId = 1
+let adoptRefusal: string | null = null
+try {
+  await whenGameClosed(saInstall, () => (activeGameId = 2), listerRunning)
+} catch (e) {
+  adoptRefusal = (e as Error).message
+}
+check('adopt: the refusal is raised', !!adoptRefusal && adoptRefusal.includes('gta_sa.exe'), adoptRefusal)
+check('adopt: the active game is left exactly where it was', activeGameId === 1)
+check(
+  'adopt: with the game closed the change goes through',
+  (await whenGameClosed(saInstall, () => (activeGameId = 2), listerIdle)) === 2 && activeGameId === 2
+)
+forgetRunningProcesses()
 
 fs.rmSync(tmp, { recursive: true, force: true })
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`)

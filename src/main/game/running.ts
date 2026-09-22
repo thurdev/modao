@@ -199,8 +199,36 @@ async function tasklistProcesses(exeNames: string[]): Promise<RunningProcess[]> 
 const CACHE_TTL_MS = 2_000
 let cache: { at: number; key: string; processes: RunningProcess[] } | null = null
 
+/**
+ * Dropped the moment the game is launched: the table was read at most two
+ * seconds ago and would still say the game is closed, which is exactly the
+ * window in which a user alt-tabs back and clicks something.
+ */
 export function forgetRunningProcesses(): void {
   cache = null
+  lastKnown = null
+}
+
+/**
+ * The last answer, readable without awaiting.
+ *
+ * `probeWriteAccess` is synchronous and is reached from places that cannot be
+ * made async - `toGameInstall`, every `activeGame()` call behind it - yet it
+ * writes a file into modloader\. It asks here first so that, once anything has
+ * established the game is up, none of those paths writes anything. `null` means
+ * nobody has asked recently and the caller has to decide for itself.
+ */
+const LAST_KNOWN_TTL_MS = 15_000
+let lastKnown: { at: number; path: string; running: boolean } | null = null
+
+export function lastKnownGameRunning(gamePath: string): boolean | null {
+  if (!lastKnown || Date.now() - lastKnown.at > LAST_KNOWN_TTL_MS) return null
+  return normalize(lastKnown.path) === normalize(gamePath ?? '') ? lastKnown.running : null
+}
+
+/** Test seam: sets what `lastKnownGameRunning` will answer. */
+export function rememberGameRunning(gamePath: string, running: boolean): void {
+  lastKnown = { at: Date.now(), path: gamePath, running }
 }
 
 async function processesFor(exeNames: string[], lister: ProcessLister): Promise<RunningProcess[]> {
@@ -218,7 +246,9 @@ export async function checkGameRunning(
 ): Promise<GameRunningVerdict> {
   const names = gameExeNames(game.kind)
   const processes = lister === listWindowsProcesses ? await processesFor(names, lister) : await lister(names)
-  return gameRunningVerdict(game, processes)
+  const verdict = gameRunningVerdict(game, processes)
+  rememberGameRunning(game.path, !verdict.allowed)
+  return verdict
 }
 
 /**
@@ -232,4 +262,22 @@ export async function assertGameNotRunning(
   const verdict = await checkGameRunning(game, lister)
   if (verdict.allowed) return
   throw new Error(t('messages.access.gameRunning', { exe: verdict.exe ?? gameExeNames(game.kind)[0] }))
+}
+
+/**
+ * Runs `mutate` only when the game is closed, and nothing at all when it is not.
+ *
+ * Adoption used to point the app at the install it was adopting before checking
+ * on it, so a refusal still moved the active-game pointer - which the refusal's
+ * own "nothing was changed" flatly contradicted. Anything that has to change
+ * state before it can do its work goes through here, so that a refusal is
+ * genuinely atomic.
+ */
+export async function whenGameClosed<T>(
+  game: { path: string; kind: GameKind },
+  mutate: () => T,
+  lister?: ProcessLister
+): Promise<T> {
+  await assertGameNotRunning(game, lister)
+  return mutate()
 }
