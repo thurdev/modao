@@ -158,7 +158,12 @@ rodar se algum mod não puder ser materializado.
 
 ## Licença
 
-[MIT](LICENSE).
+[GPL-3.0-or-later](LICENSE).
+
+Em português claro: usa, modifica e redistribui à vontade. Se você distribuir
+uma versão modificada, é obrigado a publicar o código dela sob a mesma licença.
+Ninguém pega isso, fecha o código e transforma num produto proprietário — que é
+exatamente o ponto, porque isso aqui é da comunidade.
 
 ---
 
@@ -216,6 +221,9 @@ unsigned.
 the [MixMods](https://www.mixmods.com.br/) community. Not affiliated with
 Rockstar Games; distributes no game content and never patches the executable.
 
-MIT licensed.
+Licensed under the GPL-3.0-or-later: use it, change it, redistribute it. If you
+distribute a modified version, you have to publish its source under the same
+licence. Nobody takes this, closes the source and turns it into a proprietary
+product - which is the point, because it belongs to the community.
 
 </details>

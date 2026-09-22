@@ -4,7 +4,7 @@
   "description": "Modão — gerenciador de mods nativo do Mod Loader para GTA (San Andreas, III, Vice City e SA:DE)",
   "main": "out/main/index.js",
   "author": "thurdev",
-  "license": "MIT",
+  "license": "GPL-3.0-or-later",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",

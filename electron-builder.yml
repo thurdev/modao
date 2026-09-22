@@ -3,6 +3,8 @@ productName: Modão
 # The window and the installer say "Modão"; the file on disk stays ASCII, because an
 # accent in an executable name trips shortcuts, scripts and the odd antivirus.
 executableName: Modao
+# Shown by the installer and recorded in the app metadata.
+license: LICENSE
 directories:
   buildResources: build
   output: dist
