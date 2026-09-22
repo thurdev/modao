@@ -268,9 +268,19 @@ async function scanModLoaderCrash(profileId: number | null): Promise<{ added: nu
   // addressingForStorage is the one place that distinction is made, and it is
   // tested directly.
   const addressing = addressingForStorage({ from: 'modloader', module: crash.module, address: crash.address })
+  // The Event-Log path looks its address up in CrashList (see the loop above);
+  // this one used to insert matched_cause/matched_solution as null
+  // unconditionally, so the SAME address found by Windows resolved to a cause
+  // and found by Mod Loader did not. addressing.addressKind is only ever
+  // 'exe' when there is an address CrashList can be asked about at all.
+  const match = addressing.lookupAddress ? await lookup(addressing.lookupAddress) : null
+  const cause = match?.cause ?? (match?.nearest ? `${match.nearest.cause} (nearest known address ${match.nearest.address})` : null)
+  const registerEntries = Object.entries(crash.registers)
   const detail = [
     crash.reason,
+    registerEntries.length ? `Registers:\n${registerEntries.map(([k, v]) => `${k}=${v}`).join(' ')}` : '',
     crash.lastStreamedFile ? `Last file opened for streaming: ${crash.lastStreamedFile}` : '',
+    crash.stack.length ? `Stack dump:\n${crash.stack.join('\n')}` : '',
     crash.backtrace.length ? `Backtrace:\n${crash.backtrace.join('\n')}` : ''
   ]
     .filter(Boolean)
@@ -293,8 +303,8 @@ async function scanModLoaderCrash(profileId: number | null): Promise<{ added: nu
       crash.module ?? 'gta_sa.exe',
       '',
       addressing.crashAddress,
-      null,
-      null,
+      cause,
+      match?.solution ?? null,
       'exception',
       detail,
       'modloader.log',

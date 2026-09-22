@@ -147,8 +147,9 @@ export function parseModLoaderLog(text: string, expected: string[] = []): Omit<M
 /**
  * Mod Loader installs its own crash handler and writes a register dump, a stack
  * dump and a backtrace straight into this log. It is far better than the
- * Windows Event Log: the Event Log gives one address, this gives the call path
- * and the last file the streamer touched.
+ * Windows Event Log: the Event Log gives one address, this gives the call path,
+ * the register state at the moment of the fault, and the last file the
+ * streamer touched.
  */
 export function parseCrashDump(text: string): ModLoaderCrash | null {
   const start = text.search(/Game has crashed|Unhandled exception|EXCEPTION_/i)
@@ -178,12 +179,68 @@ export function parseCrashDump(text: string): ModLoaderCrash | null {
     }
   }
 
+  const registers = parseRegisterBlock(tail)
+  const stack = parseStackBlock(tail)
+
   // "Opening file for streaming MODELS\GTA3.IMG" right before the fault names
   // what the game was reading when it died.
   const streamed = [...text.matchAll(/Opening file for streaming "?([^"\r\n]+)"?/gi)].pop()?.[1] ?? null
   const when = /\[(\d{4}-\d{2}-\d{2}[^\]]*)\]/.exec(tail)?.[1] ?? null
 
-  return { occurredAt: when, reason, address, addressIsAbsolute: true, module, backtrace, lastStreamedFile: streamed }
+  return {
+    occurredAt: when,
+    reason,
+    address,
+    addressIsAbsolute: true,
+    module,
+    backtrace,
+    lastStreamedFile: streamed,
+    registers,
+    stack
+  }
+}
+
+/**
+ * The register dump: one or more "NAME=VALUE" or "NAME: VALUE" pairs, e.g.
+ * "ECX=FFFFFFFF" or "EIP: 005B8E55". This is exactly what makes a crash like
+ * the spec's worked example solvable - ECX = 0xFFFFFFFF is why a "this ==
+ * -1" call is the diagnosis, not just an address. Read up to the next named
+ * section or a blank line, so it never swallows the stack dump or backtrace
+ * that usually follow it.
+ */
+function parseRegisterBlock(tail: string): Record<string, string> {
+  const registers: Record<string, string> = {}
+  const start = tail.search(/Register(?:s|\s+dump)?\s*:?/i)
+  if (start < 0) return registers
+
+  const rest = tail.slice(start)
+  const bodyStart = rest.search(/\r?\n/)
+  if (bodyStart < 0) return registers
+  const body = rest.slice(bodyStart)
+  const end = body.search(/\r?\n\s*\r?\n|Stack ?dump|Backtrace|Call ?stack/i)
+  const region = end >= 0 ? body.slice(0, end) : body.slice(0, 600)
+
+  for (const m of region.matchAll(/\b([A-Z]{2,4})\s*[=:]\s*(0x[0-9A-Fa-f]+|[0-9A-Fa-f]{4,8})\b/g)) {
+    const digits = m[2].replace(/^0x/i, '').toUpperCase()
+    registers[m[1].toUpperCase()] = `0x${digits}`
+  }
+  return registers
+}
+
+/** The raw stack-dump lines, kept as written - they are read as hex, not parsed further. */
+function parseStackBlock(tail: string): string[] {
+  const stack: string[] = []
+  const start = tail.search(/Stack ?dump/i)
+  if (start < 0) return stack
+  for (const line of tail.slice(start).split(/\r?\n/).slice(1)) {
+    const t = line.trim()
+    if (!t) break
+    if (/^[-=]{3,}$/.test(t)) break
+    if (/^(Backtrace|Call ?stack)\b/i.test(t)) break
+    stack.push(t)
+    if (stack.length >= 32) break
+  }
+  return stack
 }
 
 export async function reportFromGame(gamePath: string, expected: string[] = []): Promise<ModLoaderLogReport | null> {

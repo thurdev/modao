@@ -815,6 +815,15 @@ export function registerIpc(): void {
       solution: m.solution
     }
   })
+  // "Deep analysis": for a crash address CrashList has no entry for. Not a
+  // disassembler - see src/main/diagnostics/disasm.ts for exactly what this
+  // does and does not do.
+  ipcMain.handle('health:deepAnalyze', async (_e, address: string) => {
+    const game = requireActiveGame()
+    const exeName = gameDefinition(game.kind).exeNames[0]
+    const { deepAnalyse } = await import('./diagnostics/disasm')
+    return deepAnalyse(path.join(game.path, exeName), address)
+  })
   // The renderer still passes a profile id; the logs are not per-profile, and an
   // extra argument to a handler that ignores it is harmless.
   ipcMain.handle('health:modLoaderReport', async (_e, profileId: number) => {

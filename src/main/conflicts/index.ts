@@ -1,9 +1,12 @@
 import path from 'node:path'
+import fsp from 'node:fs/promises'
 import type { ConflictClaimant, FileConflict } from '@shared/types'
+import { findHookCollisions, type HookCollision } from '@shared/hookCollisions'
 import { getDb } from '../db'
 import { resolveWinner } from '../game/modloaderIni'
 import { storeDir } from '../store/contentStore'
 import { analyzeTxd, describeTxdProblems } from '../formats/txd'
+import { pluginEvidence } from '../formats/strings'
 import { exists } from '../util/fsx'
 
 interface ProvidesRow {
@@ -117,6 +120,43 @@ export function locateProvided(installId: number, providesKey: string): string |
   if (!row?.store_key) return null
   const p = path.join(storeDir(row.store_key), row.relative_path)
   return exists(p) ? p : null
+}
+
+/**
+ * Two mods hooking the same address, found by decoding the MSVC-mangled
+ * template args a plugin-sdk .asi built with no source leaves in its own
+ * symbol table (see @shared/mangled, @shared/hookCollisions). Unlike the file
+ * conflicts above, this never shows up as two mods claiming one filename -
+ * both .asi files install cleanly, and the collision is invisible until one
+ * of the two hooks the other stomps on stops working, or both crash.
+ */
+export async function listHookCollisions(profileId: number, limit = 60): Promise<HookCollision[]> {
+  const rows = getDb()
+    .prepare(
+      `SELECT i.store_key, m.title, f.relative_path
+         FROM install_file f
+         JOIN install i ON i.id = f.install_id
+         JOIN mod_version mv ON mv.id = i.mod_version_id
+         JOIN mod m ON m.id = mv.mod_id
+        WHERE i.profile_id = ? AND i.enabled = 1 AND lower(f.relative_path) LIKE '%.asi'`
+    )
+    .all(profileId) as { store_key: string | null; title: string; relative_path: string }[]
+
+  const candidates: { title: string; file: string; addresses: number[] }[] = []
+  let budget = limit
+  for (const row of rows) {
+    if (budget-- <= 0) break
+    if (!row.store_key) continue
+    const file = path.join(storeDir(row.store_key), row.relative_path)
+    if (!exists(file)) continue
+    const buf = await fsp.readFile(file).catch(() => null)
+    if (!buf) continue
+    const evidence = pluginEvidence(buf)
+    if (evidence.hookAddresses.length) {
+      candidates.push({ title: row.title, file: row.relative_path, addresses: evidence.hookAddresses })
+    }
+  }
+  return findHookCollisions(candidates)
 }
 
 /** The conflict key a file is indexed under: inside a Mod Loader folder, the path relative to that folder. */

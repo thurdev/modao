@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import type { BisectSession, CrashIncident, CrashReport, HealthCheck } from '@shared/types'
+import type { BisectSession, CrashIncident, CrashReport, DeepAnalysisResult, HealthCheck } from '@shared/types'
 import { UNLOADED_NOTE } from '@shared/crash'
 import { api, relativeTime } from '../api'
-import { useT } from '../lib/i18n'
+import { useT, type TranslateFn } from '../lib/i18n'
 import { useApp } from '../state/store'
 import { Badge, Button, Checkbox, Empty, ErrorNote, Loading, Modal, StatusDot, Tabs, useAsync } from '../components/ui'
 import { Icon } from '../components/icons'
@@ -174,6 +174,23 @@ function Crashes(props: { profileId: number; pushToast: ToastFn }): JSX.Element 
   const [manualResult, setManualResult] = useState<{ address: string; cause: string | null; solution: string | null } | null>(
     null
   )
+  const [deepLoading, setDeepLoading] = useState(false)
+  const [deepResults, setDeepResults] = useState<Record<number, DeepAnalysisResult>>({})
+
+  // Only offered when CrashList had nothing to say: this is what makes a miss
+  // read as "not in the bundled list, here is a hex window" instead of a dead end.
+  async function runDeepAnalysis(crash: CrashReport): Promise<void> {
+    if (!crash.crashAddress) return
+    setDeepLoading(true)
+    try {
+      const result = await api.deepAnalyze(crash.crashAddress)
+      setDeepResults((prev) => ({ ...prev, [crash.id]: result }))
+    } catch (e) {
+      props.pushToast('error', (e as Error).message)
+    } finally {
+      setDeepLoading(false)
+    }
+  }
 
   async function scan(): Promise<void> {
     setScanning(true)
@@ -386,6 +403,22 @@ function Crashes(props: { profileId: number; pushToast: ToastFn }): JSX.Element 
                     <p className="muted">{detail.primary.matchedSolution}</p>
                   </>
                 ) : null}
+                {!detail.primary.matchedCause ? (
+                  deepResults[detail.primary.id] ? (
+                    <DeepAnalysisView result={deepResults[detail.primary.id]} t={t} />
+                  ) : (
+                    <div style={{ marginTop: 8 }}>
+                      <Button
+                        size="sm"
+                        variant="quiet"
+                        disabled={deepLoading}
+                        onClick={() => void runDeepAnalysis(detail.primary)}
+                      >
+                        {deepLoading ? t('crashes.deepAnalyzing') : t('crashes.deepAnalyze')}
+                      </Button>
+                    </div>
+                  )
+                ) : null}
               </>
             ) : (
               <>
@@ -416,6 +449,33 @@ function Crashes(props: { profileId: number; pushToast: ToastFn }): JSX.Element 
         ) : null}
       </AnimatePresence>
     </>
+  )
+}
+
+/**
+ * The result of "deep analysis": a hex window around the crash address, not a
+ * disassembly - Modão has no x86 decoder and bundles neither Python nor
+ * capstone. `result.note` says so plainly (or explains why there is nothing
+ * to show, when the address falls in no section of the exe).
+ */
+function DeepAnalysisView(props: { result: DeepAnalysisResult; t: TranslateFn }): JSX.Element {
+  const { result, t } = props
+  return (
+    <div className="col" style={{ marginTop: 8, gap: 6 }}>
+      {result.section !== null && result.fileOffset !== null ? (
+        <div className="row wrap faint" style={{ gap: 12 }}>
+          <span>{t('crashes.deepAnalysisSection', { section: result.section })}</span>
+          <span>{t('crashes.deepAnalysisOffset', { offset: result.fileOffset.toString(16).toUpperCase() })}</span>
+        </div>
+      ) : null}
+      {result.hex.length ? (
+        <>
+          <strong className="faint">{t('crashes.deepAnalysisHexHeading')}</strong>
+          <pre className="pre mono">{result.hex.join('\n')}</pre>
+        </>
+      ) : null}
+      <p className="faint">{result.note}</p>
+    </div>
   )
 }
 

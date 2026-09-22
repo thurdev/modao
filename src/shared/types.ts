@@ -193,6 +193,15 @@ export interface InstalledMod {
   updateAvailable: boolean
   latestVersionLabel: string | null
   subMods: SubMod[]
+  /** Mutually exclusive options recorded at install time, switchable without re-downloading. */
+  variantGroups: InstalledVariantGroup[]
+}
+
+export interface InstalledVariantGroup {
+  id: string
+  question: string
+  chosenOptionId: string
+  options: { id: string; label: string }[]
 }
 
 /** One archive entry classified into a destination. */
@@ -223,10 +232,31 @@ export interface VariantGroup {
   id: string
   /** Path of the parent folder containing the mutually exclusive siblings. */
   parentPath: string
+  /**
+   * Set when the parent folder is itself a parenthesised config container
+   * ("(configurações)") whose options duplicate a sibling mod's own config
+   * filenames. The chosen option merges into this mod's own folder instead of
+   * becoming a top-level mod of its own.
+   */
+  attachedToPath: string | null
   kind: 'style' | 'resolution' | 'language' | 'game' | 'extra' | 'generic'
   question: string
   hint: string | null
   options: VariantOption[]
+}
+
+/**
+ * An optional folder that means nothing installed on its own - "Extra",
+ * "(bonus)", "translations" - but that a user may still want: merged into the
+ * mod it belongs to, or installed as its own higher-priority mod.
+ */
+export interface AddOn {
+  id: string
+  /** Path inside the archive. */
+  path: string
+  label: string
+  fileCount: number
+  size: number
 }
 
 /**
@@ -295,6 +325,8 @@ export interface InstallPlan {
   extractRoot: string
   readmes: ReadmeParse[]
   variants: VariantGroup[]
+  /** Optional folders offered beside the plan - enable to merge or install separately. */
+  addOns: AddOn[]
   files: PlannedFile[]
   dependencies: DependencyNode[]
   /**
@@ -669,6 +701,37 @@ export interface ModLoaderCrash {
   module: string | null
   backtrace: string[]
   lastStreamedFile: string | null
+  /**
+   * Name -> value, exactly as Mod Loader's own crash handler printed them
+   * ("ECX" -> "0xFFFFFFFF"). Empty when the dump carried no register block.
+   */
+  registers: Record<string, string>
+  /** The raw stack-dump lines, in the order the handler wrote them. */
+  stack: string[]
+}
+
+/** One row of a PE section table: what a VA-to-file-offset conversion needs. */
+export interface PeSection {
+  name: string
+  virtualAddress: number
+  virtualSize: number
+  rawSize: number
+  rawPointer: number
+}
+
+/** The result of the app's "deep analysis" action on a crash address that CrashList could not answer for. */
+export interface DeepAnalysisResult {
+  address: string
+  /** Null when the address falls in no section of the exe as read from disk. */
+  fileOffset: number | null
+  section: string | null
+  /** Formatted hex-dump lines around the address. Empty when fileOffset is null. */
+  hex: string[]
+  /**
+   * Always present: explains what this is (a hex window, not a disassembly)
+   * or why there is nothing to show.
+   */
+  note: string
 }
 
 export interface ModLoaderLogReport {

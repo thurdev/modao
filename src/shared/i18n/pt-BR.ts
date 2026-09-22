@@ -99,7 +99,17 @@ export const ptBR = {
     faultOffset: 'Deslocamento da falha',
     crashAddress: 'Endereço do crash',
     faultLocation: 'Local da falha',
-    notLookedUpTitle: 'Não consultado'
+    notLookedUpTitle: 'Não consultado',
+    deepAnalyze: 'Análise profunda',
+    deepAnalyzing: 'Analisando…',
+    deepAnalysisSection: 'Seção do executável: {section}',
+    deepAnalysisOffset: 'Deslocamento no arquivo: 0x{offset}',
+    deepAnalysisHexHeading: 'Bytes ao redor do endereço',
+    deepAnalysisInvalidAddress: 'Isso não é um endereço válido.',
+    deepAnalysisNotFound:
+      'Esse endereço não cai dentro de nenhuma seção do gta_sa.exe lido do disco — pode pertencer a uma DLL, a uma região gerada em tempo de execução, ou o executável no disco não é o mesmo que crashou.',
+    deepAnalysisDisclaimer:
+      'Isto é uma janela de bytes ao redor do endereço do crash, não uma desmontagem: o Modão não tem um decodificador x86 e não empacota Python nem capstone. Cole esses bytes num desmontador (um site hex-para-asm, IDA Free, Ghidra) para ler as instruções de verdade.'
   },
   access: {
     theGameFolder: 'a pasta do jogo',

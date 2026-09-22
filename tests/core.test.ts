@@ -51,6 +51,9 @@ import { catalogKind } from '../src/shared/catalogKind'
 import { parseCrashDump, parseModLoaderLog } from '../src/main/diagnostics/modloaderLog'
 import { limitAdjusterNames, parseStreamIni, SAFE_STREAMING_MEMORY_MB } from '../src/main/game/streamIni'
 import { pluginEvidence } from '../src/main/formats/strings'
+import { decodeMangledHex, extractMangledAddresses } from '../src/shared/mangled'
+import { findHookCollisions } from '../src/shared/hookCollisions'
+import { formatHexDump, vaToFileOffset } from '../src/shared/disasm'
 import {
   assertGameNotRunning,
   checkGameRunning,
@@ -1833,6 +1836,97 @@ check(
 )
 forgetWriteAccess()
 forgetRunningProcesses()
+
+// --- MSVC-mangled hook addresses ---------------------------------------------
+// A plugin-sdk .asi built with no source spells the addresses it hooks as hex
+// nibbles A-P (A=0 .. P=15) inside its own symbol table. These four are the
+// real mangled names CollectiblesOnRadar.SA.asi carries.
+check('mangled: $0FDOJIB@ decodes to 0x53E981', decodeMangledHex('$0FDOJIB@') === 0x53e981, decodeMangledHex('$0FDOJIB@'))
+check('mangled: $0FHFLEE@ decodes to 0x575B44', decodeMangledHex('$0FHFLEE@') === 0x575b44, decodeMangledHex('$0FHFLEE@'))
+check('mangled: $0FIKKCN@ decodes to 0x58AA2D', decodeMangledHex('$0FIKKCN@') === 0x58aa2d, decodeMangledHex('$0FIKKCN@'))
+check('mangled: $0FLPDKB@ decodes to 0x5BF3A1', decodeMangledHex('$0FLPDKB@') === 0x5bf3a1, decodeMangledHex('$0FLPDKB@'))
+check('mangled: a malformed token decodes to nothing', decodeMangledHex('$0FDOJIB') === null)
+
+const embeddedMangled = extractMangledAddresses(['??$Call@$0FDOJIB@@ClassX@@SAXXZ', 'no mangling in here at all'])
+check(
+  'mangled: a mangled token embedded in a longer decorated symbol is still found',
+  embeddedMangled.includes(0x53e981),
+  embeddedMangled
+)
+
+// --- two mods hooking one address --------------------------------------------
+const hookCollisions = findHookCollisions([
+  { title: 'Collectibles on Radar', file: 'CollectiblesOnRadar.SA.asi', addresses: [0x53e981, 0x575b44] },
+  { title: 'Some Other Mod', file: 'OtherMod.asi', addresses: [0x53e981] }
+])
+check(
+  'hooks: two different mods hooking one address are flagged',
+  hookCollisions.some((c) => c.address === '0x0053E981' && new Set(c.claimants.map((x) => x.title)).size === 2),
+  hookCollisions
+)
+check(
+  'hooks: an address only one mod hooks is not flagged',
+  !hookCollisions.some((c) => c.address === '0x00575B44'),
+  hookCollisions
+)
+const noHookCollision = findHookCollisions([
+  { title: 'Solo Mod', file: 'a.asi', addresses: [0x1000] },
+  { title: 'Solo Mod', file: 'b.asi', addresses: [0x1000] }
+])
+check('hooks: the same mod hooking its own address from two files is not a collision', noHookCollision.length === 0, noHookCollision)
+
+// --- deep analysis: VA to file offset, and a hex window -----------------------
+// Not a disassembler - Python and capstone are not available to this app. This
+// is the VA-to-file-offset conversion, over a synthetic PE section table.
+const synthSections = [
+  { name: '.text', virtualAddress: 0x1000, virtualSize: 0x5000, rawSize: 0x5000, rawPointer: 0x400 },
+  { name: '.rdata', virtualAddress: 0x6000, virtualSize: 0x2000, rawSize: 0x2000, rawPointer: 0x5400 }
+]
+const synthImageBase = 0x400000
+const offsetHit = vaToFileOffset(synthImageBase, synthSections, synthImageBase + 0x1200)
+check(
+  'disasm: a VA converts to the right file offset for a synthetic PE section table',
+  offsetHit?.section === '.text' && offsetHit?.fileOffset === 0x600,
+  offsetHit
+)
+const offsetMiss = vaToFileOffset(synthImageBase, synthSections, synthImageBase + 0x9000)
+check('disasm: a VA outside every section converts to nothing', offsetMiss === null, offsetMiss)
+const hexLines = formatHexDump(Buffer.from(Array.from({ length: 16 }, (_, i) => i)), 0x600, 0x602)
+check('disasm: the byte at the marked offset is bracketed in the hex dump', hexLines[0]?.includes('[02]'), hexLines)
+
+// --- the register dump and stack dump Mod Loader's own handler writes -------
+const crashLogWithRegs = [
+  'Opening file for streaming "MODELS\\GTA3.IMG"',
+  'Unhandled exception at 0x005B8E55 in module "gta_sa.exe"',
+  'EXCEPTION_ACCESS_VIOLATION writing to 0x00000024',
+  'Register dump:',
+  'EAX=00000000 EBX=00892400 ECX=FFFFFFFF EDX=00000001',
+  'ESI=00000000 EDI=00000000 EBP=0028F914 ESP=0028F8FC EIP=005B8E55',
+  '',
+  'Stack dump:',
+  '0028F8FC  00 00 00 00 01 00 00 00',
+  '0028F904  00 00 00 00 00 00 00 00',
+  '',
+  'Backtrace:',
+  '  0x005B8E55 gta_sa.exe CStreaming::RequestModelStream',
+  '  0x004C0C63 gta_sa.exe CStreaming::LoadAllRequestedModels',
+  '',
+  '--------------------------------'
+].join('\r\n')
+const regCrash = parseCrashDump(crashLogWithRegs)
+check('modloader.log: a register dump is parsed, ECX included', regCrash?.registers.ECX === '0xFFFFFFFF', regCrash?.registers)
+check('modloader.log: every register on the line is parsed, not just the first', regCrash?.registers.EIP === '0x005B8E55', regCrash?.registers)
+check(
+  'modloader.log: the stack dump is kept, separate from the backtrace',
+  regCrash?.stack.length === 2 && regCrash?.stack[0].startsWith('0028F8FC'),
+  regCrash?.stack
+)
+check(
+  'modloader.log: the backtrace still reads correctly with a register and stack dump present',
+  regCrash?.backtrace.length === 2,
+  regCrash?.backtrace
+)
+check('modloader.log: a dump with no register block reports no registers', mlCrash?.registers && Object.keys(mlCrash.registers).length === 0, mlCrash?.registers)
 
 fs.rmSync(tmp, { recursive: true, force: true })
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`)

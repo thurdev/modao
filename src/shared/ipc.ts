@@ -6,6 +6,7 @@ import type {
   CatalogMod,
   CrashIncident,
   CrashReport,
+  DeepAnalysisResult,
   ExistingSavesReport,
   FileConflict,
   GameInstall,
@@ -168,6 +169,8 @@ export interface ModãoApi {
     scanCrashes(profileId: number): Promise<{ found: number; added: number; hangSuspected: boolean; message: string }>
     resolveCrash(id: number, resolved: boolean): Promise<void>
     lookupAddress(address: string): Promise<{ address: string; cause: string | null; solution: string | null }>
+    /** Not a disassembler: a VA-to-file-offset conversion plus a hex window, for an address CrashList had no entry for. */
+    deepAnalyze(address: string): Promise<DeepAnalysisResult>
     logs(): Promise<LogEntry[]>
     /** What Mod Loader itself says it did with this profile's mods. */
     modLoaderReport(profileId: number): Promise<ModLoaderLogReport | null>
@@ -268,6 +271,7 @@ export const IPC_CHANNELS = [
   'health:scanCrashes',
   'health:resolveCrash',
   'health:lookupAddress',
+  'health:deepAnalyze',
   'health:logs',
   'health:modLoaderReport',
   'health:fixStreamingMemory',

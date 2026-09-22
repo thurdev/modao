@@ -104,6 +104,12 @@ export const checks = {
     sizeSummary: '{size} GB de mods ligados',
     sizeDetail:
       'Pacote grande somado a um espaço de endereçamento de 2 GB é a causa mais comum de crash por falta de memória no meio do jogo.',
+    hookTitle: 'Mods hookando o mesmo endereço',
+    hookNone: 'Nenhum hook duplicado encontrado entre os .asi deste perfil',
+    hookFound_one: '1 endereço tem mais de um mod hookando ele',
+    hookFound_other: '{count} endereços têm mais de um mod hookando eles',
+    hookDetail:
+      'Um plugin-sdk .asi compilado sem código-fonte guarda os endereços que ele hooka como nomes ofuscados no próprio símbolo — o Modão decodifica isso. Dois mods hookando o mesmo endereço não aparecem como conflito de arquivo: os dois .asi instalam sem problema, e só um dos hooks sobrevive em tempo de execução.',
     unknown: 'desconhecido'
   },
   en: {
@@ -204,6 +210,12 @@ export const checks = {
     sizeSummary: '{size} GB of enabled mods',
     sizeDetail:
       'Large packs plus a 2 GB address space is the usual cause of out-of-memory crashes mid-game.',
+    hookTitle: 'Mods hooking the same address',
+    hookNone: 'No duplicate hooks found among this profile\'s .asi files',
+    hookFound_one: '1 address has more than one mod hooking it',
+    hookFound_other: '{count} addresses have more than one mod hooking them',
+    hookDetail:
+      'A plugin-sdk .asi built with no source code stores the addresses it hooks as obfuscated names in its own symbol table - Modão decodes that. Two mods hooking the same address never show up as a file conflict: both .asi files install fine, and only one hook survives at runtime.',
     unknown: 'unknown'
   }
 } as const

@@ -10,6 +10,7 @@ import type {
   CatalogMod,
   CrashIncident,
   CrashReport,
+  DeepAnalysisResult,
   FileConflict,
   GameInstall,
   HealthReport,
@@ -203,6 +204,7 @@ export const api = {
   resolveCrash: (id: number, resolved: boolean) => call<void>('health:resolveCrash', id, resolved),
   lookupAddress: (address: string) =>
     call<{ address: string; cause: string | null; solution: string | null }>('health:lookupAddress', address),
+  deepAnalyze: (address: string) => call<DeepAnalysisResult>('health:deepAnalyze', address),
   fixStreamingMemory: (memoryMb?: number) =>
     call<{ file: string; backup: string; from: number | null; to: number }>('health:fixStreamingMemory', memoryMb),
   modLoaderReport: (profileId: number) => call<ModLoaderLogReport | null>('health:modLoaderReport', profileId),

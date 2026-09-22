@@ -11,7 +11,7 @@ import { exists, walk } from '../util/fsx'
 import { requireActiveGame } from '../game/detect'
 import { checkGameExe } from '../game/pe'
 import { probeWriteAccess } from '../game/access'
-import { listConflicts } from '../conflicts'
+import { listConflicts, listHookCollisions } from '../conflicts'
 import { profileDependencyProblems } from '../deps/resolver'
 import { analyzeTxd } from '../formats/txd'
 import { storeDir } from '../store/contentStore'
@@ -198,6 +198,10 @@ export async function runHealthCheck(profileId: number): Promise<HealthReport> {
   // the field report found last after days of bisecting.
   checks.push(await outdatedBuildCheck(profileId))
 
+  // 14. Two mods hooking the same address - invisible to the file-conflict
+  // check above, since both .asi files install cleanly.
+  checks.push(await hookCollisionCheck(profileId))
+
   const blocking = checks.filter((c) => c.status === 'fail').length
   const warnings = checks.filter((c) => c.status === 'warn').length
   return {
@@ -208,6 +212,24 @@ export async function runHealthCheck(profileId: number): Promise<HealthReport> {
     ok: blocking === 0,
     blocking,
     warnings
+  }
+}
+
+/**
+ * A plugin-sdk .asi built with no source encodes the addresses it hooks as
+ * mangled template args in its own symbol table. Two mods hooking the same
+ * one never show up in the file-conflict check - both binaries install fine
+ * - so this is the only place the app can catch it.
+ */
+async function hookCollisionCheck(profileId: number): Promise<HealthCheck> {
+  const collisions = await listHookCollisions(profileId)
+  return {
+    id: 'hook-collision',
+    title: t('checks.hookTitle'),
+    status: collisions.length ? 'warn' : 'pass',
+    summary: collisions.length ? t('checks.hookFound', { count: collisions.length }) : t('checks.hookNone'),
+    detail: collisions.length ? t('checks.hookDetail') : undefined,
+    items: collisions.map((c) => `${c.address}: ${[...new Set(c.claimants.map((x) => x.title))].join(' vs ')}`)
   }
 }
 
