@@ -1,0 +1,1579 @@
+{
+ "format": "modao-index",
+ "version": 1,
+ "game": {
+  "kind": "sade",
+  "name": "GTA: San Andreas — Definitive Edition"
+ },
+ "generatedAt": "2026-09-22T10:30:51.321Z",
+ "source": "https://www.mixmods.com.br/",
+ "note": "Discovery index: metadata, an excerpt and a link to the original post. The full post, the images and the files belong to their authors and stay on mixmods.com.br. Nothing here mirrors a mod file.",
+ "count": 64,
+ "mods": [
+  {
+   "slug": "animated-dog-mod-de-cachorro",
+   "title": "[SA/SA:DE] Animated Dog (mod de cachorro) v1.2 Fixed",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "sade"
+   ],
+   "category": "Skins e Pedestres",
+   "sourceUrl": "https://www.mixmods.com.br/2022/05/animated-dog-mod-de-cachorro/",
+   "excerpt": "Atualizado 30/05/22 SA: Agora não remove mais a animação de gangues falando! Assim o mod não precisa mais substituir o “gangs.ifp”, a correção é feita no script CLEO. SA: Melhor linha de “peds.ide”, corrige som de patins (antes não acontecia comigo) e possibilita aparecer na rua. SA: Adicionado “pedgrp.dat” opcional para ele aparecer nas ruas.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2019/01/gta-sa-san-mod-animated-dog-anim-cachorro-6281828.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2019/01/gta-sa-san-mod-animated-dog-anim-cachorro-8068648.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2019/01/gta-sa-definitive-trilogy-animated-dog-mod-cj-cachorro-500x244.jpg"
+   ],
+   "version": "1.2",
+   "releaseDate": "2022-05-30T08:15:00+00:00",
+   "downloadUrl": "https://sharemods.com/ml1ztztvhgne/Animated_Dog.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-05-30T08:15:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "correr-em-interiores",
+   "title": "Interior Sprint (correr em interiores) (multiplataforma)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "sade"
+   ],
+   "category": "GTA SA The Definitive Edition",
+   "sourceUrl": "https://www.mixmods.com.br/2017/02/correr-em-interiores/",
+   "excerpt": "Um mod feito em uns 15 segundos… Agora você pode correr dentro de interiores. O mod desativa o limite que faz o CJ não poder correr dentro de casas, lojas etc (que é controlado pelo tipo de chão). Este mod é multiplataforma! Pois ele edita o “surfinfo.dat” da pasta “data”.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2017/02/gta-sa-correr-interior-mod-3001805.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/09/mandamentos-mods-1-150x150.jpg"
+   ],
+   "version": "2017-02-19",
+   "releaseDate": "2017-02-19T07:24:00+00:00",
+   "downloadUrl": "https://sharemods.com/fqjng308uemm/Interior_Sprint.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2017-02-19T07:24:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "crazy-trains",
+   "title": "[SA/SA:DE/Mobile] Crazy Trains CLEO",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "sade"
+   ],
+   "category": "GTA SA Mobile",
+   "sourceUrl": "https://www.mixmods.com.br/2021/12/crazy-trains/",
+   "excerpt": "Crazy Trains é um mod simples mas divertido, que viralizou muito no youtube. Só o vídeo abaixo, de 2019, tem 6 milhões de visualizações! <span data-mce-type=\"bookmark\" style=\"display: inline-block; width: 0px; overflow: hidden; line-height: 0;\" class=\"mce_SELRES_start\"> </span> O mod cria, infinitamente, 2 trens que cortam uma rua de San Fierro (perto de Doherty), em alta velocidade saindo e entra…",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2024/03/unreal-nanite-150x150.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2023/01/GB-150x150.png"
+   ],
+   "version": "2023-06-05",
+   "releaseDate": "2023-06-05T14:24:02+00:00",
+   "downloadUrl": "https://sharemods.com/u8fcdy7tele9/Crazy_Trains.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-12-09T19:33:05+00:00",
+   "updatedAt": "2023-06-05T14:24:02+00:00"
+  },
+  {
+   "slug": "darker-water-agua-mais-escura",
+   "title": "[SA:DE] Darker Water (água mais escura)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2022/04/darker-water-agua-mais-escura/",
+   "excerpt": "Mod para GTA San Andreas The Definitive Edition que deixa a água mais escura. A água original do jogo é estranhamente clara/brilhante e ciano, o mod deixa a cor mais próxima da cor clássica, um azul mais profundo. Não muda a textura.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/04/gta-sa-definitive-dark-darker-water-color-classic-agua-escura.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/08/gta-sa-san-andreas-ped-skin-source-photo-texture-face-3-150x150.jpg"
+   ],
+   "version": "2022-04-22",
+   "releaseDate": "2022-04-22T07:48:36+00:00",
+   "downloadUrl": "https://sharemods.com/5s4pwq4ahghg/SADE_-_Darker_Water.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-04-22T07:48:36+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "garbage-effect-fix",
+   "title": "[SA:DE] Garbage Effect Fix (corrigir efeito de lixo)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "GTA SA The Definitive Edition",
+   "sourceUrl": "https://www.mixmods.com.br/2021/12/garbage-effect-fix/",
+   "excerpt": "Mod que corrige a textura faltando quando você atira/quebra o saco de lixo no GTA SA The Definitive Edition. Nós não conseguimos restaurar a textura que falta, portanto somente removemos ela, por enquanto. Atenção: O bug foi corrigido a partir do patch 1.04! Este mod só é útil para versões anteriores ou caso você queira mudar o estilo do efeito (o original é estranho). Não testamos na 1.04.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-definitive-edition-garbage-effect-fx-fix-bug-glitch-texture-lixo-3905881-500x311.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-definitive-edition-trilogy-fog-distance-fix-mod-restore-4-7845536-150x150.jpg"
+   ],
+   "version": "2021-12-05",
+   "releaseDate": "2021-12-05T20:37:10+00:00",
+   "downloadUrl": "https://sharemods.com/jmdphexl620c/SADE_-_Garbage_Effect_Fix.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-12-05T20:37:10+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "gta-trilogy-characters-by-bronxbx-skin-pack",
+   "title": "[GTA Trilogy] Characters by BRONXBX (skin pack)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Skins e Pedestres",
+   "sourceUrl": "https://www.mixmods.com.br/2021/12/gta-trilogy-characters-by-bronxbx-skin-pack/",
+   "excerpt": "Um mod pack que melhora as texturas e modelos dos personagens do GTA Vice City e San Andreas The Definitive Edition. Não foi totalmente testado pela gente, mas parecem ótimos. Eu juntei (com autorização) separando tudo numa pasta, com um arquivo .pak para cada personagem, fácil de escolher e trocar. Vice City The Definitive Edition: Ken Rosenberg com nova textura baseada no VC clássico.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-vc-vice-city-definitive-mod-characters-new-fix-BRONX-skin-pack-3883407-500x408.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-vc-vice-city-definitive-mod-characters-new-fix-BRONX-skin-pack-2-7233694-500x297.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png"
+   ],
+   "version": "2021-12-10",
+   "releaseDate": "2021-12-10T18:43:38+00:00",
+   "downloadUrl": "https://sharemods.com/ofem9rxugkkx/VCDE_-_Characters_by_BRONXBX.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": 49283072,
+   "paywalled": false,
+   "publishedAt": "2021-12-10T18:43:38+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "gta-trilogy-classic-splash-screen",
+   "title": "[SA:DE] Classic Splash Screen 4K (tela de intro antiga)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Interface",
+   "sourceUrl": "https://www.mixmods.com.br/2021/12/gta-trilogy-classic-splash-screen/",
+   "excerpt": "Mod que restaura a splash screen clássica (a tela inicial de quando você abre o jogo), para o seu estilo antigo, nostálgico, HD 4K, mas ainda com o logotipo novo e texto de copyright do The Definitive Edition (opcional).",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-definitive-trilogy-classic-splash-screen-4k-original-1561596-500x281.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-definitive-trilogy-classic-splash-screen-4k-original-2-6161749-500x281.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png"
+   ],
+   "version": "2021-12-11",
+   "releaseDate": "2021-12-11T18:53:24+00:00",
+   "downloadUrl": "https://sharemods.com/olgp1pm73gki/SADE_-_Classic_Splash_Screen.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-12-11T18:53:24+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "gta-trilogy-fusion-mod-quicksave",
+   "title": "[GTA Trilogy] Fusion Mod (quicksave)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Mods Scripts etc",
+   "sourceUrl": "https://www.mixmods.com.br/2021/11/gta-trilogy-fusion-mod-quicksave/",
+   "excerpt": "Mod criado por ThirteenAG para GTA Trilogy com objetivo de adicionar algumas funcionalidades aos jogos. Ainda é uma versão experimental, até o momento só adiciona a função de “Quicksave“: Pressione F5 para salvar o jogo rapidamente em qualquer lugar. Você pode escolher o espaço de salvamento num arquivo .ini. Necessário Ultimate ASI Loader para GTA Trilogy.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-trilogy-definitive-edition-mod-fusion-quick-save-2550448.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2024/03/unreal-nanite-150x150.jpg"
+   ],
+   "version": "2021-11-20",
+   "releaseDate": "2021-11-20T19:00:00+00:00",
+   "downloadUrl": "https://sharemods.com/ygqqgmsai83k/GTA_Trilogy_-_Fusion_Mod.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-11-20T19:00:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "gta-trilogy-lighting-fix-mod",
+   "title": "[GTA Trilogy] Lighting Fix Mod (corrigir iluminação)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade",
+    "iii"
+   ],
+   "category": "GTA III The Definitive Edition",
+   "sourceUrl": "https://www.mixmods.com.br/2021/12/gta-trilogy-lighting-fix-mod/",
+   "excerpt": "Finalmente corrigimos, da maneira correta, a iluminação escura do GTA Trilogy! Isto não é um postfx, o mod aumenta a iluminação ambiente do jogo, assim as áreas escuras ficarão um pouco mais claras, preservando corretamente as sombras e áreas iluminadas. As imagens são com brilho no médio configurado no menu, você pode ajustar para deixar ainda mais claro ou escuro.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-definitive-edition-lighting-fix-mod-dark-brightness-5284405-500x276.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-definitive-edition-lighting-fix-mod-dark-brightness-shadows-2381167-500x435.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-trilogy-lighting-fix-mod-dark-brightness-interior-cutscene-bug-4963125-500x372.jpg"
+   ],
+   "version": "2021-12-01",
+   "releaseDate": "2021-12-01T13:44:46+00:00",
+   "downloadUrl": "https://sharemods.com/vy0k1ygarri1/GTA_Trilogy_-_Lighing_Fix_Mod.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-12-01T13:44:46+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "gta-trilogy-loadscreens-4k-definitive-extended",
+   "title": "[GTA Trilogy] Loadscreens 4K Definitive Extended",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Interface",
+   "sourceUrl": "https://www.mixmods.com.br/2021/12/gta-trilogy-loadscreens-4k-definitive-extended/",
+   "excerpt": "Atualizado 08/12/21 20:50 Corrigido 2 loadscreens erradas pro VC:DE. Mod que faz uma reforma total nas loadscreens do GTA Trilogy, agora todas em 4K, e várias novas artworks adicionadas sem substituir! Versão para GTA SA clássico aqui: Loadscreens 4K Definitive. GTA SA:DE: Antes eram 5, agora são 22 artworks! Em comparação, no San Andreas clássico são 14 imagens.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-definitive-loadscreen-artwork-hd-4k-mod-ai-6800866-500x399.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-definitive-trilogy-mod-loadscreen-artwork-extended-add-more-4165710-500x281.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-definitive-trilogy-mod-loadscreen-artwork-extended-add-more-2-8455198-500x281.jpg"
+   ],
+   "version": "2022-12-27",
+   "releaseDate": "2022-12-27T21:43:29+00:00",
+   "downloadUrl": "https://sharemods.com/ssogrddlecw2/SADE_-_Loadscreens_4K_Definitive_Extended.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-12-08T21:32:54+00:00",
+   "updatedAt": "2022-12-27T21:43:29+00:00"
+  },
+  {
+   "slug": "gta-trilogy-no-pickups-light",
+   "title": "[GTA Trilogy] No Pickups Light (remover luz)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade",
+    "iii"
+   ],
+   "category": "GTA III The Definitive Edition",
+   "sourceUrl": "https://www.mixmods.com.br/2021/12/gta-trilogy-no-pickups-light/",
+   "excerpt": "Mod que remove as luzes embaixo dos pickups de armas, dinheiro etc no GTA III, VC e SA The Definitive Edition. Autor: Jéssica Natália Veja também: [GTA Trilogy] Fix Marker Light (corrigir luz dos marcadores) [GTA Trilogy] No Leaf Decals (remover folhas no chão) [Fonte primária] [SA:DE] RoSA Evolved (remaster texturas HD 2024) [III] Xbox Version HD (versão Xbox para PC em HD) [GTA Trilogy] Rain Fix…",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-definitive-edition-remove-no-light-pickup-luz-4808484-500x445.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-san-definitive-trilogy-rosa-evolved-texture-remaster-retexture-hd-5936923-150x150.jpg"
+   ],
+   "version": "2021-12-06",
+   "releaseDate": "2021-12-06T14:48:22+00:00",
+   "downloadUrl": "https://sharemods.com/67iyqkpqfzbf/GTA_Trilogy_-_No_Pickups_Light.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-12-06T14:48:22+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "gta-trilogy-simple-fastloader",
+   "title": "[GTA Trilogy] Simple Fastloader (pular intro)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade",
+    "iii"
+   ],
+   "category": "GTA III The Definitive Edition",
+   "sourceUrl": "https://www.mixmods.com.br/2021/12/gta-trilogy-simple-fastloader/",
+   "excerpt": "O fastloader pula os vídeos de intro e telas de copyright ao iniciar o jogo, fazendo o jogo ser iniciado mais rápido, direto ao menu! No GTA III:DE e GTA VC:DE o jogo iniciará em somente 3 segundos, mas GTA SA:DE ainda demorará 20 segundos para o jogo ser carregado até o menu. O tempo varia com a potência do seu PC.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-trilogy-definitive-mod-simple-fastloader-skip-intro-3470591-500x341.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2024/10/10_gta3_BmzkrTlOVp-150x150.jpg"
+   ],
+   "version": "2022-12-14",
+   "releaseDate": "2022-12-14T01:06:48+00:00",
+   "downloadUrl": "https://sharemods.com/98tcqn0bxwbf/GTA_Trilogy_-_Simple_Fastloader.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-12-04T15:11:18+00:00",
+   "updatedAt": "2022-12-14T01:06:48+00:00"
+  },
+  {
+   "slug": "gta-trilogy-simple-native-trainer-cheat-menu",
+   "title": "[SA:DE] Simple Native Trainer (cheat menu)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Mods Scripts etc",
+   "sourceUrl": "https://www.mixmods.com.br/2021/12/gta-trilogy-simple-native-trainer-cheat-menu/",
+   "excerpt": "Mod CLEO para GTA SA The Definitive Edition que adiciona um menu trainer com várias funções e trapaças, como god mode (invencibilidade), estatísticas, munição, nível de procurado, spawnar (gerar) carros, relógio, clima, trocar cor do carro, nitro etc. Este é o primeiro mod para CLEO Redux escrito em JavaScript (.js) que estou postando aqui.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-definitive-trilogy-simple-trainer-mod-cheat-menu-cleo-7576168-500x552.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-san-definitive-trilogy-rosa-evolved-texture-remaster-retexture-hd-5936923-150x150.jpg"
+   ],
+   "version": "2021-12-21",
+   "releaseDate": "2021-12-21T06:07:46+00:00",
+   "downloadUrl": "https://sharemods.com/4q92v3o3jkay/SADE_-_Simple_Native_Trainer.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-12-21T06:07:46+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "gta-trilogy-tire-black-smoke-fix-corrigir-fumaca-dos-pneus",
+   "title": "[GTA Trilogy] Tire Black Smoke Fix (corrigir fumaça dos pneus)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade",
+    "iii"
+   ],
+   "category": "GTA III The Definitive Edition",
+   "sourceUrl": "https://www.mixmods.com.br/2021/11/gta-trilogy-tire-black-smoke-fix-corrigir-fumaca-dos-pneus/",
+   "excerpt": "Mod que corrige a fumaça preta dos pneus do GTA III/VC/SA The Definitive Edition. Sim, é de fato um bug, na vida real a essa fumaça é branca, assim como nos jogos clássicos. Autor: Jéssica Natália Veja também: [SA/SA:DE] Proper Vehicles Retex (texturas HD para veículos) [Fonte primária] [SA/SA:DE] Proper Player Retex v3.2 (CJ com texturas… [GTA Trilogy] Fog Distance Fix v1.2 (neblina e… A maior at…",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-definitive-edition-tire-smoke-fix-dark-black-white-6219176-413x800.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-vc-definitive-edition-tire-smoke-fix-burn-out-burnout-5000059-500x257.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png"
+   ],
+   "version": "2021-11-30",
+   "releaseDate": "2021-11-30T21:36:51+00:00",
+   "downloadUrl": "https://sharemods.com/a6bkxobmh5j0/GTA_Trilogy_-_Tire_Black_Smoke_Fix.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-11-30T21:36:51+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "hair-physics-demo-fisica-no-cabelo",
+   "title": "[SA:DE] Hair Physics DEMO (física no cabelo)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Mods Scripts etc",
+   "sourceUrl": "https://www.mixmods.com.br/2022/06/hair-physics-demo-fisica-no-cabelo/",
+   "excerpt": "A Jéssica conseguiu aplicar física real nos cabelos do GTA Trilogy, diretamente da Unreal Engine. <span data-mce-type=\"bookmark\" style=\"display: inline-block; width: 0px; overflow: hidden; line-height: 0;\" class=\"mce_SELRES_start\"> </span><span data-mce-type=\"bookmark\" style=\"display: inline-block; width: 0px; overflow: hidden; line-height: 0;\" class=\"mce_SELRES_start\"> </span> Este mod é somente…",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2024/03/unreal-nanite-150x150.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-definitive-edition-trilogy-fog-distance-fix-mod-restore-4-7845536-150x150.jpg"
+   ],
+   "version": "2022-06-07",
+   "releaseDate": "2022-06-07T16:49:14+00:00",
+   "downloadUrl": "https://sharemods.com/togki8d1vwu9/SADE_-_Hair_Physics_DEMO.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-06-07T16:49:14+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "insects-mod",
+   "title": "[SA/SA:DE/Mobile] Insects Mod v1.1 (moscas e insetos)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "sade"
+   ],
+   "category": "SA:DE – Mods Scripts etc",
+   "sourceUrl": "https://www.mixmods.com.br/2022/08/insects-mod/",
+   "excerpt": "Atualizado 03/08/22 Mod antigo, agora portado para mobile e GTA SA The Definitive Edition! Corrigido insetos aparecendo mesmo caso você esteja longe do chão ou embaixo d’água. Na versão PC clássica, agora os insetos aparecerão na posição da câmera em vez da posição do player. Um mod cleo que adiciona insetos pelo mapa!",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2018/02/mod-cleo-insects-gta-sa-500x282.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2018/02/mod-cleo-insects-gta-sa-1-1-500x282.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-5744501.png"
+   ],
+   "version": "1.1",
+   "releaseDate": "2022-10-31T04:26:26+00:00",
+   "downloadUrl": "https://sharemods.com/8dssgszwxbhk/Insects_Mod.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-08-03T17:09:00+00:00",
+   "updatedAt": "2022-10-31T04:26:26+00:00"
+  },
+  {
+   "slug": "no-aggressive-drivers-sem-motoristas-agressivos",
+   "title": "[SA/SA:DE/Mobile] No Aggressive Drivers (sem motoristas agressivos)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "sade"
+   ],
+   "category": "GTA San Andreas",
+   "sourceUrl": "https://www.mixmods.com.br/2021/12/no-aggressive-drivers-sem-motoristas-agressivos/",
+   "excerpt": "A partir da versão PC do GTA SA, foi adicionado uma funcionalidade que todos nós odiamos: quando você bate em algum carro, as vezes ele começa a te perseguir batendo no seu carro, sem dó. Remova isto do seu jogo! Além de ser extremamente irritante, é sem sentido, pois é muito comum e até a ambulância faz isso em você.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2017/06/gta-sa-mod-no-more-aggressive-drivers-disable-remove-2706701.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2023/02/jogo-gta-brasileiro-impunes-2nibble-devlog-bicicleta-empinando-150x150.jpg"
+   ],
+   "version": "2021-12-05",
+   "releaseDate": "2021-12-05T13:20:00+00:00",
+   "downloadUrl": "https://sharemods.com/pzlccbcs8iq2/No_Aggressive_Drivers.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-12-05T13:20:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "proper-player-retex",
+   "title": "[SA/SA:DE] Proper Player Retex v3.2 (CJ com texturas em HD) (PC/Android)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "sade"
+   ],
+   "category": "Player e Roupas",
+   "sourceUrl": "https://www.mixmods.com.br/2024/12/proper-player-retex/",
+   "excerpt": "Atualizado 5/12/25 Nova versão para PC, com correções e melhorias para roupas! Port oficial para Android (mobile)! Todas as texturas do CJ remasterizadas em HD, preservando o estilo original do jogo! Compramos a versão premium do Remini para recriar todos os rostos em maior definição, entre muitos outros ajustes manuais.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/04/gta-sa-mod-proper-player-retex-cj-hd-comparison-2-500x308.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/04/gta-sa-mod-proper-player-retex-cj-hd-face-texture-1-500x250.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/04/gta-sa-mod-proper-player-retex-cj-hd-3-500x486.jpg"
+   ],
+   "version": "3.2",
+   "releaseDate": "2025-12-06T02:32:01+00:00",
+   "downloadUrl": "https://sharemods.com/dckdhp4ir86q/Proper_Player_Retex.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": 125829120,
+   "paywalled": false,
+   "publishedAt": "2024-12-23T00:19:00+00:00",
+   "updatedAt": "2025-12-06T02:32:01+00:00"
+  },
+  {
+   "slug": "proper-radar",
+   "title": "[SA/SA:DE] Proper Radar v1.3 (mapa em HD corrigido)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "sade"
+   ],
+   "category": "Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2022/07/proper-radar/",
+   "excerpt": "Atualizado 14/07/22 Mais várias pequenas correções, e foi removido as bordas finas por volta da água. Liberado o projeto fonte! Assim qualquer pessoa pode ajudar ou criar novas opções de cores. Atualizado 25/04/22 Ainda havia muita coisa para melhorar, mas agora eu espero que seja a versão final (por enquanto), já está bom o suficiente. Aqui as diferenças em comparação com a versão anterior.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/04/gta-sa-mod-radar-minimap-proper-map-fix-hd-hq-6-500x500.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/04/gta-sa-mod-radar-minimap-proper-map-fix-hd-hq-comparison-1-500x441.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/04/gta-sa-definitive-edition-radar-map-mod-classic-color-proper.jpg"
+   ],
+   "version": "1.3",
+   "releaseDate": "2022-07-14T15:27:30+00:00",
+   "downloadUrl": "https://sharemods.com/eenyrp1bklvj/Proper_Radar.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-07-14T15:27:30+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "put-helmet",
+   "title": "[SA/SA:DE/Mobile] Put Helmet Mod (colocar capacete)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "sade"
+   ],
+   "category": "GTA SA The Definitive Edition",
+   "sourceUrl": "https://www.mixmods.com.br/2021/12/put-helmet/",
+   "excerpt": "Meu primeiro mod CLEO para GTA Trilogy e diversas plataformas! O CJ veste o capacete (com animação) ao subir numa moto. É uma alternativa (com animação) para o Helmet Mod, mas precisa desativar o capacete no CJ no arquivo de configuração dele.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-definitive-mobile-mod-cleo-script-put-helmet-colocar-capacete-9020534-500x316.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2023/01/GB-150x150.png"
+   ],
+   "version": "2024-08-03",
+   "releaseDate": "2024-08-03T02:44:14+00:00",
+   "downloadUrl": "https://sharemods.com/afb2uljpqzzv/Put_Helmet_Mod.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-12-03T22:07:02+00:00",
+   "updatedAt": "2024-08-03T02:44:14+00:00"
+  },
+  {
+   "slug": "remove-brass-knuckles",
+   "title": "[SA/SADE/Mobile] Remove Brass Knuckles (desativar soco-inglês)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "sade"
+   ],
+   "category": "Armas",
+   "sourceUrl": "https://www.mixmods.com.br/2022/07/remove-brass-knuckles/",
+   "excerpt": "Mod que remove completamente o soco-inglês do GTA San Andreas, a arma mais odiada de todas! É a segunda coisa mais perguntada no Google quando pesquisa por ela. O grande problema é que substitui a mão quando desarmado, assim ficando com algo feio na sua mão o tempo todo, e caso você tenha as namoradas, será literalmente impossível você remover o soco-inglês, mesmo indo pro hospital ou sendo preso.…",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/07/gta-sa-mod-how-to-get-rid-of-brass-knuckles-brassknucle-soco-ingles-500x392.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-5744501.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/05/jogo-gta-brasileiro-impunes-2nibble-devlog-soccer-futebol-penalti-150x150.jpg"
+   ],
+   "version": "2022-07-16",
+   "releaseDate": "2022-07-16T17:37:29+00:00",
+   "downloadUrl": "https://sharemods.com/w1gml4nqvlo8/Remove_Brass_Knucles.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-07-16T17:37:29+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sa-cars-on-dirt-roads-mod",
+   "title": "[SA/SA:DE/Mobile] Cars On Dirt Roads Mod (veículos em estradas)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "sade"
+   ],
+   "category": "Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2022/09/sa-cars-on-dirt-roads-mod/",
+   "excerpt": "Atualizado 21/07/26 Se não funcionou pra você, baixe de novo agora. Atualizado 22/09/22 Corrigido carros dirigindo no meio da fazenda na saída de LS. Mod CLEO para GTA SA que adiciona NPCs dirigindo em estradas de terra por toda San Andreas. O funcionamento é simples e nada intrusivo. Reativa paths originais do jogo usados por carros da polícia, para que civis também possam usar.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/09/gta-sa-mod-cars-on-dirt-roads-estradas-vehicles-cleo-500x325.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2023/01/GB-150x150.png"
+   ],
+   "version": "2026-07-21",
+   "releaseDate": "2026-07-21T05:44:25+00:00",
+   "downloadUrl": "https://sharemods.com/8f2odk9nzebs/Cars_On_Dirt_Roads.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-09-19T19:04:49+00:00",
+   "updatedAt": "2026-07-21T05:44:25+00:00"
+  },
+  {
+   "slug": "sa-proper-radar-recolor",
+   "title": "[SA/SA:DE] Proper Radar – Recolor (mapa HD corrigido com nova cor)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "sade"
+   ],
+   "category": "Interface (Hud e Radar)",
+   "sourceUrl": "https://www.mixmods.com.br/2022/04/sa-proper-radar-recolor/",
+   "excerpt": "Novo mapa do radar do GTA San Andreas, em HD, redesenhado, mais acurado, e com nova paleta de cores! Inspirado na paleta de cor do mapa redesenhado pelo D159, é na minha opinião a paleta de cores mais bonita atualmente para mods do gênero. Note que ainda é o desenho do Proper Radar v1.2, eu usei somente as cores.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/04/gta-sa-mod-proper-radar-hd-hq-recolor-redesigned-500x500.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/04/gta-sa-mod-proper-radar-hd-hq-recolor-redesigned-2-500x254.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/04/gta-sa-definitive-trilogy-proper-radar-recolor-500x281.jpg"
+   ],
+   "version": "2022-04-26",
+   "releaseDate": "2022-04-26T14:53:29+00:00",
+   "downloadUrl": "https://sharemods.com/tg1z6peh9axs/Proper_Radar_-_Recolor.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-04-26T14:53:29+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sa-sade-awesome-ifp",
+   "title": "[SA/SA:DE] Awesome IFP v3 (novas animações)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "sade"
+   ],
+   "category": "Animações",
+   "sourceUrl": "https://www.mixmods.com.br/2021/11/sa-sade-awesome-ifp/",
+   "excerpt": "Atualizado 12/11/21 Adicionado versão para GTA SA The Definitive Edition. Download reorganizado. Foi um dos poucos mods de animações que gostei, ao meio de tantos mods de animações estilo GTA IV, este tem um diferencial. As animações não são exageradamente diferentes das do GTA SA, parecem na verdade “melhorias” para as animações originais do jogo.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/mod-3.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/mod-2.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/mod-2-1-206x300-3656406.jpg"
+   ],
+   "version": "2021-11-12",
+   "releaseDate": "2021-11-12T15:19:00+00:00",
+   "downloadUrl": "https://sharemods.com/47465yc6kq12/Awesome_IFP.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-11-12T15:19:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sa-sade-burglary-with-any-car-roubar-casa-com-qualquer-carro",
+   "title": "[SA/SA:DE] Burglary With Any Car v2.0 (roubar casa com qualquer carro)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "sade"
+   ],
+   "category": "Missões",
+   "sourceUrl": "https://www.mixmods.com.br/2022/01/sa-sade-burglary-with-any-car-roubar-casa-com-qualquer-carro/",
+   "excerpt": "Mod que possibilita iniciar a missão de roubar/invadir casas (arrombamento) usando qualquer veículo do jogo. Nota: para abrir o porta-malas eu usei o mod Abrir porta-malas com a mão, mas no momento só funciona antes de iniciar a missão. A missão originalmente abre as portas detrás dos carros, pois originalmente era uma van.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/01/gta-sa-mod-burglary-mission-any-car-roubar-casa-house-9980079-500x233.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/01/gta-sa-definitive-mod-burglary-mission-any-car-roubar-casa-house-3116030-500x314.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png"
+   ],
+   "version": "2.0",
+   "releaseDate": "2022-01-12T09:38:31+00:00",
+   "downloadUrl": "https://sharemods.com/r880ibdugvnx/SA_SADE_-_Burglary_With_Any_Car.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-01-12T09:38:31+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sa-sade-carcols-fix-corrigir-cores-dos-carros",
+   "title": "[SA/SA:DE] Carcols Fix (corrigir cores dos carros)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "sade"
+   ],
+   "category": "Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2021/11/sa-sade-carcols-fix-corrigir-cores-dos-carros/",
+   "excerpt": "Atenção: Estas correções já estão inclusas no Proper Fixes v2 ou mais novo. Exceto que decidimos não corrigir a linha de cor do carro do Big Smoke, pois nós já estamos acostumados com ele ser ciano, em vez disso o Proper Fixes corrige a cor do carro para ciano em cutscenes. Mod que corrige vários bugs das configurações de cores dos carros do GTA SA clássico, e versão The Definitive Edition.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-definitive-edition-carcols-fix-glendale-color-car-5499582.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/09/mandamentos-mods-1-150x150.jpg"
+   ],
+   "version": "2025-10-27",
+   "releaseDate": "2025-10-27T03:40:17+00:00",
+   "downloadUrl": "https://sharemods.com/wy8sed37l2bu/Carcols_Fix.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-11-16T03:00:00+00:00",
+   "updatedAt": "2025-10-27T03:40:17+00:00"
+  },
+  {
+   "slug": "sa-sade-hd-tags-made-with-fat-cap-pichacoes-hd",
+   "title": "[SA/SA:DE] HD Tags made with fat cap (pichações HD)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "sade"
+   ],
+   "category": "Mapas e Objetos",
+   "sourceUrl": "https://www.mixmods.com.br/2022/02/sa-sade-hd-tags-made-with-fat-cap-pichacoes-hd/",
+   "excerpt": "Atualizado 06/02/22 Adicionado opção mais clara e brilhante para o GTA SA clássico (pois muita gente reclamou que eram escuras demais). Corrigido as pichações transparentes demais no GTA SA The Definitive Edition. Atenção: Esta correção também foi implementada no RoSA Project Evolved do SA:DE hoje! Junto com a melhoria de uma outra textura.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-mod-graffiti-hd-texture-tag-grove-fat-cap-2060520-500x425.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-mod-graffiti-tags-hd-fatcap-7947193-410x1024.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-definitive-rosa-evolved-hd-texture-fat-tag-grove-graffiti-5134363-500x549.jpg"
+   ],
+   "version": "2022-02-06",
+   "releaseDate": "2022-02-06T14:07:00+00:00",
+   "downloadUrl": "https://sharemods.com/yletv18lxc9k/SA_-_HD_Tags_Fat_Cap_-_Brighter_color.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-02-06T14:07:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sa-sade-original-hq-icons-icones-originais-hd",
+   "title": "[SA/SA:DE] Original HQ Icons (ícones originais HD)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "sade"
+   ],
+   "category": "Interface (Hud e Radar)",
+   "sourceUrl": "https://www.mixmods.com.br/2021/11/sa-sade-original-hq-icons-icones-originais-hd/",
+   "excerpt": "Atualizado 12/11/21 Adicionado versão adaptada para o GTA SA The Definitive Edition. Este mod substitui todos os ícones do GTA por ícones idênticos aos originais, porém em HD e com qualidade muito melhor. Outros mods de ícones não deixam os ícones idênticos aos do jogo, o estilo dos ícones é praticamente igual aos ícones do GTA original (PS2, PC etc).",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/sa-original-hd-hq-icons-radar-map-mod-2263141-500x375.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-definitive-edition-mod-hq-hd-radar-icons-original-classic-1121265.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-7219754.png"
+   ],
+   "version": "2021-11-12",
+   "releaseDate": "2021-11-12T21:30:00+00:00",
+   "downloadUrl": "https://sharemods.com/e9q9mnaxppyv/SA_Original_Radar_Icons_HQ.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-11-12T21:30:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sa-sade-ped-run-fix-corrigir-velhinhas-correndo",
+   "title": "[SA/SA:DE] Ped Run Fix v2.2 (corrigir velhinhas correndo)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "sade"
+   ],
+   "category": "Animações",
+   "sourceUrl": "https://www.mixmods.com.br/2022/01/sa-sade-ped-run-fix-corrigir-velhinhas-correndo/",
+   "excerpt": "Atualizado 22/01/22 Repostado com novo nome. Removido a animação de andar com sacola do GTA VC (leftover), eu adicionei como variação, mas ficou estranho. Adaptado ao GTA SA:DE. Mod que corrige as velhinhas do GTA SA (e SA:DE) correndo rápido, agora elas terão dificuldades ao correr.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/01/gta-logic-meme-san-andreas-grandma-run-old-ped-cj-mod-fix-4254743-500x580.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/01/gta-sa-mod-old-ped-run-fix-animgrp-grandma-sprint-mod-5212925-500x460.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/01/gta-sa-definitive-trilogy-animgrp-old-ped-run-fix-mod-1162583-500x313.jpg"
+   ],
+   "version": "2.2",
+   "releaseDate": "2022-01-22T03:36:45+00:00",
+   "downloadUrl": "https://sharemods.com/c08l1q6s8kxy/SA_SADE_-_Peds_Run_Fix.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-01-22T03:36:45+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sa-sade-proper-vehicles-retex",
+   "title": "[SA/SA:DE] Proper Vehicles Retex v2.1 (texturas HD para veículos)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "sade"
+   ],
+   "category": "Carros",
+   "sourceUrl": "https://www.mixmods.com.br/2022/04/sa-sade-proper-vehicles-retex/",
+   "excerpt": "Atualizado 10/04/22 Uma grande atualização para ambos, GTA SA clássico e The Definitive Edition! Criado as texturas dos carros que faltavam em 2K. Refeito todas as propagandas de marca (Benson, Yankee etc), dessa vez baseado nas originais. Corrigida escala exagerada em algumas portas. Corrigido bug no interior de um carro de polícia. Trocado toca CD por um rádio em todos os carros.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-mod-proper-hd-retex-textures-remaster-interior-3832160.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/02/gta-sa-mod-proper-vehicles-retex-hd-textures-remaster-interior-1-500x484.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-mod-proper-hd-retex-textures-remaster-1685903.jpg"
+   ],
+   "version": "2.1",
+   "releaseDate": "2025-12-13T15:12:46+00:00",
+   "downloadUrl": "https://sharemods.com/2uesa2zbze2m/Proper_Vehicles_Retex_v2.1_512_VERSION.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": 48234496,
+   "paywalled": false,
+   "publishedAt": "2022-04-10T03:00:00+00:00",
+   "updatedAt": "2025-12-13T15:12:46+00:00"
+  },
+  {
+   "slug": "sa-sade-realistic-population-more-peds-popcycle-dat",
+   "title": "[SA/SA:DE/Mobile] Realistic Population – More peds (popcycle.dat)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "sade"
+   ],
+   "category": "Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2021/11/sa-sade-realistic-population-more-peds-popcycle-dat/",
+   "excerpt": "Atualizado 21/11/21 Portado para GTA SA:DE. Inclui opção para aumentar o número de pedestres e carros na rua (não recomendado para o GTA SA clássico, pois há isto no MixSets). O arquivo “popcycle.dat” do GTA SA cuida da aparição (spawn) dos pedestres e carros do jogo, isto é, a quantidade e tipos de pedestres e veículos de cada local.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2020/08/gta-sa-popcycle-noite-night-real-population-9912246.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2020/08/gta-sa-popcycle-beach-real-population-7974141.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-definitive-edition-popcycle-population-more-peds-cars-mod-1663190.jpg"
+   ],
+   "version": "2021-11-22",
+   "releaseDate": "2021-11-22T01:00:00+00:00",
+   "downloadUrl": "https://sharemods.com/4jpa4h4vu1nf/Realistic_Population.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-11-22T01:00:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sa-sade-remastered-pictures-mod-quadros-com-fotos-hd",
+   "title": "[SA/SA:DE] Remastered Pictures Mod v1.1 (quadros com fotos HD)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "sade"
+   ],
+   "category": "GTA SA The Definitive Edition",
+   "sourceUrl": "https://www.mixmods.com.br/2021/12/sa-sade-remastered-pictures-mod-quadros-com-fotos-hd/",
+   "excerpt": "Atualizado 23/12/21 SA/SA:DE: Corrigido um quadro escuro demais na casa do CJ, e invertido para fazer sentido com o local da foto, e a foto do Sweet com a Kendl agora tem menos contraste e saturação, para ficar mais parecida com a clássica. Mod que remasteriza os quadros do GTA SA clássico e GTA SA The Definitive Edition!",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-definitive-edition-remastered-pictures-mod-fix-texture-9003355-500x545.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-mod-remastered-pictures-hd-texture-source-fix-1957625-500x493.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-definitive-edition-remastered-photos-mod-fix-texture-1440496-500x284.jpg"
+   ],
+   "version": "1.1",
+   "releaseDate": "2021-12-02T11:29:57+00:00",
+   "downloadUrl": "https://sharemods.com/ehdslx8agqi1/Remastered_Pictures_Mod.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-12-02T11:29:57+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sa-sade-torch-mod-tocha-com-luz",
+   "title": "[SA/SA:DE] Torch Mod (tocha com luz)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "sade"
+   ],
+   "category": "Armas",
+   "sourceUrl": "https://www.mixmods.com.br/2022/06/sa-sade-torch-mod-tocha-com-luz/",
+   "excerpt": "Mod de tocha com luz funcional, para ambos: GTA SA The Definitive Edition e clássico. No GTA SA:DE, devido à engine moderna, usa luz per-pixel, que de fato ilumina o ambiente. No GTA SA clássico, eu criei um pequeno script que simula iluminação, um resultado também muito legal e compatível com 2 jogadores. Substitui o molotov.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/06/gta-sa-definitive-trilogy-torch-tocha-luz-light-500x281.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/06/gta-sa-torch-tocha-luz-light-flashlight-cleo-500x336.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-7219754.png"
+   ],
+   "version": "2022-06-27",
+   "releaseDate": "2022-06-27T07:30:58+00:00",
+   "downloadUrl": "https://sharemods.com/pknk1m9jkooc/SADE_-_Torch_Mod.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-06-27T07:30:58+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sa-sfdp-heli-fix",
+   "title": "[SA/SA:DE/Mobile] SFDP Heli Fix (helicóptero da polícia de SF)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "sade"
+   ],
+   "category": "Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2022/06/sa-sfdp-heli-fix/",
+   "excerpt": "Pequeno mod CLEO que corrige o helicóptero errado na delegacia de polícia de San Fierro. Originalmente o GTA SA erroneamente usou o Maverick (civil) em vez da variação (“polmav”). Diferente da versão anteriormente postada aqui, esta é compatível com fastman92 limit adjuster (antes o mod causava crash com o limite de veículos estacionados dele).",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2018/03/gta-sa-mod-sfdp-helicopter-fix-sf-maverick-polmav-parked-500x180.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-5744501.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2023/01/GB-150x150.png"
+   ],
+   "version": "2022-06-07",
+   "releaseDate": "2022-06-07T20:45:00+00:00",
+   "downloadUrl": "https://sharemods.com/s4l7mw43heuk/SFDP_Heli_Fix.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-06-07T20:45:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sade-anachronism-fixes",
+   "title": "[SA:DE] Anachronism Fixes v0.1 (corrigir erros de época e lore)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2022/01/sade-anachronism-fixes/",
+   "excerpt": "O que eu (Junior_Djjr) mais odiei no GTA Trilogy foram os erros de anacronismo (erros cronológicos de mistura de épocas) e lore do jogo, principalmente porque usaram objetos, revistas, camisas e outras imagens do GTA V, que se passa em 2013 e são mais modernos.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/01/gta-sa-definitive-mod-picture-frame-smartphone-fix-8819199.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/01/gta-sa-definitive-mod-picture-frame-girl-lore-fix-9442150-500x406.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png"
+   ],
+   "version": "0.1",
+   "releaseDate": "2022-01-14T10:47:35+00:00",
+   "downloadUrl": "https://sharemods.com/ogsmjaay24zq/SADE_-_Anachronism_Fixes.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-01-14T10:47:35+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sade-camisa-fck-you-taketwo-primeiro-mod",
+   "title": "[SA:DE] Camisa F*ck You TakeTwo (PRIMEIRO MOD)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Player e Roupas",
+   "sourceUrl": "https://www.mixmods.com.br/2021/11/sade-camisa-fck-you-taketwo-primeiro-mod/",
+   "excerpt": "Nós fomos os primeiros do mundo a conseguir criar um mod pro GTA SA The Definitive Edition (GTA Trilogy)! Lançado no nosso fórum dia 12 4AM UTC-3. E não podia ser melhor do que uma camisa mandando a TakeTwo se foder, como uma resposta para toda a cagada que fizeram com os modders e fãs de GTA nos últimos anos. Não substitui nenhum arquivo (funciona com o “modloader” integrado da Unreal).",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-definitive-edition-trilogy-tshirt-taketwo-camisa-mod-258x300-7170169.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-7219754.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/10/urbanize-logo-catarse-150x150.png"
+   ],
+   "version": "2021-11-12",
+   "releaseDate": "2021-11-12T13:06:00+00:00",
+   "downloadUrl": "https://sharemods.com/3j8qu37rtrj2/SADE_-_Fuck_You_TakeTwo_Shirt.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-11-12T13:06:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sade-catalina-bank-retex-fix",
+   "title": "[SA:DE] Catalina Bank Retex Fix (corrigir texturas do banco)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2022/01/sade-catalina-bank-retex-fix/",
+   "excerpt": "Mod que re-texturiza e corrige as texturas do banco de Palomino Creek do GTA SA The Definitive Edition (onde você o assalta numa missão da Catalina). Além de deixar um pouco mais parecido com o clássico, ele recria todas as texturas que antes eram upscales automáticos, e em principal, corrige o efeito parallax de interior falso nas vitrines, afinal, você pode entrar no banco, não faz sentido você…",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/01/gta-sa-definitive-trilogy-bank-catalina-rob-fix-improve-banco-corrigir-4220937-491x800.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-5744501.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-definitive-loadscreen-artwork-hd-4k-mod-ai-6800866-150x150.png"
+   ],
+   "version": "2022-01-30",
+   "releaseDate": "2022-01-30T12:16:32+00:00",
+   "downloadUrl": "https://sharemods.com/kedvvu42lh4w/SADE_-_Catalina_Bank_Retex_Fix.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-01-30T12:16:32+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sade-cj-tatoos-fix",
+   "title": "[SA:DE] CJ Tattoos Fix (corrigir tatuagens)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2022/04/sade-cj-tatoos-fix/",
+   "excerpt": "Mod que corrige erros nas tatuagens do CJ do GTA San Andreas The Definitive Edition. Corrigido ”descasque” de parede na tatuagem de cruz. Corrigido teia não conectada na 6crown. Corrigida tatuagem “orange grove st families”, removendo o “orange” que é da beta. Corrigido tatuagem ”san fiero” para ”san fierro”, também da beta.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/04/gta-sa-definitive-mod-cj-tatoos-fix-improved-orange-fiero.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-definitive-edition-rain-fix-improve-puddles-night-6353168-150x150.jpg"
+   ],
+   "version": "2022-04-15",
+   "releaseDate": "2022-04-15T06:41:08+00:00",
+   "downloadUrl": "https://sharemods.com/bdrd28f3dl9a/SADE_-_CJ_Tatoos_Fix.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-04-15T06:41:08+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sade-classic-colored-radio-icons-icones-coloridos",
+   "title": "[GTA Trilogy] Classic Colored Radio Icons (ícones coloridos)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade",
+    "iii"
+   ],
+   "category": "GTA III The Definitive Edition",
+   "sourceUrl": "https://www.mixmods.com.br/2021/12/sade-classic-colored-radio-icons-icones-coloridos/",
+   "excerpt": "Atenção: Foi relatado crash na nova versão do GTA Trilogy. Mod que restaura os ícones clássicos, coloridos, em HD, para a roda de rádio do GTA III, VC e SA The Definitive Edition! Atenção: Foi relatado crash na nova versão do GTA Trilogy.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-definitive-edition-classic-colored-icons-coloridos-cor-4971355-500x281.jpeg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-vc-definitive-edition-classic-colored-radio-icons-4765427.jpeg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-iii-definitive-edition-mod-classic-colored-radio-icons-coloridos-3984320.jpeg"
+   ],
+   "version": "2024-10-31",
+   "releaseDate": "2024-10-31T14:45:27+00:00",
+   "downloadUrl": "https://sharemods.com/o7byzkluds9v/GTA_Trilogy_-_Classic_Colored_Radio_Station_Icons.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-12-07T14:10:00+00:00",
+   "updatedAt": "2024-10-31T14:45:27+00:00"
+  },
+  {
+   "slug": "sade-classic-water-agua-estilo-classico",
+   "title": "[SA:DE] Classic Water (água com textura do clássico)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Gráficos",
+   "sourceUrl": "https://www.mixmods.com.br/2021/11/sade-classic-water-agua-estilo-classico/",
+   "excerpt": "Mod para GTA SA:DE que restaura a textura de água do GTA San Andreas clássico (versão mais HD encontrada nos arquivos do GTA IV). Mas agora usando os shaders modernos. Também ajusta a cor da água, principalmente de noite, para deixá-la mais escura — isto é considerado uma correção, pois a água original do jogo é brilhante demais de noite.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-definitive-edition-mod-classic-water-old-restore-4796366.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2020/02/LaeOZh0-1012684-150x150.png"
+   ],
+   "version": "2021-11-18",
+   "releaseDate": "2021-11-18T18:00:00+00:00",
+   "downloadUrl": "https://sharemods.com/nimjk9pqgwbj/SADE_-_Classic_Water.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-11-18T18:00:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sade-disable-heat-haze",
+   "title": "[SA:DE] Disable Heat Haze (remover efeito de calor)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2022/05/sade-disable-heat-haze/",
+   "excerpt": "Mod para desativar o efeito de calor na tela do GTA San Andreas The Definitive Edition. No GTA SA clássico o efeito é péssimo e vários mods desativam por padrão. A essência continuou no GTA SA: é mais fraco, mas ainda muito feio. O mod remove o efeito de distorção que aparece em alguns climas do jogo.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/05/gta-sa-definitive-disable-remove-no-heat-haze-efeito-calor-postfx-effect.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-5744501.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-mixsets-mixmods-statistics-views-6965641-150x150.jpg"
+   ],
+   "version": "2022-05-07",
+   "releaseDate": "2022-05-07T07:16:52+00:00",
+   "downloadUrl": "https://sharemods.com/qjn2re6grpno/SADE_-_Disable_Heat_Haze.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-05-07T07:16:52+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sade-dodge-viper-gts",
+   "title": "[SA:DE] Dodge Viper GTS",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Carros",
+   "sourceUrl": "https://www.mixmods.com.br/2022/01/sade-dodge-viper-gts/",
+   "excerpt": "Primeiro mod de carro do mundo para GTA San Andreas The Definitive Edition! Modelo convertido de um jogo (não sei qual), portanto é muito caprichado, otimizado, e os gráficos modernos deixam o carro muito bonito. A conversão é relativamente boa, inclui danos e substitui o Banshee (na qual foi inspirado; não mesmo ano). Há opção para substituir o Hotring (se preferir).",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/01/gta-sa-definitive-trilogy-car-mod-dodge-viper-gts-3-9657872-500x281.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/01/gta-sa-definitive-trilogy-car-mod-dodge-viper-gts-2-1045905-500x281.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/01/gta-sa-definitive-trilogy-car-mod-dodge-viper-gts-damage-9162879-500x281.jpg"
+   ],
+   "version": "2022-01-12",
+   "releaseDate": "2022-01-12T07:57:37+00:00",
+   "downloadUrl": "https://sharemods.com/nodqk7dx7u5b/SADE_-_Dodge_Viper_GTS.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-01-12T07:57:37+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sade-fix-fam3-shirt-7-bug-corrigir-camisa-da-gangue",
+   "title": "[SA:DE] Fix FAM3 Shirt 7 Bug (corrigir camisa da gangue)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2021/11/sade-fix-fam3-shirt-7-bug-corrigir-camisa-da-gangue/",
+   "excerpt": "Mod para GTA SA The Definitive Edition que corrige um bug no mínimo, cômico: Havia um número “7” por trás das variações dos números “5”, “9” e “3” nas camisas dos membros da Grove. Agora a camisa desse membro da gangue não tem mais o problema. Atenção: Este bug já foi corrigido nos novos patches do jogo! Este mod só é útil para patches antigos.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-definitive-edition-fam3-fix-number-7-bug-7690499.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/08/gta-sa-mod-mixsets-3470629-150x150.png"
+   ],
+   "version": "2021-11-14",
+   "releaseDate": "2021-11-14T05:00:00+00:00",
+   "downloadUrl": "https://sharemods.com/ieo87wge8c6c/SADE_-_Fix_FAM3_Shirt_7_Bug.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-11-14T05:00:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sade-fix-road-texture-blend-bug",
+   "title": "[SA:DE] Fix Road Texture Blend Bug (corrigir textura de rua)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2021/12/sade-fix-road-texture-blend-bug/",
+   "excerpt": "Mod que corrige um erro grotesco numa transição (blend) de textura no GTA San Andreas The Definitive Edition. Autor: Jéssica Natália Veja também: [SA:DE] Wires Texture Fix (corrigir bug nos fios) [SA:DE] Garbage Effect Fix (corrigir efeito de lixo) [SA] Map Textures Fix (correção das texturas do mapa) [Fonte primária] [SA:DE] Wires Texture Fix (corrigir bug nos fios) [GTA Trilogy] Fog Distance Fix…",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-definitive-trilogy-fix-road-blend-texture-bug-textura-rua-9218353-500x268.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-5744501.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-definitive-fix-wires-textures-bug-fios-angel-pine-7670931-150x150.jpg"
+   ],
+   "version": "2021-12-19",
+   "releaseDate": "2021-12-19T00:48:18+00:00",
+   "downloadUrl": "https://sharemods.com/0shfumymmgr9/SADE_-_Fix_Road_Texture_Blend_Bug.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-12-19T00:48:18+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sade-flashlight-mod-lanterna",
+   "title": "[SA:DE] Flashlight Mod (lanterna com luz)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Armas",
+   "sourceUrl": "https://www.mixmods.com.br/2022/06/sade-flashlight-mod-lanterna/",
+   "excerpt": "Mod de lanterna com luz funcional para o GTA San Andreas The Definitive Edition! Este é um dos poucos mods onde GTA Trilogy é superior ao clássico, pois a Unreal Engine usa iluminação per-pixel, então a lanterna de fato ilumina o ambiente! É um excelente mod para usar com mods de horror, mistérios etc. O modelo da lanterna é muito bem detalhado.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/06/gta-sa-definitive-trilogy-flashlight-mod-lanterna-luz-light-per-pixel-3-500x314.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/06/gta-sa-definitive-trilogy-flashlight-mod-lanterna-luz-light-per-pixel-2-500x314.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/06/gta-sa-definitive-trilogy-flashlight-mod-lanterna-luz-light-per-pixel-500x314.jpg"
+   ],
+   "version": "2022-06-23",
+   "releaseDate": "2022-06-23T12:30:27+00:00",
+   "downloadUrl": "https://sharemods.com/6a9xva5ps49c/SADE_-_Flashlight_Mod.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": 10485760,
+   "paywalled": false,
+   "publishedAt": "2022-06-23T12:30:27+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sade-improved-ped-tattoos",
+   "title": "[SA:DE] Improved Ped Tattoos",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2022/03/sade-improved-ped-tattoos/",
+   "excerpt": "Mod que remasteriza e corrige as tatuagens dos Vagos do GTA San Andreas The Definitive Edition. A Grove Street Games fez um péssimo trabalho com as tatuagens do jogo: Usaram upscale em desenho de linhas azuis (sendo que a cor azul foi causada pela compressão da textura clássica, ou seja, é bug), e falta de lógica: Por que Vagos (mexicanos) teriam uma tatuagem enorme do mapa da África? Solução?",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/03/gta-sa-definitive-trilogy-mod-vagos-tatoo-ped-retex-texture-fix-9398330-500x579.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/03/gta-sa-definitive-trilogy-mod-vagos-tatoo-retex-texture-fix-mr-cartoon-7112498-419x800.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png"
+   ],
+   "version": "2022-03-10",
+   "releaseDate": "2022-03-10T04:34:35+00:00",
+   "downloadUrl": "https://sharemods.com/fg209fxnszgg/SADE_-_Improved_Ped_Tattoos.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-03-10T04:34:35+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sade-lake-water-fix",
+   "title": "[SA:DE] Lake Water Fix (corrigir lago de Back O’ Beyond)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2022/04/sade-lake-water-fix/",
+   "excerpt": "Mod que corrige a água baixa demais no lago de Back O’ Beyond no GTA SA The Definitive Edition, que fazia o CJ “voar” em cima da água. Autor: Jéssica Natália Veja também: [GTA Trilogy] Water Ripple Fix (corrigir efeito de água) [SA:DE] Classic Water (água estilo clássico) [Tópico oficial no Fórum MixMods] [SA] GTA Trilogy Peds Pack (skins convertidas do SA:DE) [GTA Trilogy] Classic Colored Radio I…",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/04/gta-sa-definitive-trilogy-mod-bob-lake-water-fix-height-agua-fux-500x193.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-5744501.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/08/gta-sa-mod-sade-definitive-trilogy-hd-peds-skins-converted-classic-pack-4-150x150.jpg"
+   ],
+   "version": "2022-04-12",
+   "releaseDate": "2022-04-12T02:32:15+00:00",
+   "downloadUrl": "https://sharemods.com/ap7g70atpkko/SADE_-_Lake_Water_Fix.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-04-12T02:32:15+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sade-naruto-pedifp-correr-como-naruto",
+   "title": "[SA:DE] Naruto PedIFP (correr como Naruto)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Animações",
+   "sourceUrl": "https://www.mixmods.com.br/2021/11/sade-naruto-pedifp-correr-como-naruto/",
+   "excerpt": "Segundo mod criado para GTA SA The Definitive Edition (GTA Trilogy)! Não poderia ser outro: lutar e correr como o Naruto! No vídeo acima foi usado cheats. Troca o ped.ifp interno do jogo (não substitui nenhum arquivo).",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-definitive-edition-mod-naruto-ifp-anim.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-7219754.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2019/08/gta-sa-animation-anim-fix-logo-8110670-150x138.png"
+   ],
+   "version": "2021-11-12",
+   "releaseDate": "2021-11-12T13:12:00+00:00",
+   "downloadUrl": "https://sharemods.com/p72zp44q3nr1/SADE_-_Naruto_PedIFP.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-11-12T13:12:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sade-next-gen-weapon-sounds-mw2019",
+   "title": "[SA:DE] Next-Gen Weapon Sounds (MW2019)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Sons",
+   "sourceUrl": "https://www.mixmods.com.br/2021/11/sade-next-gen-weapon-sounds-mw2019/",
+   "excerpt": "Primeiro mod de sons HD realistas para as armas do GTA San Andreas The Definitive Edition! São sons de tiros convertidos do jogo COD MW2019. Normalmente trocar esses sons faz o volume não seguir a configuração no menu, mas este mod não tem esse problema, funciona tudo corretamente! E mais, diferente dos mods de sons do SA clássico, os sons deste mod deixam os tiros com efeito estéreo!",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/05/jogo-gta-brasileiro-impunes-2nibble-devlog-soccer-futebol-penalti-150x150.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/09/mandamentos-mods-1-150x150.jpg"
+   ],
+   "version": "2021-11-14",
+   "releaseDate": "2021-11-14T19:00:00+00:00",
+   "downloadUrl": "https://sharemods.com/e24bpwd3pv4t/SADE_-_Next-Gen_Weapon_Sounds_MW2019.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-11-14T19:00:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sade-proper-characters-retex",
+   "title": "[SA:DE] Proper Characters Retex v0.1 (melhores texturas para peds)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Skins e Pedestres",
+   "sourceUrl": "https://www.mixmods.com.br/2022/01/sade-proper-characters-retex/",
+   "excerpt": "Prévia de um início de um projeto nosso para criar novas texturas para os personagens e pedestres do GTA SA The Definitive Edition (GTA Trilogy). Até o momento, nós criamos uma melhor textura pra namorada do CJ, Denise, agora mais realista e correta. E a cereja do bolo: a bandana usa a textura fonte original em HD que a Rockstar usou na Denise clássica!",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/01/gta-sa-definitive-trilogy-mod-denise-fix-skin-texture-better-3385202-500x346.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/07/gta-sa-mod-proper-peds-characters-retex-hd-npcs-remaster-texture-upscale-ai-remini-1-1-150x150.jpg"
+   ],
+   "version": "0.1",
+   "releaseDate": "2022-01-10T10:15:31+00:00",
+   "downloadUrl": "https://sharemods.com/esd152zz1k9o/SADE_-_Proper_Characters_Retex.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-01-10T10:15:31+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sade-proper-hd-jeans-calca-com-textura-hd",
+   "title": "[SA:DE] Proper HD Jeans v2.0 (calça com textura HD)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Player e Roupas",
+   "sourceUrl": "https://www.mixmods.com.br/2021/11/sade-proper-hd-jeans-calca-com-textura-hd/",
+   "excerpt": "Atualizado 05/04/22 Corrigido não dando efeito no novo patch do jogo. (2022) Atualmente não compatível com o mais novo patch do jogo (2024) Desde as primeiras imagens do GTA SA The Definitive Edition, as pessoas vêm criticando a calça do CJ com textura muito low, portanto nós a corrigimos, remasterizando em HD.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-definitive-trilogy-mod-proper-player-retex-jeans-hd-pants-texture-6240426-500x564.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-definitive-trilogy-jeans-pants-proper-mod-comparison-hd-1730336-500x507.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-7219754.png"
+   ],
+   "version": "2.0",
+   "releaseDate": "2024-12-22T22:55:08+00:00",
+   "downloadUrl": "https://sharemods.com/qyd2xtywnn5h/SADE_-_Proper_HD_Jeans.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-11-12T19:17:00+00:00",
+   "updatedAt": "2024-12-22T22:55:08+00:00"
+  },
+  {
+   "slug": "sade-real-hd-ak-47-arma-ak-47-realista",
+   "title": "[SA:DE] Real HD AK-47 (arma AK-47 realista)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Armas",
+   "sourceUrl": "https://www.mixmods.com.br/2021/11/sade-real-hd-ak-47-arma-ak-47-realista/",
+   "excerpt": "O primeiro mod de modelo HD lançado para GTA SA The Definitive Edition (GTA Trilogy)! A AK-47 original do SA:DE é uma das piores armas do jogo, portanto nós trocamos por uma nova realista em HD. Inclui todos os maps (normal map, metallic map etc) para um material realista!",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-definitive-edition-mod-arma-gun-ak47-hd.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-definitive-edition-mod-arma-gun-ak47-hd-2.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-7219754.png"
+   ],
+   "version": "2021-11-13",
+   "releaseDate": "2021-11-13T19:09:00+00:00",
+   "downloadUrl": "https://sharemods.com/quhxyi5ey8o1/Real_HD_AK-47.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-11-13T19:09:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sade-rimmers-shirt-fix",
+   "title": "[SA:DE] Rimmers Shirt Fix (corrigir camisa do FAM3)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2021/12/sade-rimmers-shirt-fix/",
+   "excerpt": "Mod que corrige a textura horrível na camisa do membro de gangue nas cutscenes, que por algum motivo eles escreveram “Rinimo’s” no MS Paint em vez de “Rimmers”. A correção é completa, inclui normal maps e o “7”, que tinha estilo diferente.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-definitive-mod-trilogy-fix-fam-shirt-rimmers-logo-2893704-500x637.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2024/10/10_gta3_BmzkrTlOVp-150x150.jpg"
+   ],
+   "version": "2021-12-24",
+   "releaseDate": "2021-12-24T19:41:32+00:00",
+   "downloadUrl": "https://sharemods.com/s28nd2p8v4bi/SADE_-_Rimmers_Shirt_Fix.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-12-24T19:41:32+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sade-rosa-project-evolved",
+   "title": "[SA:DE] RoSA Evolved (remaster texturas HD 2024)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Gráficos",
+   "sourceUrl": "https://www.mixmods.com.br/2021/12/sade-rosa-project-evolved/",
+   "excerpt": "Atualizado 15/11/24 Corrigido incompatibilidade com o novo update do GTA Trilogy. O melhor pack de texturas remasterizadas em HD para GTA San Andreas, agora também para The Definitive Edition! Para GTA clássico, baixe: [SA] RoSA Project Evolved RoSA Evolved é a nova versão do RoSA Reborn, versões do RoSA continuadas por nós da MixMods.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-san-definitive-trilogy-rosa-evolved-texture-remaster-retexture-hd-5936923-500x421.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-san-definitive-mod-rosa-evolved-hd-textures-remaster-pack-5034698-500x281.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-san-definitive-mod-rosa-evolved-hd-textures-remaster-pack-5-6767408-500x281.jpg"
+   ],
+   "version": "2024-11-16",
+   "releaseDate": "2024-11-16T02:31:57+00:00",
+   "downloadUrl": "https://www.mediafire.com/file/1wobp99dnsr6518/500-RoSA+Evolved+-+Tilables.pak/file",
+   "downloadHost": "mediafire.com",
+   "fileSize": 2147483648,
+   "paywalled": false,
+   "publishedAt": "2021-12-26T00:22:31+00:00",
+   "updatedAt": "2024-11-16T02:31:57+00:00"
+  },
+  {
+   "slug": "sade-sandstorm-fix",
+   "title": "[SA:DE] Sandstorm Fix (corrigir tempestade de areia)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2022/04/sade-sandstorm-fix/",
+   "excerpt": "Finalmente corrigimos o efeito de tempestade de areia do GTA SA The Definitive Edition! Antes parecia um mundo de diarreia, e afetava até mesmo o CJ. Autor: Jéssica Natália Veja também: [SA:DE] Disable Heat Haze (desativar efeito de calor) [GTA Trilogy] Rain Fix (chuva corrigida) [GTA Trilogy] Lighting Fix Mod (corrigir iluminação) [GTA Trilogy] Fog Distance Fix (neblina e distância de visão) [SA:…",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/04/gta-sa-definitive-mod-sandstorm-fix-bug-glitch-disable-trilogy-500x621.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/04/gta-sa-definitive-mod-sandstorm-fix-bug-glitch-disable-trilogy-2-500x221.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-5744501.png"
+   ],
+   "version": "2022-04-08",
+   "releaseDate": "2022-04-08T19:15:29+00:00",
+   "downloadUrl": "https://sharemods.com/xxmyttqp23iv/SADE_-_Sandstorm_Fix.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-04-08T19:15:29+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sade-silent-hill-pack-fog-heather-skin",
+   "title": "[SA:DE] Silent Hill Pack: Fog + Heather skin",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Gráficos",
+   "sourceUrl": "https://www.mixmods.com.br/2022/06/sade-silent-hill-pack-fog-heather-skin/",
+   "excerpt": "Mod que adiciona a neblina do Silent Hill e skin da Heather ao GTA San Andreas The Definitive Edition. A neblina do GTA Trilogy é volumétrica, então o resultado é realmente bonito. <span data-mce-type=\"bookmark\" style=\"display: inline-block; width: 0px; overflow: hidden; line-height: 0;\" class=\"mce_SELRES_start\"> </span> Com o mod de lanterna, dá um excelente gameplay de horror e mistério.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/06/gta-sa-definitive-trilogy-silent-hill-fog-skin-heather-ped-neblina-500x360.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-7219754.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-definitive-edition-trilogy-fog-distance-fix-mod-restore-4-7845536-150x150.jpg"
+   ],
+   "version": "2022-06-23",
+   "releaseDate": "2022-06-23T12:30:07+00:00",
+   "downloadUrl": "https://sharemods.com/gs44uwpqq0im/SADE_-_Silent_Hill_Pack_-_Fog_Heather_skin.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-06-23T12:30:07+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sade-snow-conversion-mod-pack",
+   "title": "[SA:DE] Snow Conversion 2021 (mod pack)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Conversões totais",
+   "sourceUrl": "https://www.mixmods.com.br/2021/12/sade-snow-conversion-mod-pack/",
+   "excerpt": "Inicialmente criado para GTA San Andreas clássico, agora também para GTA SA The Definitive Edition! Snow Conversion é um pack de mods que transforma o GTA SA:DE em um ambiente de neve, tendo em base as texturas do mod Snow Andreas, revisado e melhorado por nós. Mais informações desta versão do Snow Andreas aqui.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-definitive-trilogy-mod-snow-textures-pack-conversion-neve-5921252-500x281.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-definitive-trilogy-mod-snow-textures-pack-conversion-neve-7952431-500x281.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-definitive-trilogy-mod-snow-textures-pack-conversion-neve-4754250-500x281.jpg"
+   ],
+   "version": "2021-12-16",
+   "releaseDate": "2021-12-16T00:54:52+00:00",
+   "downloadUrl": "https://sharemods.com/5u9ty16p0zwf/Snow_Andreas_Reborn_DE.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": 137363456,
+   "paywalled": false,
+   "publishedAt": "2021-12-16T00:54:52+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sade-submerged-map-mapa-embaixo-dagua",
+   "title": "[SA:DE] Submerged Map (mapa embaixo d´água)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Mapas e Objetos",
+   "sourceUrl": "https://www.mixmods.com.br/2021/11/sade-submerged-map-mapa-embaixo-dagua/",
+   "excerpt": "Mod que muda o water.dat do GTA SA:DE para que todas as cidades fiquem inundadas embaixo d’água. Este foi um dos primeiros mods do mundo para o GTA clássico. No GTA Trilogy o efeito é bem legal, devido aos gráficos modernos. Os NPCs continuam funcionando, o que é bem estranho. Autor: Jéssica Natália [Fonte primária] Jogo IMPUNES: Chuva e muito mais!",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-definitive-edition-flooded-submerged-water-city-map-7534623.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-definitive-edition-flooded-submerged-water-city-map-7455697.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png"
+   ],
+   "version": "2021-11-16",
+   "releaseDate": "2021-11-16T21:00:00+00:00",
+   "downloadUrl": "https://sharemods.com/fbw1mcux185g/SADE_-_Water_Submerged_Map.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-11-16T21:00:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sade-wires-texture-fix-corrigir-bug-nos-fios",
+   "title": "[SA:DE] Wires Texture Fix (corrigir bug nos fios)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2021/12/sade-wires-texture-fix-corrigir-bug-nos-fios/",
+   "excerpt": "Mod que corrige um bug de textura nos fios de Angel Pine no GTA San Andreas The Definitive Edition. Originalmente ela estava completamente sólida, um bloco preto horrível. Agora tem transparência. Note que de longe os fios ficam serrilhados, isto é uma limitação do jogo, pois o jogo não usa shader com semi-transparência nos objetos do mapa.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-definitive-fix-wires-textures-bug-fios-angel-pine-7670931-500x336.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-definitive-edition-fix-wires-textures-bug-fios-4902945-500x334.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png"
+   ],
+   "version": "2021-12-17",
+   "releaseDate": "2021-12-17T22:37:23+00:00",
+   "downloadUrl": "https://sharemods.com/u2kraqi0h460/SADE_-_Wires_Texture_Fix.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-12-17T22:37:23+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "simple-free-cam-camera-livre",
+   "title": "[SA/SA:DE] Simple Free Cam v2.1.1 (câmera livre)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "sade"
+   ],
+   "category": "GTA SA The Definitive Edition",
+   "sourceUrl": "https://www.mixmods.com.br/2021/12/simple-free-cam-camera-livre/",
+   "excerpt": "Atualizado 15/09/22 SA: Corrigido a opção de inverter o mouse. Atualizado 08/09/22 Corrigido a velocidade variando conforme o FPS do jogo. Opção para mudar o valor de velocidade mais rapidamente segurando SHIFT. Tecla “Insert” teletransporta o CJ para a posição da câmera (útil para carregar o mapa do local), segurando SHIFT usa o chão (opção no .ini).",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2018/11/gta-sa-san-mod-cleo-simple-free-cam-hack-3806361.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-5744501.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2025/05/soundize-bg-21-9-150x150.png"
+   ],
+   "version": "2.1.1",
+   "releaseDate": "2023-06-06T02:53:27+00:00",
+   "downloadUrl": "https://sharemods.com/vykgtsb0h1ha/Simple_Free_Cam.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-12-07T19:30:00+00:00",
+   "updatedAt": "2023-06-06T02:53:27+00:00"
+  },
+  {
+   "slug": "simple-skin-selector-ped-creator",
+   "title": "[SA:DE] Simple Skin Selector and Ped Creator",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Mods Scripts etc",
+   "sourceUrl": "https://www.mixmods.com.br/2022/01/simple-skin-selector-ped-creator/",
+   "excerpt": "Mod CLEO (JavaScript) para GTA SA The Definitive Edition para controlar um pedestre ou personagem no lugar do CJ. Além do gameplay diferenciado, o mod é também útil para testar os pedestres do jogo, inclusive variações, e ter uma gangue de pedestres. Comandos: Segure ALT e use as setas pra ESQUERDA e DIREITA para mudar a skin. Segure ALT e CTRL e use as setas para mudar a variação (é aleatório).",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/01/gta-sa-definitive-trilogy-skin-selector-cleo-mod-script-ped-player-2366440-500x364.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/01/gta-sa-definitive-trilogy-skin-selector-cleo-mod-script-ped-gang-7830249-500x281.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png"
+   ],
+   "version": "2022-01-08",
+   "releaseDate": "2022-01-08T09:07:20+00:00",
+   "downloadUrl": "https://sharemods.com/htmgpj0r6ki1/SADE_-_Simple_Skin_Selector_and_Ped_Creator.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-01-08T09:07:20+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "skateboarding-mod-mod-de-skate-para-gta-sa",
+   "title": "[SA/SA:DE] Skateboarding Mod (mod de skate)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "sade"
+   ],
+   "category": "Animações",
+   "sourceUrl": "https://www.mixmods.com.br/2022/06/skateboarding-mod-mod-de-skate-para-gta-sa/",
+   "excerpt": "Atualizado 04/06/22 09:35 Portado para o GTA SA The Definitive Edition! O motivo de eu nunca ter postado um mod de andar de skate aqui no blog antes era de que eu não sabia qual era o melhor. Mas agora sim: o melhor mod de skate para GTA SA que existe. Mod originalmente criado por Linevariy e melhorado por Junior_Djjr e M.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2019/10/gta-sa-skate-mod-2427635.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2019/10/gta-sa-skate-mod-5437508.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2019/10/gta-sa-skate-mod-7286215.jpg"
+   ],
+   "version": "2023-03-31",
+   "releaseDate": "2023-03-31T20:41:14+00:00",
+   "downloadUrl": "https://sharemods.com/33090codslex/Skate_Mod.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": 94371840,
+   "paywalled": false,
+   "publishedAt": "2022-06-04T12:35:00+00:00",
+   "updatedAt": "2023-03-31T20:41:14+00:00"
+  },
+  {
+   "slug": "smaller-hud",
+   "title": "[GTA Trilogy] Smaller Hud (interface menor)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2022/04/smaller-hud/",
+   "excerpt": "Mod para GTA Trilogy (III, VC e SA Definitive Edition) que deixa a interface (hud) mais pequena. — não inclui minimapa 2D como na imagem — Desde o início eu achei a interface muito grande. Este mod deixa o minimapa/radar exatamente igual ao tamanho do GTA SA clássico com Widescreen Fix, e diminui também as informações do player (ícone da arma etc). Assim o jogo parece mais moderno e “limpo”.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/04/gta-sa-definitive-trilogy-smaller-hud-interface-small-ui-500x281.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-5744501.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-definitive-trilogy-mod-snow-textures-pack-conversion-neve-5921252-150x150.jpg"
+   ],
+   "version": "2024-11-16",
+   "releaseDate": "2024-11-16T02:39:31+00:00",
+   "downloadUrl": "https://drive.google.com/file/d/10Om56P45feeYtR4hpQsvtMX1OPqxma0d/view?usp=sharing",
+   "downloadHost": "drive.google.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-04-30T22:28:58+00:00",
+   "updatedAt": "2024-11-16T02:39:31+00:00"
+  },
+  {
+   "slug": "vehicles-windows-fix",
+   "title": "[SA:DE] Vehicles Windows Fix v1.1 (corrigir vidros dos carros)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade"
+   ],
+   "category": "SA:DE – Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2022/04/vehicles-windows-fix/",
+   "excerpt": "Atualizado 21/04/22 Agora também foi trocado a textura de vidro quebrado (que antes era um buraco de bala, uma péssima decisão de design que não faz sentido). Mod que corrige bugs graves nos vidros de todos os veículos do GTA SA The Definitive Edition: Corrige os vidros invisíveis pelo lado de dentro (double sided).",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/04/gta-sa-definitive-trilogy-vehicles-car-window-fix-texture-bug-vidros-500x682.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/04/gta-sa-definitive-trilogy-mod-fix-vehicles-car-window-bug-glasses-500x629.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png"
+   ],
+   "version": "1.1",
+   "releaseDate": "2022-04-19T10:42:54+00:00",
+   "downloadUrl": "https://sharemods.com/von6rzow7t0u/SADE_-_Vehicles_Windows_Fix.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-04-19T10:42:54+00:00",
+   "updatedAt": null
+  }
+ ]
+}

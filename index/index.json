@@ -1,0 +1,12 @@
+{
+ "format": "modao-index-manifest",
+ "version": 1,
+ "generatedAt": "2026-09-22T10:30:51.321Z",
+ "games": {
+  "sa": 2843,
+  "sade": 64,
+  "iii": 55,
+  "vc": 65
+ },
+ "paywalled": 14
+}

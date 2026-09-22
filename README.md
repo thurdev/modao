@@ -82,10 +82,10 @@ O diretório [`index/`](index/) tem o catálogo em JSON, um arquivo por jogo, pr
 quem quiser usar em outra ferramenta:
 
 ```
-index/sa.json     GTA: San Andreas
-index/vc.json     Vice City
-index/iii.json    GTA III
-index/sade.json   Definitive Edition
+index/sa.json     GTA: San Andreas      2843 mods
+index/vc.json     Vice City               65 mods
+index/iii.json    GTA III                 55 mods
+index/sade.json   Definitive Edition      64 mods
 index/index.json  manifesto com as contagens
 ```
 

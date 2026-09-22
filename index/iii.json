@@ -1,0 +1,1407 @@
+{
+ "format": "modao-index",
+ "version": 1,
+ "game": {
+  "kind": "iii",
+  "name": "GTA III"
+ },
+ "generatedAt": "2026-09-22T10:30:51.321Z",
+ "source": "https://www.mixmods.com.br/",
+ "note": "Discovery index: metadata, an excerpt and a link to the original post. The full post, the images and the files belong to their authors and stay on mixmods.com.br. Nothing here mirrors a mod file.",
+ "count": 55,
+ "mods": [
+  {
+   "slug": "cleo-redux",
+   "title": "CLEO Redux",
+   "author": "Junior_Djjr",
+   "games": [
+    "iii"
+   ],
+   "category": "GTA III",
+   "sourceUrl": "https://www.mixmods.com.br/2021/12/cleo-redux/",
+   "excerpt": "CLEO Redux é uma re-implementação da CLEO reescrita do zero. O projeto é liderado pelo Seemann, o criador da CLEO antiga! Portanto é confiável. Jogos compatíveis: GTA III GTA Vice City GTA San Andreas re3 reVC GTA III The Definitive Edition GTA Vice City The Definitive Edition GTA San Andreas The Definitive Edition GTA IV Complete Edition Suporta scripts SCM (arquivos .cs e outros) e JavaScript (.…",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-iii-vc-sa-trilogy-cleo-redux-logo-download-mod-script-5095376-500x191.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2018/08/gta-sa-debug-kit-xbox-8458285-150x150.jpg"
+   ],
+   "version": "2021-12-09",
+   "releaseDate": "2021-12-09T15:25:04+00:00",
+   "downloadUrl": "https://github.com/cleolibrary/CLEO-Redux/releases",
+   "downloadHost": "github.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-12-09T15:25:04+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "clipboard-cheat-by-bloodriver",
+   "title": "[III|VC|SA] Clipboard Cheat By Bloodriver (colar códigos de manhas)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "III – Mods Scripts etc",
+   "sourceUrl": "https://www.mixmods.com.br/2022/09/clipboard-cheat-by-bloodriver/",
+   "excerpt": "Atualizado 01/09/22 Agora também para GTA III e GTA Vice City! Mod CLEO para você colar cheats usando Ctrl+V para ativar trapaças do jogo, ou ativar/desativar mods. Não só isso: mods que leem o buffer de cheats para digitar nomes dentro do jogo, também receberão o texto colado.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/08/gta-sa-mod-clipboard-cheat-ctrl-v-copy-paste-colar.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/01/gta-lcs-vcs-cw-chinatown-wars-stories-logo-guia-psp-ps2-emulador-8163628-150x150.jpg"
+   ],
+   "version": "2022-09-01",
+   "releaseDate": "2022-09-01T20:20:27+00:00",
+   "downloadUrl": "https://sharemods.com/r7y5zbkm51fs/III_VC_SA_-_Clipboard_Cheat.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-09-01T20:20:27+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "crashinfo",
+   "title": "[III|VC|SA] CrashInfo v1.2.1 (mostrar solução de crash)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "Ferramentas",
+   "sourceUrl": "https://www.mixmods.com.br/2022/09/crashinfo/",
+   "excerpt": "Atualizado 30/01/25 Adicionado lista em espanhol. Atualizado 13/09/22 Adaptado para GTA III e GTA Vice City! Ainda sem documentações, mas em breve começarei a colocar. Adicionado um botão “Force Quit” para fechar o jogo de maneira forçada, e textos melhorados. Um mod que irá revolucionar o modding do GTA III/VC/SA!",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/01/gta-iii-vc-sa-mod-crashinfo-crash-info-error-solution-list-500x506.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/10/urbanize-logo-catarse-150x150.png"
+   ],
+   "version": "1.2.1",
+   "releaseDate": "2025-01-30T23:02:45+00:00",
+   "downloadUrl": "https://sharemods.com/g2boidmk6atl/CrashInfo.zip.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-09-13T09:36:00+00:00",
+   "updatedAt": "2025-01-30T23:02:45+00:00"
+  },
+  {
+   "slug": "gta-trilogy-lighting-fix-mod",
+   "title": "[GTA Trilogy] Lighting Fix Mod (corrigir iluminação)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade",
+    "iii"
+   ],
+   "category": "GTA III The Definitive Edition",
+   "sourceUrl": "https://www.mixmods.com.br/2021/12/gta-trilogy-lighting-fix-mod/",
+   "excerpt": "Finalmente corrigimos, da maneira correta, a iluminação escura do GTA Trilogy! Isto não é um postfx, o mod aumenta a iluminação ambiente do jogo, assim as áreas escuras ficarão um pouco mais claras, preservando corretamente as sombras e áreas iluminadas. As imagens são com brilho no médio configurado no menu, você pode ajustar para deixar ainda mais claro ou escuro.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-definitive-edition-lighting-fix-mod-dark-brightness-5284405-500x276.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-definitive-edition-lighting-fix-mod-dark-brightness-shadows-2381167-500x435.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-trilogy-lighting-fix-mod-dark-brightness-interior-cutscene-bug-4963125-500x372.jpg"
+   ],
+   "version": "2021-12-01",
+   "releaseDate": "2021-12-01T13:44:46+00:00",
+   "downloadUrl": "https://sharemods.com/vy0k1ygarri1/GTA_Trilogy_-_Lighing_Fix_Mod.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-12-01T13:44:46+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "gta-trilogy-no-pickups-light",
+   "title": "[GTA Trilogy] No Pickups Light (remover luz)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade",
+    "iii"
+   ],
+   "category": "GTA III The Definitive Edition",
+   "sourceUrl": "https://www.mixmods.com.br/2021/12/gta-trilogy-no-pickups-light/",
+   "excerpt": "Mod que remove as luzes embaixo dos pickups de armas, dinheiro etc no GTA III, VC e SA The Definitive Edition. Autor: Jéssica Natália Veja também: [GTA Trilogy] Fix Marker Light (corrigir luz dos marcadores) [GTA Trilogy] No Leaf Decals (remover folhas no chão) [Fonte primária] [SA:DE] RoSA Evolved (remaster texturas HD 2024) [III] Xbox Version HD (versão Xbox para PC em HD) [GTA Trilogy] Rain Fix…",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-definitive-edition-remove-no-light-pickup-luz-4808484-500x445.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-sa-san-definitive-trilogy-rosa-evolved-texture-remaster-retexture-hd-5936923-150x150.jpg"
+   ],
+   "version": "2021-12-06",
+   "releaseDate": "2021-12-06T14:48:22+00:00",
+   "downloadUrl": "https://sharemods.com/67iyqkpqfzbf/GTA_Trilogy_-_No_Pickups_Light.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-12-06T14:48:22+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "gta-trilogy-simple-fastloader",
+   "title": "[GTA Trilogy] Simple Fastloader (pular intro)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade",
+    "iii"
+   ],
+   "category": "GTA III The Definitive Edition",
+   "sourceUrl": "https://www.mixmods.com.br/2021/12/gta-trilogy-simple-fastloader/",
+   "excerpt": "O fastloader pula os vídeos de intro e telas de copyright ao iniciar o jogo, fazendo o jogo ser iniciado mais rápido, direto ao menu! No GTA III:DE e GTA VC:DE o jogo iniciará em somente 3 segundos, mas GTA SA:DE ainda demorará 20 segundos para o jogo ser carregado até o menu. O tempo varia com a potência do seu PC.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-trilogy-definitive-mod-simple-fastloader-skip-intro-3470591-500x341.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2024/10/10_gta3_BmzkrTlOVp-150x150.jpg"
+   ],
+   "version": "2022-12-14",
+   "releaseDate": "2022-12-14T01:06:48+00:00",
+   "downloadUrl": "https://sharemods.com/98tcqn0bxwbf/GTA_Trilogy_-_Simple_Fastloader.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-12-04T15:11:18+00:00",
+   "updatedAt": "2022-12-14T01:06:48+00:00"
+  },
+  {
+   "slug": "gta-trilogy-tire-black-smoke-fix-corrigir-fumaca-dos-pneus",
+   "title": "[GTA Trilogy] Tire Black Smoke Fix (corrigir fumaça dos pneus)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade",
+    "iii"
+   ],
+   "category": "GTA III The Definitive Edition",
+   "sourceUrl": "https://www.mixmods.com.br/2021/11/gta-trilogy-tire-black-smoke-fix-corrigir-fumaca-dos-pneus/",
+   "excerpt": "Mod que corrige a fumaça preta dos pneus do GTA III/VC/SA The Definitive Edition. Sim, é de fato um bug, na vida real a essa fumaça é branca, assim como nos jogos clássicos. Autor: Jéssica Natália Veja também: [SA/SA:DE] Proper Vehicles Retex (texturas HD para veículos) [Fonte primária] [SA/SA:DE] Proper Player Retex v3.2 (CJ com texturas… [GTA Trilogy] Fog Distance Fix v1.2 (neblina e… A maior at…",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-definitive-edition-tire-smoke-fix-dark-black-white-6219176-413x800.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-vc-definitive-edition-tire-smoke-fix-burn-out-burnout-5000059-500x257.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png"
+   ],
+   "version": "2021-11-30",
+   "releaseDate": "2021-11-30T21:36:51+00:00",
+   "downloadUrl": "https://sharemods.com/a6bkxobmh5j0/GTA_Trilogy_-_Tire_Black_Smoke_Fix.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-11-30T21:36:51+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iii-biblioteca-cleo",
+   "title": "[III] CLEO v2.0.0.6",
+   "author": "Junior_Djjr",
+   "games": [
+    "iii"
+   ],
+   "category": "III – Mods Scripts etc",
+   "sourceUrl": "https://www.mixmods.com.br/2016/08/iii-biblioteca-cleo/",
+   "excerpt": "Atualizado (23/10/21) Adicionado opcodes 0AB3 0AB4 Agora o 05EE é compatível com o código de tecla da CLEO antiga (1.0.0.6). Versão da Biblioteca/Livraria CLEO para GTA 3. Esta é a segunda versão do mod, criada “do zero” pelo DK22Pac, e depois ThirteenAG aprimorou ela adicionando mais opcodes, incluindo vários da CLEO 4 do San Andreas.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2016/08/IMG0118A-4857146.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2020/02/LaeOZh0-1012684-150x150.png"
+   ],
+   "version": "2.0.0.6",
+   "releaseDate": "2016-08-31T18:56:00+00:00",
+   "downloadUrl": "https://sharemods.com/1axl7f7uta6f/III_Biblioteca_CLEO.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2016-08-31T18:56:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iii-curiosidades-ele-nao-se-chama-claude-speed",
+   "title": "[III Curiosidades] Ele não se chama Claude Speed?",
+   "author": "Junior_Djjr",
+   "games": [
+    "iii"
+   ],
+   "category": "III – Curiosidades",
+   "sourceUrl": "https://www.mixmods.com.br/2016/09/iii-curiosidades-ele-nao-se-chama-claude-speed/",
+   "excerpt": "E se eu te dissesse que o protagonista do GTA 3 não se chama “Claude Speed”? Ou até mesmo que o nome “Claude” é questionável!? Nesta postagem irei abordar os pontos contras e a favor do nome do protagonista do GTA 3 ser ou não ser “Claude Speed” para você refletir e tirar suas próprias conclusões.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2016/09/gta-3-claude-speed-1806009.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2016/09/claude_speed-7403080.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2016/09/claude_speed-2890085.jpg"
+   ],
+   "version": "2016-09-04",
+   "releaseDate": "2016-09-04T02:15:00+00:00",
+   "downloadUrl": null,
+   "downloadHost": null,
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2016-09-04T02:15:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iii-essentials-pack",
+   "title": "[III] Essentials (pack de mods que não podem faltar no GTA 3)",
+   "author": "Junior_Djjr",
+   "games": [
+    "iii"
+   ],
+   "category": "III – Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2020/12/iii-essentials-pack/",
+   "excerpt": "Atualizado conforme: 16/08/26 (DD/MM/YY) Um pacote de mods essenciais para o bom funcionamento do GTA III e mods. O pack inclui os mods que nunca podem faltar; o passo inicial após instalar o jogo. Quickstart.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2020/12/gta-iii-3-mod-pack-essentials-4115173.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/06/gta-iii-xbox-version-hd-pc-logo-9229949-150x150.png"
+   ],
+   "version": "2026-08-16",
+   "releaseDate": "2026-08-16T06:27:56+00:00",
+   "downloadUrl": "https://sharemods.com/q4xuvc6ectae/III_-_Essentials_Pack.zip.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": 5242880,
+   "paywalled": false,
+   "publishedAt": "2020-12-05T05:09:00+00:00",
+   "updatedAt": "2026-08-16T06:27:56+00:00"
+  },
+  {
+   "slug": "iii-female-player-v1-1-player-feminino-mulher",
+   "title": "[III] Female Player v1.1 (player feminino / mulher)",
+   "author": "Junior_Djjr",
+   "games": [
+    "iii"
+   ],
+   "category": "III – Mods Femininos",
+   "sourceUrl": "https://www.mixmods.com.br/2021/10/iii-female-player-v1-1-player-feminino-mulher/",
+   "excerpt": "Atualizado 02/10/21 Adicionado um player custom, para fazer mais sentido na história. Corrigido bugs nas cutscenes. Removido a pasta “anim” do mod, era inútil, delete-a. Mod para GTA III que muda o Claude por uma mulher: Clarice Velocity. Funciona bem em cutscenes, e devido ao Claude não ter voz, não fica estranho. Utiliza os modelos melhorados da versão Xbox do jogo.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/gta-iii-mod-female-player-clarice-woman-girl-mulher-3477934.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/gta-iii-mod-female-player-clarice-woman-girl-mulher-9260038.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/gta-iii-claude-player-female-woman-girl-mulher-mod-3844964.jpg"
+   ],
+   "version": "1.1",
+   "releaseDate": "2021-10-02T20:00:00+00:00",
+   "downloadUrl": "https://sharemods.com/bgrmemukz411/III_-_Female_Player.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-10-02T20:00:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iii-grand-theft-auto-3d",
+   "title": "[III] Grand Theft Auto 3D",
+   "author": "Junior_Djjr",
+   "games": [
+    "iii"
+   ],
+   "category": "III – Conversões totais",
+   "sourceUrl": "https://www.mixmods.com.br/2019/01/iii-grand-theft-auto-3d/",
+   "excerpt": "GTA 3D é um mod que traz o GTA 3 para as suas primeiras versões de desenvolvimento. Para entender melhor do que se trata, eu recomendo que veja este post: [Curiosidade] Todas as imagens do GTA III alpha / beta. O objetivo é deixá-lo como nas primeiras imagens liberadas durante o início de desenvolvimento do jogo (algo que as pessoas normalmente chamam de “versão alpha”, mas não “beta”).",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2019/01/gta-iii-3-gta3d-beta-alpha-mod-1038384.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2019/01/gta-iii-3-gta3d-beta-alpha-mod-7171769.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2019/01/gta-iii-3-gta3d-beta-alpha-mod-6298983.jpg"
+   ],
+   "version": "2019-01-26",
+   "releaseDate": "2019-01-26T04:33:00+00:00",
+   "downloadUrl": "http://linkshrink.net/SCn/gta3d",
+   "downloadHost": "linkshrink.net",
+   "fileSize": 340787200,
+   "paywalled": false,
+   "publishedAt": "2019-01-26T04:33:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iii-gta-frosted-winter",
+   "title": "[III] GTA Frosted Winter (conversão total de neve)",
+   "author": "Junior_Djjr",
+   "games": [
+    "iii"
+   ],
+   "category": "III – Conversões totais",
+   "sourceUrl": "https://www.mixmods.com.br/2021/12/iii-gta-frosted-winter/",
+   "excerpt": "Atualizado 24/12/21 Corrigido relâmpagos no céu. Corrigido a missão 7 causando softlock. Havia um “cleo.asi” antigo do mod (4.1) junto aos arquivos, foi removido, isso pode corrigir problemas variados. Atualizado 23/12/21 Removido os sons, como armas, agora muda somente sons de neve. Ícones do minimapa corretos, e os ícones das armas agora são cinzas.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-iii-mod-frosted-winter-total-conversion-missions-snow-1874766-500x281.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-iii-mod-frosted-winter-total-conversion-missions-snow-2-1770041-500x281.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-iii-mod-frosted-winter-total-conversion-missions-snow-4-4667585-500x281.jpg"
+   ],
+   "version": "2021-12-24",
+   "releaseDate": "2021-12-24T17:38:10+00:00",
+   "downloadUrl": "https://sharemods.com/6jm9kwe2m31q/GTA_Frosted_Winter.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": 220200960,
+   "paywalled": false,
+   "publishedAt": "2021-12-24T17:38:10+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iii-iii-aircraft-pilotar-avioes-no-gta-3",
+   "title": "[III] III Aircraft (pilotar aviões no GTA 3)",
+   "author": "Junior_Djjr",
+   "games": [
+    "iii"
+   ],
+   "category": "III – Aviões",
+   "sourceUrl": "https://www.mixmods.com.br/2017/03/iii-iii-aircraft-pilotar-avioes-no-gta-3/",
+   "excerpt": "Atualizado Agora compatível com instalação por Modloader! É só baixar e extrair. Não tem como não amar os mods! Somente mods conseguem trazer isso para nós. Um mod criado pelo Silent que recebeu o prêmio de melhor mod de veículo de 2013 pela GTA Awards. Pela primeira vez você irá voar no GTA 3 e conhecer Liberty City de cima pra baixo!",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2017/03/gta-3-aircraft-airplane-heli-pilotar-dodo-3262676.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2017/03/gta-3-aircraft-airplane-heli-pilotar-drive-3517479.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2017/03/gta-3-aircraft-heli-fly-maverick-8617461.jpg"
+   ],
+   "version": "2017-03-27",
+   "releaseDate": "2017-03-27T06:00:00+00:00",
+   "downloadUrl": "http://linkshrink.net/SCn/iii-aircraft",
+   "downloadHost": "linkshrink.net",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2017-03-27T06:00:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iii-mixsets",
+   "title": "[III] MixSets",
+   "author": "Junior_Djjr",
+   "games": [
+    "iii"
+   ],
+   "category": "III – Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2021/08/iii-mixsets/",
+   "excerpt": "40 configurações! Um mod .asi com um extenso arquivo .ini com centenas de fixes (correções) e tweaks para você configurar o seu GTA III! Você é livre para ativar somente uma, ou todas as opções. Lista de funções: Configurar limite de FPS. Configurar limite de uso de memória para streaming (stream memory fix). Carros não desviam do seu carro de polícia com sirene ligada.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/08/gta-iii-3-mod-mixsets-tweak-fix-mixmods-7915943.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-5744501.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137-150x50.png"
+   ],
+   "version": "2025-11-16",
+   "releaseDate": "2025-11-16T03:24:56+00:00",
+   "downloadUrl": "https://sharemods.com/3mr8h0gnl5px/III_-_MixSets.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-08-28T09:56:00+00:00",
+   "updatedAt": "2025-11-16T03:24:56+00:00"
+  },
+  {
+   "slug": "iii-project2dfx-4-4",
+   "title": "[III] Project2DFX 4.4",
+   "author": "Junior_Djjr",
+   "games": [
+    "iii"
+   ],
+   "category": "III – Gráficos",
+   "sourceUrl": "https://www.mixmods.com.br/2016/09/iii-project2dfx-4-4/",
+   "excerpt": "Atualizado v4.4 – 11/08/21 Corrigido a configuração “CoronaFarClip” invertendo a opção “auto”. Agora você poderá ver Liberty City de ponta-a-ponta! Project 2DFX é um mod asi que promete aumentar a distância de visão do mapa e suas luzes.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2016/09/gta-3-project-2dfx-mod-1850164.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2016/09/gta-3-project-2dfx-mod-6554124.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2016/09/gta-3-project-2dfx-mod-2235551.jpg"
+   ],
+   "version": "4.4",
+   "releaseDate": "2016-09-01T19:42:00+00:00",
+   "downloadUrl": "https://sharemods.com/k03fbscmz9s0/III_-_Project2DFX.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2016-09-01T19:42:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iii-silentpatch",
+   "title": "[III] SilentPatch (Build 10.1 – 2026)",
+   "author": "Junior_Djjr",
+   "games": [
+    "iii"
+   ],
+   "category": "III – Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2026/08/iii-silentpatch/",
+   "excerpt": "Atualizado 16/08/26 Hotfix: Várias correções importantes. A versão anterior foi gigante, e isso causou vários pequenos novos problemas causados pelo mod em si, inclusive incompatibilidades/conflitos com outros mods como SAMP, FLA e MVL (mais informações aqui). Tudo agora foi corrigido, e também adicionado novas correções (marcados aqui na lista com “Novo”). Também atualizado no Essentials Pack.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2020/02/LaeOZh0-1012684.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2020/02/gta-3-silentpatch-6120698.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/09/download-baixar-4415969.png"
+   ],
+   "version": "10.1",
+   "releaseDate": "2026-08-16T07:06:48+00:00",
+   "downloadUrl": "https://github.com/CookiePLMonster/SilentPatch/releases/tag/1.1-BUILD34.1-SA",
+   "downloadHost": "github.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2026-08-01T16:30:00+00:00",
+   "updatedAt": "2026-08-16T07:06:48+00:00"
+  },
+  {
+   "slug": "iii-traducao-pt-br-para-gta-3-pc-android-ps2-re3-2021",
+   "title": "[III] Tradução PT-BR para GTA 3 (PC/Android/PS2/re3) (2025)",
+   "author": "Junior_Djjr",
+   "games": [
+    "iii"
+   ],
+   "category": "III – DESTAQUES",
+   "sourceUrl": "https://www.mixmods.com.br/2019/11/iii-traducao-pt-br-para-gta-3-pc-android-ps2-re3-2021/",
+   "excerpt": "Atualizado 14/01/25 Mais correções e melhorias do MJay. Atualizado 27/09/21 Mais correções e melhorias do MJay. Atualizado 15/08/21 Houve uma grande atualização do MJay na tradução, realmente muita coisa foi revisada e melhorada (PC), e agora inclui adaptação para o projeto re3 (GTA open source)! Atualizado: Corrigido textos trocados na versão re3.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2019/11/gta-iii-3-traducao-pt-br-portugues-9119222.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2019/11/gta-iii-3-traducao-pt-br-portugues-1276287.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2019/11/gta-3-traducao-ptbr-4819408.jpg"
+   ],
+   "version": "2025-01-15",
+   "releaseDate": "2025-01-15T00:23:53+00:00",
+   "downloadUrl": "https://sharemods.com/z5cw3z3j8e55/III_-_Traducao_PT-BR.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2019-11-12T06:00:00+00:00",
+   "updatedAt": "2025-01-15T00:23:53+00:00"
+  },
+  {
+   "slug": "iii-vc-achievements-system-conquistas-para-pc",
+   "title": "[III/VC] Achievements System (conquistas para PC)",
+   "author": "Junior_Djjr",
+   "games": [
+    "iii",
+    "vc"
+   ],
+   "category": "III – DESTAQUES",
+   "sourceUrl": "https://www.mixmods.com.br/2021/10/iii-vc-achievements-system-conquistas-para-pc/",
+   "excerpt": "Mod CLEO que adiciona as conquistas clássicas do PS4 para PC, para os jogos GTA III (29) e GTA Vice City (34). O sistema é muitíssimo bem programado pelo Firehead, quase idêntica às conquistas oficiais, possibilita inclusive outros mods adicionaram novas conquistas e trabalharem em torno delas.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/gta-iii-achievements-mod-ps4-pc-conquistas-1885720.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/07/gta-ug-underground-logo-6890204-150x150.png"
+   ],
+   "version": "2021-10-17",
+   "releaseDate": "2021-10-17T13:41:00+00:00",
+   "downloadUrl": "https://sharemods.com/ovy6d0eamxah/III_-_Achievements_System.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-10-17T13:41:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iii-vc-menu-map-radar",
+   "title": "[III/VC] Menu Map (radar no menu de pausa)",
+   "author": "Junior_Djjr",
+   "games": [
+    "iii",
+    "vc"
+   ],
+   "category": "III – DESTAQUES",
+   "sourceUrl": "https://www.mixmods.com.br/2022/04/iii-vc-menu-map-radar/",
+   "excerpt": "Finalmente um mod que adiciona o mapa no menu de pausa do GTA III! Podendo mover, dar zoom e marcar destino (waypoint). E o mesmo também para GTA Vice City! No caso, ele melhora a visualização e controles do mapa. Isto estava presente no projeto re3 (veio de lá?) e agora está disponível num simples mod .asi.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/04/gta-3-iii-menu-map-mapa-pause-pausa-mod-asi-1-500x297.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/04/gta-vc-vice-city-improved-better-mod-menu-map-iii-500x281.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-5744501.png"
+   ],
+   "version": "2026-06-19",
+   "releaseDate": "2026-06-19T15:26:09+00:00",
+   "downloadUrl": "https://sharemods.com/qjl89sqc3hrb/III_-_Menu_Map.zip.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-04-26T11:33:21+00:00",
+   "updatedAt": "2026-06-19T15:26:09+00:00"
+  },
+  {
+   "slug": "iii-vc-renderhook-raytracing-rtx-graphics",
+   "title": "[III/VC] RenderHook Raytracing (RTX graphics)",
+   "author": "Junior_Djjr",
+   "games": [
+    "iii",
+    "vc"
+   ],
+   "category": "III – DESTAQUES",
+   "sourceUrl": "https://www.mixmods.com.br/2021/01/iii-vc-renderhook-raytracing-rtx-graphics/",
+   "excerpt": "Finalmente, suporte aos gráficos raytracing para GTA III e GTA Vice City através do RenderHook! — screenshots do autor — RenderHook é um mod para GTA que usa shaders DirectX 11 para gráficos realistas e modernos. E agora, suporte para cálculo de iluminação e reflexos raytraced! Situação atual: Somente para placas de vídeo RTX, ainda, pode suportar GTX em breve.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/01/gta-iii-3-rtx-raytracing-renderhook-graphic-mod-2005923.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/01/gta-iii-3-rtx-raytracing-renderhook-graphic-mod-2388042.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/01/gta-iii-3-rtx-raytracing-renderhook-graphic-mod-3939486.jpg"
+   ],
+   "version": "2023-03-20",
+   "releaseDate": "2023-03-20T02:53:19+00:00",
+   "downloadUrl": "https://sharemods.com/93pihiwhypiv/III_-_RenderHook_Raytracing.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-01-05T23:59:00+00:00",
+   "updatedAt": "2023-03-20T02:53:19+00:00"
+  },
+  {
+   "slug": "iii-vc-sa-allweapon-ter-todas-as-armas",
+   "title": "[III/VC/SA] AllWeapon (ter todas as armas)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "III – Mods Scripts etc",
+   "sourceUrl": "https://www.mixmods.com.br/2021/06/iii-vc-sa-allweapon-ter-todas-as-armas/",
+   "excerpt": "Mod para GTA III, GTA VC e GTA SA que possibilita carregar todas as armas do jogo ao mesmo tempo! O funcionamento é como um cheat, ao ativá-lo, você receberá todas as armas, podendo fazer scroll em todas as armas do jogo, ao desativar, volta ao normal. Há também como selecionar o slot através das teclas “1” até “9”. Também útil para testar mods de armas.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-mod-cheat-menu-logo-9147379-150x150.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/06/gta-iii-xbox-version-hd-pc-logo-9229949-150x150.png"
+   ],
+   "version": "2021-06-23",
+   "releaseDate": "2021-06-23T23:56:00+00:00",
+   "downloadUrl": "https://sharemods.com/rrnk8jg7mk93/III_VC_SA_-_AllWeapon.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-06-23T23:56:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iii-vc-sa-bobbleheads-cheat",
+   "title": "[III/VC/SA] BobbleHeads Cheat",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "Humor",
+   "sourceUrl": "https://www.mixmods.com.br/2022/05/iii-vc-sa-bobbleheads-cheat/",
+   "excerpt": "Mod .asi que adiciona o cheat “BOBBLEHEADS” no GTA III, VC e SA clássico. O cheat, presente no GTA Trilogy, aumenta o tamanho da cabeça de todas as pessoas. Note que não aumenta a área do headshot. Nota: o mod pro SA não estava funcionando aqui, eu editei e compilei antes de postar.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/05/gta-iii-vc-sa-mod-bobble-head-bobbleheads-cabeca-grande-500x398.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/05/gta-iii-vc-sa-mod-bobble-head-bobbleheads-cabeca-grande-cj.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-5744501.png"
+   ],
+   "version": "2022-05-23",
+   "releaseDate": "2022-05-23T02:21:56+00:00",
+   "downloadUrl": "https://sharemods.com/qign28rllopd/III_VC_SA_-_BobbleHeads_Cheat.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-05-23T02:21:56+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iii-vc-sa-car-speed-fps-fix-corrigir-dirigir-em-fps-alto-baixo",
+   "title": "[III/VC/SA] Car Speed FPS Fix (corrigir dirigir em FPS alto/baixo)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2019/05/iii-vc-sa-car-speed-fps-fix-corrigir-dirigir-em-fps-alto-baixo/",
+   "excerpt": "Atenção: A correção já foi incluída no mod Framerate Vigilante Estou feliz de anunciar que eu corrigi o bug que faz os carros diminuírem velocidade demais enquanto com FPS alto, e demorarem para diminuir em FPS baixo. É um bug que as pessoas de FPS alto relatam como “parece que o carro está com freio de mão puxado”, exato!",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-5744501.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2019/05/download-baixar-2-1379856.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137-150x50.png"
+   ],
+   "version": "2019-05-03",
+   "releaseDate": "2019-05-03T08:30:00+00:00",
+   "downloadUrl": "http://linkshrink.net/SCn/car-speed-fps-fix",
+   "downloadHost": "linkshrink.net",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2019-05-03T08:30:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iii-vc-sa-debug-menu-v1-3",
+   "title": "[III/VC/SA] Debug Menu v1.3",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "Ferramentas",
+   "sourceUrl": "https://www.mixmods.com.br/2019/06/iii-vc-sa-debug-menu-v1-3/",
+   "excerpt": "Atualizado 07/06/19 Já foi atualizado há um tempo, não deu mais atenção ao mod pois eu não achava que seria tão útil para jogadores “comuns”, mas eu estive errado, o mod está muito útil. Você pode salvar e carregar posições da câmera de debug, sendo muito útil para filmes e prints. Inclui hora e clima.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2019/06/gta-sa-debug-menu-5543553.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2019/06/gta-sa-debug-menu-4647225.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2019/06/gta-vc-mod-debug-menu-5573326.jpg"
+   ],
+   "version": "1.3",
+   "releaseDate": "2019-06-07T20:30:00+00:00",
+   "downloadUrl": "https://sharemods.com/dugdkrw9s1a7/III_VC_SA_-_Debug_Menu.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2019-06-07T20:30:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iii-vc-sa-framerate-vigilante",
+   "title": "[III/VC/SA] Framerate Vigilante (corrigir bugs de FPS alto)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2022/08/iii-vc-sa-framerate-vigilante/",
+   "excerpt": "Português English Atualizado 16/08/26 Adicionado [SA]: Corrigido todos os problemas com o balanço de componentes (portas, escada de bombeiro, mas principalmente o chassi/carroceria do carro balançando rápido em FPS alto).",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/06/gta-iii-xbox-version-hd-pc-logo-9229949-150x150.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/09/mandamentos-mods-1-150x150.jpg"
+   ],
+   "version": "2026-08-16",
+   "releaseDate": "2026-08-16T07:16:39+00:00",
+   "downloadUrl": "https://sharemods.com/0cxm88ppiv38/Framerate_Vigilante.zip.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": 415465,
+   "paywalled": false,
+   "publishedAt": "2022-08-14T08:22:00+00:00",
+   "updatedAt": "2026-08-16T07:16:39+00:00"
+  },
+  {
+   "slug": "iii-vc-sa-ginput-melhor-suporte-para-controles",
+   "title": "[III/VC/SA] GInput (melhor suporte para controles)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2021/01/iii-vc-sa-ginput-melhor-suporte-para-controles/",
+   "excerpt": "Atualizado 06/01/21 Adicionado opções de botões em HD e com várias opções de imagens de botões de diferentes modelos de controles. Mod essencial para jogar GTA San Andreas, GTA Vice City ou GTA III no gamepad/joystick!",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/01/gta-sa-mod-ginput-ps2-xbox-gamepad-1402931.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/01/gta-mod-ginput-hd-buttons-update-ps4-xbox-logitech-4320395.png"
+   ],
+   "version": "2022-12-29",
+   "releaseDate": "2022-12-29T13:13:19+00:00",
+   "downloadUrl": "https://github.com/x360ce/x360ce/releases/latest",
+   "downloadHost": "github.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-01-07T03:00:00+00:00",
+   "updatedAt": "2022-12-29T13:13:19+00:00"
+  },
+  {
+   "slug": "iii-vc-sa-gps-line-mod-radar-minimap",
+   "title": "[III/VC/SA] GPS Line Mod (fixed) (GPS no radar/minimapa)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "III – Interface (Hud e Radar)",
+   "sourceUrl": "https://www.mixmods.com.br/2022/02/iii-vc-sa-gps-line-mod-radar-minimap/",
+   "excerpt": "Atualizado 10/02/22 A correção do limite de distância fazia o canto direito superior do mapa ficar sem caminhos para os carros e pedestres, foi corrigido! Melhor adaptação para mods de mapa maior, como GTA Mixed (não testado) e agora o .asi do singleplayer pode ser instalado no SAMP para aumentar o limite de distância (também não testado).",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-iii-vc-sa-gps-mod-line-radar-minimap-asi-6543141-500x259.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/12/gta-san-andreas-gps-mod-line-radar-minimap-asi-dk22pac-3661208-500x294.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png"
+   ],
+   "version": "2022-02-11",
+   "releaseDate": "2022-02-11T01:40:23+00:00",
+   "downloadUrl": "https://sharemods.com/vi6ga47ta00b/III_VC_SA_-_GPS_Line_Mod.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-02-11T01:40:23+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iii-vc-sa-gta-iii-hd-vehicles-tri-pack-carros-hd",
+   "title": "[III/VC/SA] GTA III HD Vehicles Tri-Pack (carros HD)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "Aviões e Helicópteros",
+   "sourceUrl": "https://www.mixmods.com.br/2017/10/iii-vc-sa-gta-iii-hd-vehicles-tri-pack-carros-hd/",
+   "excerpt": "Atualizado: Eu tinha esquecido do arquivo .fxt para os carros adicionados sem substituir. Baixe-o. Considerado por muitos o melhor pack de veículos para GTA; considerado pela GTA Awards 2012 como “melhor mod de veículo”. Um pack que troca todos os carros, caminhões etc do GTA III por novos modelados em HD. Todos serão substituídos, dando uma nova cara ao jogo, realmente como se fosse um remaster.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2017/10/gta-iii-mod-hd-vehicles-cars-tri-pack-1971207.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2017/10/gta-iii-mod-hd-vehicles-cars-tri-pack-2-2824742.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2017/10/gta-iii-mod-hd-vehicles-cars-tri-pack-7-6179275.jpg"
+   ],
+   "version": "2017-10-04",
+   "releaseDate": "2017-10-04T04:50:00+00:00",
+   "downloadUrl": "https://drive.google.com/file/d/0B1sAJQAUfOOYRHk5allrUkJRREE/view",
+   "downloadHost": "drive.google.com",
+   "fileSize": 2097152,
+   "paywalled": false,
+   "publishedAt": "2017-10-04T04:50:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iii-vc-sa-largeaddress-reconhecer-3-4-gb-de-ram",
+   "title": "[III/VC/SA] Largeaddress – Reconhecer 3/4 GB de RAM",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2016/09/iii-vc-sa-largeaddress-reconhecer-3-4-gb-de-ram/",
+   "excerpt": "Veja também: Fazer qualquer jogo/aplicativo reconhecer 4 GB de RAM Postagem avançada para você que modifica o GTA como um louco: Há não muito tempo houve uma revolução em corrigir um bug que acontecia sempre ao usar mods muito pesados, ou seja, quando jogo usava muita RAM artefatos apareciam na tela, e isso foi corrigido com o SilentPatch assim possibilitando as pessoas usarem muitos mods pesados…",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2016/09/largeadress-exe-gta-sa-vc-iii-silent-7921181.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2016/09/fix-runtime-error-gta-sa-6984495.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png"
+   ],
+   "version": "2016-09-10",
+   "releaseDate": "2016-09-10T08:02:00+00:00",
+   "downloadUrl": "http://linkshrink.net/SCn/Largeaddress",
+   "downloadHost": "linkshrink.net",
+   "fileSize": 4294967296,
+   "paywalled": false,
+   "publishedAt": "2016-09-10T08:02:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iii-vc-sa-lcs-vehicle-camera-port-camera-do-sa-e-lcs",
+   "title": "[III/VC] SA & LCS Vehicle Camera Port (câmera do SA e LCS)",
+   "author": "Junior_Djjr",
+   "games": [
+    "iii",
+    "vc"
+   ],
+   "category": "III – Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2020/04/iii-vc-sa-lcs-vehicle-camera-port-camera-do-sa-e-lcs/",
+   "excerpt": "Um mod ambicioso que converte todo o sistema de câmera de veículos do GTA San Andreas e GTA Liberty City Stories para o GTA III e GTA Vice City, podendo rotacionar a câmera por volta do carro. Diferente de todos os outros mods do gênero, este converte o código do próprio GTA SA e GTA LCS, não é uma recriação.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2020/04/gta-vc-mod-sa-vehicle-camera-fix-6354646.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2020/04/gta-iii-mod-sa-vehicle-camera-fix-1999468.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png"
+   ],
+   "version": "2020-04-03",
+   "releaseDate": "2020-04-03T07:46:00+00:00",
+   "downloadUrl": "https://sharemods.com/aqqu3qa7ebi2/III_VC_-_SA_LCS_Vehicle_Camera_Port.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2020-04-03T07:46:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iii-vc-sa-one-hit-ko-morrer-em-1-hit",
+   "title": "[III/VC/SA] One Hit KO (morrer em 1 hit)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "Nossas criações",
+   "sourceUrl": "https://www.mixmods.com.br/2020/03/iii-vc-sa-one-hit-ko-morrer-em-1-hit/",
+   "excerpt": "Atualizado 12/03/20 SA: Corrigido a missão “The Da Nang Thang” causando o CJ morrer numa cena que manualmente abaixa a vida. Agradecimentos ao Sharkgamer47. Agora o mod se desativa durante cenas cinematográficas.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2020/03/gta-sa-mod-one-hit-ko-6102640.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2023/01/GB-150x150.png"
+   ],
+   "version": "2020-03-08",
+   "releaseDate": "2020-03-08T23:30:00+00:00",
+   "downloadUrl": "https://sharemods.com/mvs4qhagsa6f/III_VC_SA_-_One_Hit_KO.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2020-03-08T23:30:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iii-vc-sa-portablegta-change-saves-folder-mudar-pasta-user-files",
+   "title": "[III/VC/SA] PortableGTA – change saves folder (mudar pasta user files)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2021/06/iii-vc-sa-portablegta-change-saves-folder-mudar-pasta-user-files/",
+   "excerpt": "Atualizado 11/06/21 Algumas pessoas disseram que após a atualização anterior o mod não funcionava, testem agora e avisem se funciona. Caso ainda não funcione, eu deixei a opção para a versão antiga. Atualizado 06/05/21 Corrigido problemas graves no GTA III e GTA VC. Inclusive, antes eu não havia dito que o mod também funcionava no III e VC, provavelmente foi por causa disso.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/06/gta-san-change-user-files-save-folder-5798199.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-5744501.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2024/10/10_gta3_BmzkrTlOVp-150x150.jpg"
+   ],
+   "version": "2021-06-11",
+   "releaseDate": "2021-06-11T11:00:00+00:00",
+   "downloadUrl": "https://sharemods.com/lkin1m2msdem/PortableGTA.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-06-11T11:00:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iii-vc-sa-reshade-auto-toggle-desativar-efeitos-no-menu",
+   "title": "[III/VC/SA] ReShade Auto Toggle (desativar efeitos no menu)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "Ferramentas",
+   "sourceUrl": "https://www.mixmods.com.br/2020/04/iii-vc-sa-reshade-auto-toggle-desativar-efeitos-no-menu/",
+   "excerpt": "Um problema do ReShade, é que, por ser um mod para qualquer jogo, é praticamente impossível ele diferenciar o que é a renderização do gameplay do menu dele, assim, os efeitos gráficos continuam mesmo no menu do jogo. Portanto eu fiz este mod que automaticamente desativa os shaders do ReShade ao abrir o menu do GTA SA, GTA VC ou GTA III.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2020/04/gta-sa-mod-reshade-fix-affect-menu-5705489.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2026/05/gta-san-andreas-mod-pc-proper-shaders-logo-150x150.png"
+   ],
+   "version": "2020-04-09",
+   "releaseDate": "2020-04-09T07:08:00+00:00",
+   "downloadUrl": "https://sharemods.com/y1o3rvh75rzr/ReShade_Auto_Toggle.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2020-04-09T07:08:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iii-vc-sa-saveloader-v2-7-fast-loader-carregamento-rapido",
+   "title": "[III/VC/SA] SaveLoader v2.7 (fast loader / carregamento rápido)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "III – Mods Scripts etc",
+   "sourceUrl": "https://www.mixmods.com.br/2020/01/iii-vc-sa-saveloader-v2-7-fast-loader-carregamento-rapido/",
+   "excerpt": "Atualizado 24/01/20 O mod foi atualizado 3 vezes, e vendo em fontes oficiais, não encontrei nenhuma informação do que mudou… É isso. Aproveitei para traduzir os arquivos. Este é um mod para GTA 3, GTA Vice City e GTA San Andreas que faz o jogo carregar quase instantaneamente ao clicar no .exe.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2020/01/gta-vc-carregamento-rapido-5944615.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2020/01/gta-iii-carregamento-rapido-1698059.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png"
+   ],
+   "version": "2.7",
+   "releaseDate": "2020-01-24T06:00:00+00:00",
+   "downloadUrl": "https://sharemods.com/82fetghs6l0z/III_VC_SA_-_SaveLoader.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2020-01-24T06:00:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iii-vc-sa-scrlog-2020-3-descobrir-crash-em-mod-cleo",
+   "title": "[III/VC/SA] SCRLog 2020.3 (descobrir crash em mod CLEO)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "Ferramentas",
+   "sourceUrl": "https://www.mixmods.com.br/2020/10/iii-vc-sa-scrlog-2020-3-descobrir-crash-em-mod-cleo/",
+   "excerpt": "Atualizado 30/09/23 Arquivos .ini atualizados com mais novos comandos do CLEO+ v1.2. Atualizado 23/11/20 Corrigido GET_COLPOINT_DEPTH e GET_COLPOINT_SURFACE com opcode diferente do newOpcodes. Atualizado 07/10/20 Arquivos .ini atualizados com mais novos comandos do CLEO+. Atualizado 07/10/20 Adicionado cheat “SCRL” para ativar/desativar o SCRLog durante o jogo. Fica salvo no arquivo .ini.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2020/10/gta-mod-scrlog-crash-script-log-1046176.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2020/02/LaeOZh0-1012684-150x150.png"
+   ],
+   "version": "2020.3",
+   "releaseDate": "2023-10-01T01:55:04+00:00",
+   "downloadUrl": "https://sharemods.com/sjmd1yxgpf08/SCRLog.zip.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2020-10-07T05:00:00+00:00",
+   "updatedAt": "2023-10-01T01:55:04+00:00"
+  },
+  {
+   "slug": "iii-vc-sa-simple-regeneration",
+   "title": "[III/VC/SA] Simple Regeneration v1.1.1 (regeneração de saúde)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "Nossas criações",
+   "sourceUrl": "https://www.mixmods.com.br/2021/04/iii-vc-sa-simple-regeneration/",
+   "excerpt": "Atualizado 28/10/22 Corrigido não detectando SAMP corretamente (fazendo o mod não funcionar mesmo fora dele). Atualizado 12/04/21 Corrigido cheats de vida não funcionando enquanto a regeneração está acontecendo. O script para o jogador 2 foi integrado ao mesmo, não sendo mais necessário “Simple Regeneration – Player 2.cs”. Desativa automaticamente no SAMP (opção no .ini).",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2020/02/LaeOZh0-1012684-150x150.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2023/01/GB-150x150.png"
+   ],
+   "version": "1.1.1",
+   "releaseDate": "2021-04-12T19:00:00+00:00",
+   "downloadUrl": "https://sharemods.com/d0r9aaijgcoa/Simple_Regeneration.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-04-12T19:00:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iii-vc-sa-traducao-modloader-portugues-pt-br",
+   "title": "[III/VC/SA] Tradução ModLoader (Português PT-BR)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "Tradução",
+   "sourceUrl": "https://www.mixmods.com.br/2017/05/iii-vc-sa-traducao-modloader-portugues-pt-br/",
+   "excerpt": "Depois de anos, uma tradução em português para o ModLoader v0.3.7 criada por mim (Junior_Djjr). O menu do ModLoader dentro do jogo foi totalmente traduzido, assim como o modloader.ini: E arquivos markdown (.md) da pasta “modloader.datapluginsgta3“, onde ensinam a usar o mod: Nota: Mesmo que arquivos .md possam ser abertos no bloco de notas, é aconselhável utilizar algum editor de texto avançado, p…",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2017/05/gta-sa-mod-modloader-pt-br-portugues-2807716.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2017/05/gta-sa-mod-modloader-pt-br-portugues-4799115.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2017/05/gta-sa-mod-modloader-pt-br-portugues-1691912.jpg"
+   ],
+   "version": "2017-05-03",
+   "releaseDate": "2017-05-03T13:19:00+00:00",
+   "downloadUrl": "https://sharemods.com/x5cyvypwstv7/Traducao_ModLoader_PT-BR.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2017-05-03T13:19:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iii-vc-sa-windowed-mode",
+   "title": "[III/VC/SA] Windowed Mode (modo janela)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "Ferramentas",
+   "sourceUrl": "https://www.mixmods.com.br/2022/10/iii-vc-sa-windowed-mode/",
+   "excerpt": "O melhor mod de jogar em modo janela para GTA San Andreas, Vice City e III. E melhor: o mod corrige outros bugs relacionados com o Windows, mesmo em tela cheia! Você pode redimensionar livremente a janela em qualquer proporção. Ou até mesmo remover toda a borda, deixando somente a tela do jogo. Você ativa o modo janela com ALT+Enter, como outros jogos e programas com suporte.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2020/10/gta-sa-mod-window-janela-windowed-mode-1201945.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2020/10/gta-sa-mod-window-janela-windowed-mode-2360970.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2020/10/gta-vc-window-janela-mode-4997544.jpg"
+   ],
+   "version": "2026-05-01",
+   "releaseDate": "2026-05-01T13:08:54+00:00",
+   "downloadUrl": "https://sharemods.com/o30mgc0z4um4/SA_VC_III_-_Windowed_Mode.zip.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-10-07T22:52:00+00:00",
+   "updatedAt": "2026-05-01T13:08:54+00:00"
+  },
+  {
+   "slug": "iii-vc-skygfx-3-0b",
+   "title": "[III/VC] SkyGfx 3.0b",
+   "author": "Junior_Djjr",
+   "games": [
+    "iii",
+    "vc"
+   ],
+   "category": "III – Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2020/02/iii-vc-skygfx-3-0b/",
+   "excerpt": "Atualizado 28/06/21 v3.0b Corrigido o filtro de cor do mobile. v3.0, v3.0a Corrigido o filtro de cor YPbPr (que simula o hardware do PS2) Corrigido as gotas de chuva. Corrigido os reflexos “leeds” dos carros, em vários aspectos. Corrigido vários pipelines para sombras em tempo real (as sombras em tempo real em si não estão incluídas). Corrigido o world pipeline do Stories.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2020/02/gta-vc-skygfx-ps2-graphics-trails-9536834.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2020/02/gta-vc-skygfx-ps2-graphics-trails-4387872.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png"
+   ],
+   "version": "3.0b",
+   "releaseDate": "2020-02-19T09:00:00+00:00",
+   "downloadUrl": "https://sharemods.com/xka2n54ytolh/III_SkyGfx.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2020-02-19T09:00:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iii-vc-widescreen-fix-corrigir-widescreen",
+   "title": "[III/VC] Widescreen Fix (corrigir widescreen)",
+   "author": "Junior_Djjr",
+   "games": [
+    "iii",
+    "vc"
+   ],
+   "category": "III – Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2018/11/iii-vc-widescreen-fix-corrigir-widescreen/",
+   "excerpt": "GTA III foi lançado em 2001 e GTA VC em 2002, antigos, como se dá pra perceber eles não foram otimizados para monitores widescreen, mas mods fazem milagres! Depois que você começar a usar esse mod no GTA você nunca mais vai querer jogar sem ele!",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2018/11/gta-vc-widescreen-fix-500x282.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2018/11/gta-vc-widescreen-fix-off-500x282.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2018/11/gta-3-widescreen-fix-500x282.jpg"
+   ],
+   "version": "2024-08-01",
+   "releaseDate": "2024-08-01T06:17:31+00:00",
+   "downloadUrl": "http://linkshrink.net/SCn/vc-widescreen-fix",
+   "downloadHost": "linkshrink.net",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2018-11-11T21:30:00+00:00",
+   "updatedAt": "2024-08-01T06:17:31+00:00"
+  },
+  {
+   "slug": "iii-xbox-version-hd-versao-xbox-para-pc-em-hd",
+   "title": "[III] Xbox Version HD (versão Xbox para PC em HD)",
+   "author": "Junior_Djjr",
+   "games": [
+    "iii"
+   ],
+   "category": "III – Conversões totais",
+   "sourceUrl": "https://www.mixmods.com.br/2021/06/iii-xbox-version-hd-versao-xbox-para-pc-em-hd/",
+   "excerpt": "Atualizado 02/07/21 particle.txd remontado no Magic.TXD, SkyGfx atualizado, adicionado opção do OLA para Windows XP, e arquivos Readme inglês e português, inclusive com instruções para instalar o mod no re3 (GTA III open source). Atualizado 30/06/21 Agora instalável pelo ModLoader! Peso do download diminuído de 1 GB para 500 MB. Inclui o update.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/06/gta-iii-xbox-version-hd-pc-logo-9229949.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/06/gta-iii-xbox-version-hd-pc-remaster-9991003.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/06/gta-iii-xbox-version-hd-pc-remaster-6725553.jpg"
+   ],
+   "version": "2021-06-30",
+   "releaseDate": "2021-06-30T11:00:00+00:00",
+   "downloadUrl": "https://drive.google.com/file/d/1DsSvvtUlgiKfRFmAvecnNd-Z3hmzJG8j/view",
+   "downloadHost": "drive.google.com",
+   "fileSize": 1073741824,
+   "paywalled": false,
+   "publishedAt": "2021-06-30T11:00:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iiivcsa-carros-nao-pegam-fogo-quando-capotam",
+   "title": "[III|VC|SA] Carros não pegam fogo quando capotam",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "III – Mods Scripts etc",
+   "sourceUrl": "https://www.mixmods.com.br/2016/12/iiivcsa-carros-nao-pegam-fogo-quando-capotam/",
+   "excerpt": "Post atualizado (de 2012…) Agora com versão para GTA 3 e GTA VC. Mod até hoje é pedido — mesmo que ele já exista desde 2012 — que faz o carro não pegar fogo quando estiver capotado, virado, de cabeça pra baixo. É realmente uma coisa que atrapalha, além de ser um tanto irreal (só pega fogo quando o acidente é grave, há vazamento e faísca).",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2016/12/gta-sa-cars-no-fire-flip-4329747.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2019/04/download-baixar-2-5383049.png"
+   ],
+   "version": "2016-12-11",
+   "releaseDate": "2016-12-11T09:00:00+00:00",
+   "downloadUrl": "http://linkshrink.net/SCn/carros-nao-pegam-fogo-quando-capotam",
+   "downloadHost": "linkshrink.net",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2016-12-11T09:00:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iiivcsa-gangster-walk-fix-npcs-segurando-arma-com-duas-maos",
+   "title": "[III|VC|SA] Gangster Walk Fix (NPCs segurando arma com duas mãos)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2020/02/iiivcsa-gangster-walk-fix-npcs-segurando-arma-com-duas-maos/",
+   "excerpt": "Atualizado 16/02/20 Se o ped parar de segurar a arma causado por uma mudança no walkstyle, agora o script vai restaurar o walkstyle padrão voltando as animações normais. Agora o mod checa o walkstyle padrão antes de aplicar o novo. Assim o mod aplicará as animações somente uma vez cada pessoa. Pequenas melhorias em geral nos scripts, e eles foram muito bem encurtados.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2020/02/gta-sa-mod-cleo-m4-ak47-anim-fix-9302867.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2020/02/gta-vc-weapon-anim-fix-9082596.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-5744501.png"
+   ],
+   "version": "2020-02-16",
+   "releaseDate": "2020-02-16T22:00:00+00:00",
+   "downloadUrl": "https://sharemods.com/gc76g6v3mdo8/III_VC_SA_-_Gangster_Walk_Fix.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2020-02-16T22:00:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iiivcsa-mod-agua-hd-2k-perfect-ocean-dark-water",
+   "title": "[III|VC|SA] Mod água HD (2K) – Perfect Ocean + Dark Water",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "Gráficos",
+   "sourceUrl": "https://www.mixmods.com.br/2016/12/iiivcsa-mod-agua-hd-2k-perfect-ocean-dark-water/",
+   "excerpt": "Cansado de baixar mods de gráficos que prometem deixar a água do seu GTA SA realista mas você não gosta do resultado? Veja esta postagem dupla de 2 mods de água realista em HD para você escolher. Perfect Ocean Água de qualidade 2K que diminui a repetição e deixa bem definida, onde mesmo olhando de perto você vê as ondinhas formando a imagem da água.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2016/12/gta-sa-water-hd-mod-25C325A1gua-realista-real-9189131.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2016/12/gta-sa-water-hd-mod-25C325A1gua-realista-real-3375554.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png"
+   ],
+   "version": "2016-12-08",
+   "releaseDate": "2016-12-08T05:34:00+00:00",
+   "downloadUrl": "http://linkshrink.net/SCn/perfect-ocean",
+   "downloadHost": "linkshrink.net",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2016-12-08T05:34:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "iiivcsa-reload-mod-recarregar-armas",
+   "title": "[III|VC|SA] Reload Mod (recarregar armas)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "III – Mods Scripts etc",
+   "sourceUrl": "https://www.mixmods.com.br/2016/09/iiivcsa-reload-mod-recarregar-armas/",
+   "excerpt": "Mod cleo simples para todos os três GTAs: SA, VC e III. Assim como muitos jogos de tiro, você poderá recarregar a arma apertando a tecla R. O recarregamento automático continua assim como a maioria dos jogos, ou seja, usar R não é obrigatório para continuar atirando, e sim para ser usado naqueles momentos que você tem pouca munição e não quer começar a atirar e já necessitar recarregar.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2016/09/gta-sa-reload-mod-8062775.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2019/04/download-baixar-2-5383049.png"
+   ],
+   "version": "2016-09-13",
+   "releaseDate": "2016-09-13T05:46:00+00:00",
+   "downloadUrl": "http://linkshrink.net/SCn/vc-reload-mod",
+   "downloadHost": "linkshrink.net",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2016-09-13T05:46:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "open-limit-adjuster",
+   "title": "[III|VC|SA] OLA – Open Limit Adjuster v1.7",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "Correções e Melhorias",
+   "sourceUrl": "https://www.mixmods.com.br/2022/10/open-limit-adjuster/",
+   "excerpt": "Mods ajustadores de limites são importantes para instalar mods no GTA, para aumentar o limite de quantidade de pessoas, carros, objetos etc. Mas este tem um diferencial: Ele aumenta os limites automaticamente conforme o necessário! Assim evitando a necessidade de configurar arquivos, sempre automaticamente otimizado.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2015/02/gta-sa-san-mod-open-limit-adjuster-fix-limites-asi-9937941.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/07/mod-2-7997163-150x150.jpg"
+   ],
+   "version": "1.7",
+   "releaseDate": "2026-08-03T17:05:02+00:00",
+   "downloadUrl": "https://sharemods.com/a8lp92fm5jz4/Open_Limit_Adjuster.zip.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-10-17T04:24:00+00:00",
+   "updatedAt": "2026-08-03T17:05:02+00:00"
+  },
+  {
+   "slug": "sa-vc-iii-aderencia-de-neve",
+   "title": "[SA/VC/III] Aderência de neve",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "III – Mods Scripts etc",
+   "sourceUrl": "https://www.mixmods.com.br/2016/12/sa-vc-iii-aderencia-de-neve/",
+   "excerpt": "Um mod praticamente inédito para quem usa mod de Texturas de neve. Este mod irá mudar completamente a forma de como os carros do jogo reagem a neve, dificultando a direção, freio e tentando deixar mais realista. Será necessário mais cuidado na hora de dirigir agora. O mod na verdade fazia parte da TC One Snowy Vice City, um mod para GTA Vice City!",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2016/12/SA_COMPACT2B2016-12-232B21-08-52-080-5733955.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2019/04/download-baixar-2-5383049.png"
+   ],
+   "version": "2016-12-23",
+   "releaseDate": "2016-12-23T22:28:00+00:00",
+   "downloadUrl": "http://linkshrink.net/7Z5a2V",
+   "downloadHost": "linkshrink.net",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2016-12-23T22:28:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sa-vc-iii-autosave-mod",
+   "title": "[SA/VC/III] Autosave Mod",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "DESTAQUES",
+   "sourceUrl": "https://www.mixmods.com.br/2017/11/sa-vc-iii-autosave-mod/",
+   "excerpt": "Uma ideia tão simples, mas não feita antes: mod que irá trazer a função de auto salvamento após passar cada missão no GTA. Todos sabemos o quão chato é terminar uma missão e ter que procurar um ponto de save que muitas vezes não está por perto. Com este mod ao terminar uma missão seu progresso será salvo automaticamente sem precisar apertar nada, se assemelhando mais com os jogos atuais.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2017/11/SA_COMPACT2B2017-11-152B18-08-17-033-2894547.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-mixsets-mixmods-statistics-views-6965641-150x150.jpg"
+   ],
+   "version": "2017-11-17",
+   "releaseDate": "2017-11-17T20:18:00+00:00",
+   "downloadUrl": "https://sharemods.com/2bzexl3f34yx/_SA__Autosave.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2017-11-17T20:18:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sa-vc-iii-musica-no-menu",
+   "title": "[SA/VC/III] Música no menu",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "Sons",
+   "sourceUrl": "https://www.mixmods.com.br/2016/10/sa-vc-iii-musica-no-menu/",
+   "excerpt": "Esse mod permite que o jogo não fique tão chato e num clima vazio ao pausar o jogo. Será possível colocar qualquer música de preferência e o mod virá com um .ini cheio de configurações customizáveis. Postei alguns dias atrás o Música em perseguições policiais falando como seria legal se o GTA tivesse mais músicas em certas ocasiões.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2016/10/SA_COMPACT2B2016-10-162B21-37-32-603-1733906.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2016/10/Screenshot_1-6195834.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/10/download-baixar-5386177.png"
+   ],
+   "version": "2016-10-17",
+   "releaseDate": "2016-10-17T00:34:00+00:00",
+   "downloadUrl": "http://j.gs/10094265/musica-no-menu",
+   "downloadHost": "j.gs",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2016-10-17T00:34:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sa-vc-iii-radio-em-todos-os-veiculos",
+   "title": "[SA/VC/III] Rádio em todos os veículos",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "III – Mods Scripts etc",
+   "sourceUrl": "https://www.mixmods.com.br/2016/09/sa-vc-iii-radio-em-todos-os-veiculos/",
+   "excerpt": "Esse mod permite que você ative rádio em qualquer veículo dos três jogos. Agora será possível ouvir as rádios dos jogos em veículos como o carro da polícia, bicicletas, ambulância, caminhão de bombeiros, entre outros, que não eram ativados no jogo original.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2016/09/SA_COMPACT2B2016-09-192B23-19-19-560-9912888.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2016/09/Gta32B2016-09-192B23-14-42-049-3784906.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2016/09/gta-vc2B2016-09-192B23-12-20-656-5612790.jpg"
+   ],
+   "version": "2016-09-20",
+   "releaseDate": "2016-09-20T02:29:00+00:00",
+   "downloadUrl": "http://j.gs/10094265/sa-radio-todos-veiculos",
+   "downloadHost": "j.gs",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2016-09-20T02:29:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sa-vc-iii-recuperar-armas-quando-morrer-ser-preso",
+   "title": "[SA/VC/III] Recuperar armas quando morrer/ser preso",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "III – Mods Scripts etc",
+   "sourceUrl": "https://www.mixmods.com.br/2016/09/sa-vc-iii-recuperar-armas-quando-morrer-ser-preso/",
+   "excerpt": "ATUALIZADO! Versões do GTA VC e III incluídas no post Nome original do mod: Buy Back Your Weapons Mod que traz uma função do GTA Vice City Stories (GTA:VCS), que permite que você recupere as armas ao morrer ou ser preso, mas terá que pagar uma quantia de $2000 para tê-las novamente. Ao morrer, espere a mensagem aparecer na tela avisando caso você queira ou não ter as armas de novo.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2016/09/SA_COMPACT2B2016-04-252B19-25-58-030-6952887.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2016/09/gta-vc2B2016-09-102B01-02-02-118-2855013.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2016/09/Gta32B2016-09-102B00-49-40-667-2669151.jpg"
+   ],
+   "version": "2016-09-10",
+   "releaseDate": "2016-09-10T04:09:00+00:00",
+   "downloadUrl": "http://j.gs/10094265/recuperar-armas",
+   "downloadHost": "j.gs",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2016-09-10T04:09:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "sade-classic-colored-radio-icons-icones-coloridos",
+   "title": "[GTA Trilogy] Classic Colored Radio Icons (ícones coloridos)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sade",
+    "iii"
+   ],
+   "category": "GTA III The Definitive Edition",
+   "sourceUrl": "https://www.mixmods.com.br/2021/12/sade-classic-colored-radio-icons-icones-coloridos/",
+   "excerpt": "Atenção: Foi relatado crash na nova versão do GTA Trilogy. Mod que restaura os ícones clássicos, coloridos, em HD, para a roda de rádio do GTA III, VC e SA The Definitive Edition! Atenção: Foi relatado crash na nova versão do GTA Trilogy.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-sa-definitive-edition-classic-colored-icons-coloridos-cor-4971355-500x281.jpeg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-vc-definitive-edition-classic-colored-radio-icons-4765427.jpeg",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/gta-iii-definitive-edition-mod-classic-colored-radio-icons-coloridos-3984320.jpeg"
+   ],
+   "version": "2024-10-31",
+   "releaseDate": "2024-10-31T14:45:27+00:00",
+   "downloadUrl": "https://sharemods.com/o7byzkluds9v/GTA_Trilogy_-_Classic_Colored_Radio_Station_Icons.7z.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2021-12-07T14:10:00+00:00",
+   "updatedAt": "2024-10-31T14:45:27+00:00"
+  },
+  {
+   "slug": "savciii-vehicles-test-testar-crash-em-veiculos",
+   "title": "[SA|VC|III] Vehicles Test (testar crash em veículos)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "III – Mods Scripts etc",
+   "sourceUrl": "https://www.mixmods.com.br/2018/04/savciii-vehicles-test-testar-crash-em-veiculos/",
+   "excerpt": "Crashes ocasionais enquanto jogando é geralmente causado por mods de carros, já que é um tipo de mod na maioria das vezes mal feitos e que só causam crash em determinados momentos do gameplay. Pensando nisto, principalmente nas necessidades de criação de packs de carros estáveis (que não causam crash após um tempo jogando), eu fiz este mod para GTA San Andreas, Vice City e III que faz um “flood” d…",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2018/04/gta-sa-vc-iii-vehicles-crash-test-testar-carros-1224543.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2018/04/gta-vc-mod-cleo-vehicles-test-testar-carros-4853516.png",
+    "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-5744501.png"
+   ],
+   "version": "2018-04-11",
+   "releaseDate": "2018-04-11T10:55:00+00:00",
+   "downloadUrl": "http://linkshrink.net/SCn/sa-vehicles-test",
+   "downloadHost": "linkshrink.net",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2018-04-11T10:55:00+00:00",
+   "updatedAt": null
+  },
+  {
+   "slug": "transparent-menu-by-bloodriver",
+   "title": "[SA/VC/III] Transparent Menu v5 by Bloodriver (pausa transparente)",
+   "author": "Junior_Djjr",
+   "games": [
+    "sa",
+    "iii",
+    "vc"
+   ],
+   "category": "Interface (Hud e Radar)",
+   "sourceUrl": "https://www.mixmods.com.br/2022/08/transparent-menu-by-bloodriver/",
+   "excerpt": "Atualizado 02/01/26 Melhorias adicionais de otimização implementadas com base no feedback da comunidade. (III/VC/SA) Arquivo de configuração reformulado para melhor legibilidade e edição mais fácil. (III/VC/SA) A função SetMapTransparency agora é compatível no GTA Vice City. (VC) Corrigidos bugs que ocorriam no menu do jogo quando o addon SAMP estava presente, mas o script estava desativado.",
+   "images": [
+    "https://www.mixmods.com.br/wp-content/uploads/2022/07/gta-sa-mod-transparent-menu-paused-running-no-pause-500x281.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/07/gta-sa-mod-transparent-menu-paused-running-no-pause-2-500x281.jpg",
+    "https://www.mixmods.com.br/wp-content/uploads/2022/07/gta-vc-vice-city-transparent-menu-background-500x281.jpg"
+   ],
+   "version": "2026-01-02",
+   "releaseDate": "2026-01-02T19:49:56+00:00",
+   "downloadUrl": "https://sharemods.com/p15g4itnr3cm/Transparent_Menu_V5_by_Bloodriver_the_Conqueror.zip.html",
+   "downloadHost": "sharemods.com",
+   "fileSize": null,
+   "paywalled": false,
+   "publishedAt": "2022-08-16T05:13:14+00:00",
+   "updatedAt": "2026-01-02T19:49:56+00:00"
+  }
+ ]
+}
