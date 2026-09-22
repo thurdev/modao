@@ -95,6 +95,7 @@ export const checks = {
     upstreamUnavailable: 'Não foi possível falar com o GitHub agora — nada a dizer sobre a idade das builds',
     upstreamCurrent: '{count} mod(s) conferido(s) contra a release mais recente do autor; nenhum atrasado',
     upstreamSomeUnknown: '{count} mod(s) não puderam ser comparados (sem release, sem arquivo equivalente, ou sem rede).',
+    upstreamCapped: '{count} mod(s) com repositório conhecido não foram verificados nesta varredura (limite por execução atingido).',
     upstreamOutdated: '{count} mod(s) estão numa build mais antiga que a release mais recente do autor',
     upstreamDetail:
       'Uma build velha é o suspeito mais barato de todos: um download resolve, contra uma noite inteira de bissecção. O Modão compara tamanho e SHA-256 do arquivo instalado com o arquivo da release; quando a release só publica um .zip, o timestamp do PE serve de indício. Sem rede, a resposta é “não sei” — nunca “desatualizado”.',
@@ -194,6 +195,7 @@ export const checks = {
     upstreamUnavailable: 'GitHub could not be reached just now - nothing to say about how old these builds are',
     upstreamCurrent: '{count} mod(s) checked against their newest release; none behind',
     upstreamSomeUnknown: '{count} mod(s) could not be compared (no release, no matching asset, or no network).',
+    upstreamCapped: '{count} mod(s) with a known repo were not checked in this scan (per-run limit reached).',
     upstreamOutdated: '{count} mod(s) are on a build older than their newest release',
     upstreamDetail:
       'An old build is the cheapest suspect there is: one download against a whole evening of bisecting. Modão compares the installed file size and SHA-256 with the release asset; when a release only ships a .zip, the PE timestamp is taken as a hint. With no network the answer is "unknown" - never "outdated".',

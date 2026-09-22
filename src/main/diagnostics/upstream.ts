@@ -3,6 +3,7 @@ import type { HealthCheck } from '@shared/types'
 import {
   compareAgainstUpstream,
   resolveRepo,
+  upstreamCheckVerdict,
   type InstalledBinary,
   type OutdatedBuild,
   type ReleaseAsset,
@@ -153,12 +154,14 @@ function fileLocation(gamePath: string, storeKey: string | null, relativePath: s
 export interface UpstreamScan {
   /** Mods whose installed binary lost the comparison against the newest release. */
   outdated: OutdatedBuild[]
-  /** Mods that were resolved to a repo and compared. */
+  /** Mods resolved to a repo AND given a definitive verdict - successes, not attempts. */
   checked: number
   /** Mods resolved to a repo whose verdict could not be reached (offline, no asset). */
   unknown: number
   /** True when nothing could be resolved to a repo at all. */
   empty: boolean
+  /** Mods resolved to a repo but dropped by MAX_REPOS_PER_RUN before being attempted. */
+  skippedRepos: number
 }
 
 /**
@@ -180,7 +183,7 @@ export async function scanUpstream(profileId: number, fetchRelease: ReleaseFetch
         ORDER BY i.id`
     )
     .all(profileId) as InstallRow[]
-  if (installs.length === 0) return { outdated: [], checked: 0, unknown: 0, empty: true }
+  if (installs.length === 0) return { outdated: [], checked: 0, unknown: 0, empty: true, skippedRepos: 0 }
 
   const files = getDb()
     .prepare(
@@ -197,7 +200,7 @@ export async function scanUpstream(profileId: number, fetchRelease: ReleaseFetch
     else byInstall.set(f.install_id, [f])
   }
 
-  const out: UpstreamScan = { outdated: [], checked: 0, unknown: 0, empty: true }
+  const out: UpstreamScan = { outdated: [], checked: 0, unknown: 0, empty: true, skippedRepos: 0 }
   let repos = 0
   for (const install of installs) {
     const binaries = byInstall.get(install.id) ?? []
@@ -209,7 +212,13 @@ export async function scanUpstream(profileId: number, fetchRelease: ReleaseFetch
     })
     if (!repo) continue
     out.empty = false
-    if (++repos > MAX_REPOS_PER_RUN) break
+    repos++
+    if (repos > MAX_REPOS_PER_RUN) {
+      // Counted, not silently dropped: the health check must say the scan was
+      // partial rather than presenting itself as a complete answer.
+      out.skippedRepos++
+      continue
+    }
 
     // The binary that names the mod is the one worth comparing; with several,
     // the largest is the plugin and the rest are its helpers.
@@ -233,8 +242,12 @@ export async function scanUpstream(profileId: number, fetchRelease: ReleaseFetch
     }
 
     const verdict: UpstreamComparison = await compareAgainstUpstream(installed, repo, fetchRelease)
-    out.checked++
+    // `checked` counts verdicts actually reached (current or outdated), never
+    // attempts: a repo that resolved but whose fetch failed is `unknown`, and
+    // must not make this look like a mod that was successfully compared. This
+    // is what keeps a fully offline run from reading as "all clear" below.
     if (verdict.state === 'outdated') {
+      out.checked++
       out.outdated.push({
         installId: install.id,
         title: install.folder_name ?? install.title,
@@ -248,6 +261,8 @@ export async function scanUpstream(profileId: number, fetchRelease: ReleaseFetch
       })
     } else if (verdict.state === 'unknown') {
       out.unknown++
+    } else {
+      out.checked++
     }
   }
   return out
@@ -285,19 +300,40 @@ export async function outdatedBuildCheck(
     return { id: 'upstream', title: t('checks.upstreamTitle'), status: 'skip', summary: t('checks.upstreamUnavailable') }
   }
 
+  // The status decision itself is the pure, tested rule in @shared/upstream -
+  // `checked` counting successes rather than attempts is what it depends on,
+  // and is fixed above in scanUpstream.
+  const verdict = upstreamCheckVerdict(scan)
+
   if (scan.empty) {
     return { id: 'upstream', title: t('checks.upstreamTitle'), status: 'skip', summary: t('checks.upstreamNoRepos') }
   }
-  if (scan.outdated.length === 0 && scan.checked === 0) {
-    return { id: 'upstream', title: t('checks.upstreamTitle'), status: 'skip', summary: t('checks.upstreamUnavailable') }
+
+  // A partial scan never presents itself as complete: whenever some resolved
+  // repo went unverified (offline, no release, no comparable asset) or the
+  // per-run cap dropped one before it was even attempted, that is said
+  // out loud, on every branch below - including the ones that otherwise read
+  // as "nothing to worry about".
+  const partialNotes: string[] = []
+  if (scan.unknown) partialNotes.push(t('checks.upstreamSomeUnknown', { count: scan.unknown }))
+  if (scan.skippedRepos) partialNotes.push(t('checks.upstreamCapped', { count: scan.skippedRepos }))
+
+  if (verdict.status === 'skip') {
+    return {
+      id: 'upstream',
+      title: t('checks.upstreamTitle'),
+      status: 'skip',
+      summary: t('checks.upstreamUnavailable'),
+      detail: partialNotes.length ? partialNotes.join(' ') : undefined
+    }
   }
-  if (scan.outdated.length === 0) {
+  if (verdict.status === 'pass') {
     return {
       id: 'upstream',
       title: t('checks.upstreamTitle'),
       status: 'pass',
       summary: t('checks.upstreamCurrent', { count: scan.checked }),
-      detail: scan.unknown ? t('checks.upstreamSomeUnknown', { count: scan.unknown }) : undefined
+      detail: partialNotes.length ? partialNotes.join(' ') : undefined
     }
   }
   return {
@@ -305,7 +341,7 @@ export async function outdatedBuildCheck(
     title: t('checks.upstreamTitle'),
     status: 'warn',
     summary: t('checks.upstreamOutdated', { count: scan.outdated.length }),
-    detail: t('checks.upstreamDetail'),
+    detail: [t('checks.upstreamDetail'), ...partialNotes].join(' '),
     items: scan.outdated.map(describeOutdated)
   }
 }

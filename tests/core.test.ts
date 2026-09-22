@@ -65,7 +65,10 @@ import { signatureForArchive } from '../src/main/knowledge/signature'
 import {
   bisectGate,
   compareAgainstUpstream,
+  outdatedSignature,
+  planBisectStart,
   resolveRepo,
+  upstreamCheckVerdict,
   UPSTREAM_REGISTRY,
   type InstalledBinary,
   type OutdatedBuild,
@@ -1669,7 +1672,7 @@ const finding: OutdatedBuild = {
   releaseUrl: 'https://github.com/kong78/collectibles-on-radar-gta-sa/releases/tag/v1.0.4',
   reason: 'size-differs'
 }
-const refused = bisectGate([finding], false)
+const refused = bisectGate([finding], new Set())
 check('bisect: an outdated mod is surfaced instead of a first bisect step', !refused.proceed && refused.refusal?.key === 'messages.bisect.outdatedFirst', refused)
 check(
   'bisect: the refusal names the mod and both sizes',
@@ -1678,12 +1681,59 @@ check(
     refused.refusal?.params.latest === (253_440).toLocaleString(),
   refused.refusal
 )
-const told = bisectGate([finding], true)
+const told = bisectGate([finding], new Set([outdatedSignature(finding)]))
 check('bisect: once told, the user is not locked out of bisecting', told.proceed && told.outdated.length === 1, told)
-check('bisect: with nothing outdated the bisect starts as before', bisectGate([], false).proceed)
+check('bisect: with nothing outdated the bisect starts as before', bisectGate([], new Set()).proceed)
 // Offline produces an empty finding list, which must read as "carry on", not
 // as a refusal the user cannot clear.
-check('bisect: an offline check never refuses a bisect', bisectGate([], false).refusal === null)
+check('bisect: an offline check never refuses a bisect', bisectGate([], new Set()).refusal === null)
+
+// Important #2 regression: being told about one outdated mod must not
+// suppress the warning for a DIFFERENT mod that goes stale later in the same
+// session - the old per-profile boolean did exactly that.
+const otherFinding: OutdatedBuild = {
+  installId: 9,
+  title: 'CLEO Plus',
+  relativePath: 'cleo+.cleo',
+  repo: 'JuniorDjjr/CLEOPlus',
+  installedBytes: 40_000,
+  upstreamBytes: 41_500,
+  upstreamTag: 'v2.0',
+  releaseUrl: 'https://github.com/JuniorDjjr/CLEOPlus/releases/tag/v2.0',
+  reason: 'size-differs'
+}
+const toldOnlyFirst = new Set([outdatedSignature(finding)])
+const stillRefusesForNewMod = bisectGate([finding, otherFinding], toldOnlyFirst)
+check(
+  'bisect: being told about one outdated mod does not suppress a different one found later',
+  !stillRefusesForNewMod.proceed && stillRefusesForNewMod.refusal?.params.title === 'CLEO Plus',
+  stillRefusesForNewMod
+)
+// The same finding a second time, once acknowledged, does proceed.
+check('bisect: the same finding, once told, proceeds', bisectGate([finding], toldOnlyFirst).proceed)
+
+// Important #3 regression: the check and the first halving are fused into one
+// call so a reorder cannot run the halving ahead of the gate. A refusal
+// carries no `first` step at all - there is nothing to read even if a future
+// caller tried.
+const refusePlan = planBisectStart([1, 2, 3, 4], [finding], new Set())
+check(
+  'bisect: an outdated mod refuses before any halving happens',
+  refusePlan.kind === 'refuse' && !('first' in refusePlan),
+  refusePlan
+)
+const startPlan = planBisectStart([1, 2, 3, 4], [], new Set())
+check(
+  'bisect: a clear scan starts already halved, one step in',
+  startPlan.kind === 'start' && startPlan.first.step === 1 && startPlan.first.testing.length === 2 && startPlan.first.candidates.length === 4,
+  startPlan
+)
+const startPlanAcknowledged = planBisectStart([10, 11, 12], [finding], new Set([outdatedSignature(finding)]))
+check(
+  'bisect: an acknowledged finding still starts the bisect, carrying the finding on the plan',
+  startPlanAcknowledged.kind === 'start' && startPlanAcknowledged.outdated.length === 1,
+  startPlanAcknowledged
+)
 
 for (const language of ['pt-BR', 'en'] as const) {
   const refusal = translate(language, 'messages.bisect.outdatedFirst', refused.refusal?.params)
@@ -1694,7 +1744,51 @@ for (const language of ['pt-BR', 'en'] as const) {
   )
   const title = translate(language, 'checks.upstreamTitle')
   check(`upstream: the health check has a ${language} title`, title.length > 0 && title !== 'upstreamTitle', title)
+  const capped = translate(language, 'checks.upstreamCapped', { count: 3 })
+  check(`upstream: the capped-scan notice renders in ${language} with no leftover placeholder`, capped.includes('3') && !capped.includes('{'), capped)
 }
+
+// Critical regression: a scan where every mod resolved to a repo but every
+// fetch failed must never present itself as "pass". Before this fix,
+// `checked` counted attempts (including failed ones), so this exact shape -
+// one repo resolved, its fetch failed, nothing else attempted - fell through
+// to `pass` with "1 mod(s) checked... none behind", telling an offline user
+// their mods were current when nothing had actually been verified.
+const allFetchesFailed = { outdated: [], checked: 0, unknown: 1, empty: false, skippedRepos: 0 }
+check(
+  'upstream: a scan where every fetch failed is skip, never a false pass',
+  upstreamCheckVerdict(allFetchesFailed).status === 'skip',
+  upstreamCheckVerdict(allFetchesFailed)
+)
+check('upstream: that same skip is flagged as a partial scan', upstreamCheckVerdict(allFetchesFailed).partial === true)
+
+const noModsResolved = { outdated: [], checked: 0, unknown: 0, empty: true, skippedRepos: 0 }
+check('upstream: no mod resolving to a repo at all is skip', upstreamCheckVerdict(noModsResolved).status === 'skip')
+
+const someReachable = { outdated: [], checked: 2, unknown: 1, empty: false, skippedRepos: 0 }
+check(
+  'upstream: some reachable and none outdated is a real pass, but still marked partial',
+  upstreamCheckVerdict(someReachable).status === 'pass' && upstreamCheckVerdict(someReachable).partial === true,
+  upstreamCheckVerdict(someReachable)
+)
+
+const everythingReachable = { outdated: [], checked: 3, unknown: 0, empty: false, skippedRepos: 0 }
+check(
+  'upstream: everything reachable and current is a pass with no partial flag',
+  upstreamCheckVerdict(everythingReachable).status === 'pass' && upstreamCheckVerdict(everythingReachable).partial === false
+)
+
+const oneOutdatedRest = { outdated: [finding], checked: 1, unknown: 0, empty: false, skippedRepos: 0 }
+check('upstream: an outdated mod is warn even when nothing else was left unresolved', upstreamCheckVerdict(oneOutdatedRest).status === 'warn')
+
+// Minor regression: the per-run cap drops resolvable repos silently unless it
+// is counted and surfaced as a partial scan - same rule as the Critical.
+const cappedScan = { outdated: [], checked: 5, unknown: 0, empty: false, skippedRepos: 2 }
+check(
+  'upstream: repos dropped by the per-run cap mark the scan partial even when everything checked was current',
+  upstreamCheckVerdict(cappedScan).status === 'pass' && upstreamCheckVerdict(cappedScan).partial === true,
+  upstreamCheckVerdict(cappedScan)
+)
 
 // --- a health run diagnoses without writing ---------------------------------
 // runHealthCheck forces a write-access probe, which creates a file inside

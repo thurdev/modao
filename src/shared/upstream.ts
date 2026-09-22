@@ -288,6 +288,17 @@ export interface OutdatedBuild {
   reason: UpstreamReason
 }
 
+/**
+ * A stable identity for one outdated finding - the install, the repo, the
+ * release it is behind - so "already told" can track the specific mod that
+ * was reported, not the profile as a whole. Without this, telling someone
+ * about mod A going stale would silently suppress the warning for mod B
+ * going stale later in the same session.
+ */
+export function outdatedSignature(entry: OutdatedBuild): string {
+  return `${entry.installId}:${entry.repo}:${entry.upstreamTag}:${entry.reason}`
+}
+
 /** What startBisect is allowed to do, and what it has to say first. */
 export interface BisectGate {
   proceed: boolean
@@ -305,24 +316,26 @@ export interface BisectGate {
  * outdated mod asks for a bisect, it does not get one: it gets the name of the
  * mod, the version it has and the version upstream has.
  *
- * It refuses ONCE. The second ask goes through, carrying the same findings on
- * the session, because someone who has read the warning and still wants to
- * bisect - they are pinned to that version, or they already know - must not be
- * locked out of the tool by a check that cannot possibly be sure.
+ * It refuses once PER FINDING, not once per profile: `alreadyTold` is the set
+ * of findings (see `outdatedSignature`) already delivered to the user. A mod
+ * already reported is waved through on the next ask - they are pinned to that
+ * version, or they already know - but a *different* mod going stale later in
+ * the same session is a new finding and gets its own refusal.
  *
  * A scan that found nothing, or that could not reach the network at all, never
  * refuses: `outdated` is empty in both cases and the bisect simply starts.
  */
-export function bisectGate(outdated: OutdatedBuild[], acknowledged: boolean): BisectGate {
-  if (outdated.length === 0 || acknowledged) return { proceed: true, outdated, refusal: null }
-  const first = outdated[0]
+export function bisectGate(outdated: OutdatedBuild[], alreadyTold: ReadonlySet<string> = new Set()): BisectGate {
+  const untold = outdated.filter((entry) => !alreadyTold.has(outdatedSignature(entry)))
+  if (untold.length === 0) return { proceed: true, outdated, refusal: null }
+  const first = untold[0]
   return {
     proceed: false,
     outdated,
     refusal: {
       key: 'messages.bisect.outdatedFirst',
       params: {
-        count: outdated.length,
+        count: untold.length,
         title: first.title,
         installed: first.installedBytes.toLocaleString(),
         latest: first.upstreamBytes === null ? '?' : first.upstreamBytes.toLocaleString(),
@@ -331,4 +344,88 @@ export function bisectGate(outdated: OutdatedBuild[], acknowledged: boolean): Bi
       }
     }
   }
+}
+
+/** The first step of a bisect: which mods start under test, once the gate clears. */
+export interface BisectFirstStep {
+  testing: number[]
+  candidates: number[]
+  step: number
+}
+
+export type BisectPlan =
+  | { kind: 'refuse'; outdated: OutdatedBuild[]; refusal: { key: string; params: Record<string, string | number> } }
+  | { kind: 'start'; outdated: OutdatedBuild[]; first: BisectFirstStep }
+
+/**
+ * Fuses the outdated-build gate with the first halving into one call, so the
+ * two can never run in the wrong order: the "start" branch is the only one
+ * that carries a `first` step at all, and it is only reachable once the gate
+ * inside this same function has already approved. A caller cannot compute the
+ * halving before the gate - there is nothing to halve until this returns - so
+ * a future reorder of the electron-side caller is a type/behavior mismatch a
+ * test catches, not a silent revert guarded only by typecheck.
+ *
+ * `candidateIds` must have at least two entries; that precondition (there is
+ * nothing to bisect with fewer than two mods) is checked by the caller before
+ * this runs, same as before.
+ */
+export function planBisectStart(candidateIds: number[], outdated: OutdatedBuild[], alreadyTold: ReadonlySet<string> = new Set()): BisectPlan {
+  const gate = bisectGate(outdated, alreadyTold)
+  if (!gate.proceed && gate.refusal) {
+    return { kind: 'refuse', outdated: gate.outdated, refusal: gate.refusal }
+  }
+  const half = Math.ceil(candidateIds.length / 2)
+  return {
+    kind: 'start',
+    outdated: gate.outdated,
+    first: { testing: candidateIds.slice(0, half), candidates: candidateIds, step: 1 }
+  }
+}
+
+// --- turning a completed scan into a health-check verdict --------------------
+
+/** The counts a scan produces, independent of how they were gathered. */
+export interface UpstreamScanCounts {
+  outdated: OutdatedBuild[]
+  /** Repos resolved AND given a definitive verdict (current or outdated) - successes, not attempts. */
+  checked: number
+  /** Repos resolved but left indeterminate: offline, no release, no comparable asset. */
+  unknown: number
+  /** True when no mod in the profile resolved to a repo at all. */
+  empty: boolean
+  /** Repos that resolved but were dropped by the per-run cap before being attempted. */
+  skippedRepos: number
+}
+
+export type UpstreamCheckStatus = 'skip' | 'pass' | 'warn'
+
+export interface UpstreamCheckVerdict {
+  status: UpstreamCheckStatus
+  /**
+   * True whenever the scan does not account for every resolvable mod - some
+   * were unreachable, or the per-run cap dropped some before they were even
+   * attempted. A partial scan must never present itself as complete, so this
+   * is true independent of `status`.
+   */
+  partial: boolean
+}
+
+/**
+ * The decision the health check reports, as a rule rather than as branching
+ * inside the Electron-bound caller - the same split as `bisectGate`.
+ *
+ * The bug this exists to prevent: a scan where every fetch failed (nothing
+ * reachable) reporting `pass` because some earlier code counted attempts
+ * instead of successes. `checked` here MUST be successes only - see
+ * `UpstreamScanCounts` - so `checked === 0` with `empty === false` means
+ * "something resolved to a repo, but not one verdict was reached," which is
+ * `skip`, never `pass`.
+ */
+export function upstreamCheckVerdict(scan: UpstreamScanCounts): UpstreamCheckVerdict {
+  const partial = scan.unknown > 0 || scan.skippedRepos > 0
+  if (scan.empty) return { status: 'skip', partial: false }
+  if (scan.checked === 0) return { status: 'skip', partial: true }
+  if (scan.outdated.length > 0) return { status: 'warn', partial }
+  return { status: 'pass', partial }
 }
