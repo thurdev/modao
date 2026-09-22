@@ -5,11 +5,13 @@ import { api, formatBytes, relativeTime } from '../api'
 import { useApp } from '../state/store'
 import { Button, Confirm, Empty, Field, Modal } from '../components/ui'
 import { Icon } from '../components/icons'
+import { useT } from '../lib/i18n'
 import { itemVariants, listVariants } from '../lib/motion'
 
 const COLORS = ['#d8a657', '#8ab0a0', '#b08a8a', '#9a92b5', '#a6a08c', '#7f97b5']
 
 export function ProfilesScreen(): JSX.Element {
+  const t = useT()
   const { profiles, refreshProfiles, pushToast, game, orphanSaves, checkOrphanSaves } = useApp()
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Profile | null>(null)
@@ -75,8 +77,7 @@ export function ProfilesScreen(): JSX.Element {
     <div className="col" style={{ gap: 16 }}>
       <div className="page-head">
         <p>
-          A profile owns its enabled mod set, its per-mod priorities, its own save games and its own block in
-          modloader.ini. Payloads are stored once and linked into the game folder, so switching never copies gigabytes.
+          {t('profiles.intro')}
         </p>
       </div>
 
@@ -195,7 +196,7 @@ export function ProfilesScreen(): JSX.Element {
                   disabled={p.isActive || switching !== null}
                   onClick={() => switchTo(p)}
                 >
-                  {p.isActive ? 'Active' : switching === p.id ? 'Switching…' : 'Switch to'}
+                  {p.isActive ? t('profiles.active') : switching === p.id ? t('profiles.switching') : t('profiles.switchTo')}
                 </Button>
                 {p.isActive ? null : (
                   <Button
@@ -204,9 +205,9 @@ export function ProfilesScreen(): JSX.Element {
                     disabled={planning !== null || switching !== null}
                     icon={<Icon.doc width={13} height={13} />}
                     onClick={() => void previewSwitch(p)}
-                    title="Show every file the switch would touch, without touching any of them"
+                    title={t('profiles.dryRunHint')}
                   >
-                    {planning === p.id ? 'Planning…' : 'Dry run'}
+                    {planning === p.id ? t('profiles.planning') : t('profiles.dryRun')}
                   </Button>
                 )}
                 <Button
@@ -219,7 +220,7 @@ export function ProfilesScreen(): JSX.Element {
                     pushToast('success', 'Duplicated — payloads stay shared, nothing was copied on disk.')
                   }}
                 >
-                  Duplicate
+                  {t('profiles.duplicate')}
                 </Button>
                 <Button
                   size="sm"
@@ -313,8 +314,8 @@ export function ProfilesScreen(): JSX.Element {
             key="log"
             title={
               switchLog.verification && !switchLog.verification.ok
-                ? `Switched to ${switchLog.name} — but it did not verify`
-                : `Switched to ${switchLog.name}`
+                ? t('profiles.switchedButFailed', { name: switchLog.name })
+                : t('profiles.switchedTo', { name: switchLog.name })
             }
             subtitle={`${(switchLog.elapsedMs / 1000).toFixed(2)} s`}
             onClose={() => setSwitchLog(null)}
@@ -328,18 +329,18 @@ export function ProfilesScreen(): JSX.Element {
                     onClick={() => void restorePrevious()}
                     icon={<Icon.undo width={13} height={13} />}
                   >
-                    {restoring ? 'Restoring…' : 'Restore previous state'}
+                    {restoring ? t('profiles.restoring') : t('profiles.restorePrevious')}
                   </Button>
                 ) : null}
                 <span className="spacer" />
                 <Button variant="primary" onClick={() => setSwitchLog(null)}>
-                  Done
+                  {t('app.done')}
                 </Button>
               </>
             }
           >
             {switchLog.verification ? <VerificationReport v={switchLog.verification} /> : null}
-            <h3>What happened</h3>
+            <h3>{t('profiles.whatHappened')}</h3>
             <pre className="pre">{switchLog.log.join('\n')}</pre>
           </Modal>
         ) : null}
@@ -347,14 +348,14 @@ export function ProfilesScreen(): JSX.Element {
         {dryRun ? (
           <Modal
             key="dry-run"
-            title={`Dry run: switching to ${dryRun.toProfileName}`}
-            subtitle="Nothing was changed. This is the plan the real switch would carry out."
+            title={t('profiles.dryRunTitle', { name: dryRun.toProfileName })}
+            subtitle={t('profiles.dryRunSubtitle')}
             onClose={() => setDryRun(null)}
             width={760}
             footer={
               <>
                 <span className="spacer" />
-                <Button onClick={() => setDryRun(null)}>Close</Button>
+                <Button onClick={() => setDryRun(null)}>{t('app.close')}</Button>
                 <Button
                   variant="primary"
                   onClick={() => {
@@ -363,7 +364,7 @@ export function ProfilesScreen(): JSX.Element {
                     if (target) void switchTo(target)
                   }}
                 >
-                  Run it
+                  {t('profiles.runIt')}
                 </Button>
               </>
             }
@@ -466,16 +467,23 @@ function ProfileEditor(props: {
  * profile's mods. A switch is not "done" until this passes.
  */
 function VerificationReport(props: { v: SwitchVerification }): JSX.Element {
+  const t = useT()
   const v = props.v
   return (
     <div className="col" style={{ gap: 10, marginBottom: 14 }}>
       <div className="notice" data-kind={v.ok ? 'ok' : 'warn'}>
         <span className="notice-mark" />
         <div>
-          <strong>{v.ok ? 'Verified' : 'This switch did not pass verification'}</strong>
+          <strong>{v.ok ? t('profiles.verified') : t('profiles.notVerified')}</strong>
           <div className="faint">
-            {v.modsMaterialised}/{v.modsExpected} mod(s) in place · {v.asiCount} .asi · {v.cleoPluginCount} CLEO
-            plugin(s) · {v.cleoScriptCount} CLEO script(s) · modloader.ini {v.iniParsed ? 'parses' : 'could not be read'}
+            {t('profiles.verificationSummary', {
+              materialised: v.modsMaterialised,
+              expected: v.modsExpected,
+              asi: v.asiCount,
+              cleoPlugins: v.cleoPluginCount,
+              cleoScripts: v.cleoScriptCount,
+              ini: v.iniParsed ? t('profiles.iniParses') : t('profiles.iniFailed')
+            })}
           </div>
         </div>
       </div>
@@ -491,8 +499,8 @@ function VerificationReport(props: { v: SwitchVerification }): JSX.Element {
           <table className="table">
             <thead>
               <tr>
-                <th>Mod that did not arrive</th>
-                <th>Why</th>
+                <th>{t('profiles.modDidNotArrive')}</th>
+                <th>{t('profiles.why')}</th>
               </tr>
             </thead>
             <tbody>
@@ -508,7 +516,7 @@ function VerificationReport(props: { v: SwitchVerification }): JSX.Element {
       ) : null}
       {v.unresolvedDependencies.length ? (
         <div>
-          <strong>Unresolved dependencies</strong>
+          <strong>{t('profiles.unresolvedDeps')}</strong>
           <ul className="list">
             {v.unresolvedDependencies.map((d) => (
               <li key={d}>{d}</li>
@@ -520,36 +528,33 @@ function VerificationReport(props: { v: SwitchVerification }): JSX.Element {
   )
 }
 
-const ACTION_LABEL: Record<string, string> = {
-  'snapshot-and-remove': 'backed up, then removed',
-  'drop-link': 'link dropped (payload stays in the store)',
-  'leave-unmanaged': 'left alone (not managed by Modão)',
-  'leave-unverifiable': 'left alone (no verified backup)',
-  materialise: 'linked into the game folder'
-}
-
 function DryRunReport(props: { plan: SwitchPlan }): JSX.Element {
+  const t = useT()
   const plan = props.plan
   return (
     <div className="col" style={{ gap: 12 }}>
       <dl className="kv">
-        <dt>Leaving the game folder</dt>
+        <dt>{t('profiles.leaving')}</dt>
         <dd>
-          {plan.outgoing.length} file(s) · {formatBytes(plan.totalBytes)} backed up first
+          {t('profiles.outgoingSummary', { count: plan.outgoing.length, size: formatBytes(plan.totalBytes) })}
         </dd>
-        <dt>Arriving</dt>
-        <dd>{plan.incoming.length} file(s)</dd>
-        <dt>To copy into the store first</dt>
-        <dd>{plan.toIngest.length ? plan.toIngest.map((i) => `${i.label} (${i.files})`).join(', ') : 'nothing'}</dd>
-        <dt>Untouched, not managed by Modão</dt>
-        <dd>{plan.unmanaged.length ? plan.unmanaged.join(', ') : 'nothing'}</dd>
+        <dt>{t('profiles.arriving')}</dt>
+        <dd>{t('profiles.incomingSummary', { count: plan.incoming.length })}</dd>
+        <dt>{t('profiles.toStoreFirst')}</dt>
+        <dd>
+          {plan.toIngest.length
+            ? plan.toIngest.map((i) => `${i.label} (${i.files})`).join(', ')
+            : t('profiles.nothing')}
+        </dd>
+        <dt>{t('profiles.untouched')}</dt>
+        <dd>{plan.unmanaged.length ? plan.unmanaged.join(', ') : t('profiles.nothing')}</dd>
       </dl>
 
       {plan.unresolved.length ? (
         <div className="notice" data-kind="warn">
           <span className="notice-mark" />
           <div>
-            <strong>{plan.unresolved.length} mod(s) could not be materialised — the switch would refuse to run</strong>
+            <strong>{t('profiles.wouldRefuse', { count: plan.unresolved.length })}</strong>
             <ul className="list">
               {plan.unresolved.map((u) => (
                 <li key={u.installId}>
@@ -565,16 +570,16 @@ function DryRunReport(props: { plan: SwitchPlan }): JSX.Element {
         <table className="table">
           <thead>
             <tr>
-              <th>File</th>
-              <th>What happens</th>
-              <th>Mod</th>
+              <th>{t('profiles.file')}</th>
+              <th>{t('profiles.whatHappens')}</th>
+              <th>{t('profiles.mod')}</th>
             </tr>
           </thead>
           <tbody>
             {[...plan.outgoing, ...plan.incoming].map((f) => (
               <tr key={`${f.action}-${f.relativePath}`}>
                 <td className="mono ellipsis">{f.relativePath}</td>
-                <td>{ACTION_LABEL[f.action] ?? f.action}</td>
+                <td>{t(`profiles.actions.${f.action}`)}</td>
                 <td className="faint ellipsis">{f.label}</td>
               </tr>
             ))}

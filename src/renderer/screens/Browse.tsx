@@ -3,15 +3,19 @@ import { AnimatePresence, motion } from 'motion/react'
 import type { CatalogMod } from '@shared/types'
 import { api, formatBytes, formatDate } from '../api'
 import { useApp } from '../state/store'
+import { useT } from '../lib/i18n'
 import { Badge, Button, Empty, ErrorNote, Loading, Rank, Search, useAsync } from '../components/ui'
 import { ManualInstall, ModDetail } from './BrowseDetail'
+import { GameChip } from '../components/GamePicker'
+import { gameDefinition } from '@shared/games'
 import { Icon } from '../components/icons'
 import { itemVariants, listVariants } from '../lib/motion'
 
 type Sort = 'rating' | 'updated' | 'title' | 'author'
 
 export function BrowseScreen(): JSX.Element {
-  const { profile, settings, pushToast, setPlan, setPlanBusy, planBusy, setScreen } = useApp()
+  const t = useT()
+  const { profile, game, settings, pushToast, setPlan, setPlanBusy, planBusy, setScreen } = useApp()
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('All')
   const [sort, setSort] = useState<Sort>('rating')
@@ -68,32 +72,30 @@ export function BrowseScreen(): JSX.Element {
   return (
     <>
       <div className="page-head">
-        <p>
-          A discovery client for MixMods, not a mirror. Pages are cached locally and re-read at most once a day, one
-          request per second, honouring robots.txt. Paywalled early-access releases link to the author&apos;s own page
-          and are never downloaded here.
-        </p>
+        <p>{t('browse.intro')}</p>
       </div>
 
       <div className="row wrap" style={{ marginBottom: 14 }}>
-        <Search value={search} onChange={setSearch} placeholder="Search title, author or description…" width={290} />
+        <Search value={search} onChange={setSearch} placeholder={t('browse.searchPlaceholder')} width={290} />
         <select className="select" style={{ width: 168 }} value={category} onChange={(e) => setCategory(e.target.value)}>
           {(catalog.data?.categories ?? ['All']).map((c) => (
             <option key={c} value={c}>
-              {c}
+              {c === 'All' ? t('browse.allCategories') : c}
             </option>
           ))}
         </select>
         <select className="select" style={{ width: 196 }} value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
-          <option value="rating">Synthesised ranking</option>
-          <option value="updated">Recently updated</option>
-          <option value="title">Title</option>
-          <option value="author">Author</option>
+          <option value="rating">{t('browse.sortRating')}</option>
+          <option value="updated">{t('browse.sortUpdated')}</option>
+          <option value="title">{t('browse.sortTitle')}</option>
+          <option value="author">{t('browse.sortAuthor')}</option>
         </select>
         <span className="spacer" />
         <span className="faint">
-          {seed.data ? `${seed.data.count} indexed` : ''}
-          {seed.data?.lastCrawl ? ` · crawled ${formatDate(seed.data.lastCrawl)}` : ' · offline seed'}
+          {seed.data ? t('browse.indexedCount', { count: seed.data.count }) : ''}
+          {seed.data?.lastCrawl
+            ? t('browse.crawledAt', { date: formatDate(seed.data.lastCrawl) })
+            : t('browse.offlineSeed')}
         </span>
         <Button
           size="sm"
@@ -108,21 +110,21 @@ export function BrowseScreen(): JSX.Element {
             pushToast('info', r.message)
           }}
         >
-          {settings?.crawlEnabled ? 'Index MixMods' : 'Enable indexing…'}
+          {settings?.crawlEnabled ? t('browse.indexMixMods') : t('browse.enableIndexing')}
         </Button>
       </div>
 
       {catalog.error ? (
         <ErrorNote message={catalog.error} onRetry={catalog.reload} />
       ) : catalog.loading ? (
-        <Loading label="Reading the catalog…" />
+        <Loading label={t('browse.readingCatalog')} />
       ) : mods.length === 0 ? (
         <Empty
-          title="Nothing matches"
-          hint="Try a different search, or index MixMods from Settings to pull in more pages."
+          title={t('browse.nothingMatches')}
+          hint={t('browse.nothingMatchesHint')}
           action={
             <Button size="sm" onClick={() => setSearch('')}>
-              Clear search
+              {t('browse.clearSearch')}
             </Button>
           }
         />
@@ -138,9 +140,16 @@ export function BrowseScreen(): JSX.Element {
                   </div>
                 </div>
                 <div className="col" style={{ gap: 4, alignItems: 'flex-end' }}>
-                  {m.installed ? <Badge tone="ok">installed</Badge> : null}
-                  {m.paywalled ? <Badge tone="warn">early access</Badge> : null}
-                  {m.installed?.updateAvailable ? <Badge tone="accent">update</Badge> : null}
+                  {m.installed ? <Badge tone="ok">{t('browse.installedBadge')}</Badge> : null}
+                  {m.paywalled ? <Badge tone="warn">{t('browse.earlyAccessBadge')}</Badge> : null}
+                  {m.installed?.updateAvailable ? <Badge tone="accent">{t('browse.updateBadge')}</Badge> : null}
+                  {m.games.length > 1 || (game && !m.games.includes(game.kind)) ? (
+                    <span className="row wrap" style={{ gap: 3, justifyContent: 'flex-end' }}>
+                      {m.games.map((k) => (
+                        <GameChip key={k} kind={k} title={t('browse.gameChipTitle', { game: gameDefinition(k).name })} />
+                      ))}
+                    </span>
+                  ) : null}
                 </div>
               </div>
 
@@ -152,18 +161,18 @@ export function BrowseScreen(): JSX.Element {
 
               <div className="row wrap" style={{ marginTop: 'auto' }}>
                 <Button size="sm" variant="primary" disabled={!profile || planBusy} onClick={() => void install(m)}>
-                  {m.installed ? 'Reinstall' : m.paywalled || !m.versions[0]?.downloadUrl ? 'Install…' : 'Install'}
+                  {m.installed ? t('browse.reinstall') : m.paywalled || !m.versions[0]?.downloadUrl ? t('browse.installEllipsis') : t('browse.install')}
                 </Button>
                 <Button size="sm" variant="quiet" onClick={() => setDetail(m)}>
-                  Details
+                  {t('app.details')}
                 </Button>
                 <span className="spacer" />
                 <Button
                   size="sm"
                   variant="quiet"
                   iconOnly
-                  aria-label="Open the MixMods page"
-                  title="Open the MixMods page"
+                  aria-label={t('browse.openMixModsPage')}
+                  title={t('browse.openMixModsPage')}
                   onClick={() => void api.openExternal(m.sourceUrl)}
                   icon={<Icon.external />}
                 />

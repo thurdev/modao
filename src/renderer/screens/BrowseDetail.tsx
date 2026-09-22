@@ -5,6 +5,7 @@ import { classifyDownload } from '@shared/download'
 import { api, formatBytes, formatDate } from '../api'
 import { Badge, Button, Modal, Rank } from '../components/ui'
 import { Icon } from '../components/icons'
+import { useT } from '../lib/i18n'
 
 /**
  * A mod page is a post, so it is shown as one: the author's text and their
@@ -12,6 +13,7 @@ import { Icon } from '../components/icons'
  * catalogue metadata sits above and below it rather than competing with it.
  */
 export function ModDetail(props: { mod: CatalogMod; onClose: () => void; onInstall: () => void }): JSX.Element {
+  const t = useT()
   const [fetched, setFetched] = useState<CatalogMod | null>(null)
   const [fetching, setFetching] = useState(false)
   const m = fetched ?? props.mod
@@ -60,7 +62,7 @@ export function ModDetail(props: { mod: CatalogMod; onClose: () => void; onInsta
               void api.openExternal(m.sourceUrl)
             }}
           >
-            read it on mixmods.com.br
+            {t('browse.readOnMixMods')}
           </a>
         </>
       }
@@ -68,20 +70,18 @@ export function ModDetail(props: { mod: CatalogMod; onClose: () => void; onInsta
       width={880}
       footer={
         <>
-          <Button onClick={props.onClose}>Close</Button>
+          <Button onClick={props.onClose}>{t('app.close')}</Button>
           <Button
             variant="quiet"
             icon={<Icon.external width={13} height={13} />}
             onClick={() => void api.openExternal(m.sourceUrl)}
           >
-            Open the mod page
+            {t('browse.openModPage')}
           </Button>
           <span className="spacer" />
-          {m.paywalled ? (
-            <span className="faint">Early access on the author&apos;s Patreon — Modão will not mirror it.</span>
-          ) : null}
+          {m.paywalled ? <span className="faint">{t('browse.earlyAccessNotice')}</span> : null}
           <Button variant="primary" onClick={props.onInstall}>
-            {direct ? 'Install…' : 'Install from a downloaded file…'}
+            {direct ? t('browse.installEllipsis') : t('browse.installFromDownloadedFile')}
           </Button>
         </>
       }
@@ -90,15 +90,17 @@ export function ModDetail(props: { mod: CatalogMod; onClose: () => void; onInsta
         <header className="post-meta">
           <span className="row wrap" style={{ gap: 7 }}>
             <Rank value={m.rating} />
-            {m.paywalled ? <Badge tone="warn">early access</Badge> : null}
-            {m.ratingInputs.inEssentials ? <Badge tone="ok">Essentials pack</Badge> : null}
-            {m.installed ? <Badge tone="accent">installed {m.installed.versionLabel}</Badge> : null}
+            {m.paywalled ? <Badge tone="warn">{t('browse.earlyAccessBadge')}</Badge> : null}
+            {m.ratingInputs.inEssentials ? <Badge tone="ok">{t('browse.essentialsPack')}</Badge> : null}
+            {m.installed ? (
+              <Badge tone="accent">{t('browse.installedVersion', { version: m.installed.versionLabel })}</Badge>
+            ) : null}
           </span>
           <span className="spacer" />
           <span className="faint num">
-            {m.versions[0]?.versionLabel ?? 'unknown version'}
+            {m.versions[0]?.versionLabel ?? t('browse.unknownVersion')}
             {m.versions[0]?.fileSize ? ` · ${formatBytes(m.versions[0].fileSize)}` : ''}
-            {direct ? ` · ${hostOf(direct)}` : ' · no direct link'}
+            {direct ? ` · ${hostOf(direct)}` : t('browse.noDirectLink')}
           </span>
         </header>
 
@@ -111,27 +113,26 @@ export function ModDetail(props: { mod: CatalogMod; onClose: () => void; onInsta
         <footer className="post-foot">
           <div className="grid two">
             <div className="card pad col">
-              <strong>Why it ranks where it does</strong>
+              <strong>{t('browse.whyRanks')}</strong>
               <p className="faint" style={{ margin: 0 }}>
-                MixMods has no star rating. This score is Modão&apos;s own, from the inputs below — never a community
-                score.
+                {t('browse.rankingExplain')}
               </p>
               <dl className="kv">
-                <dt>Recency</dt>
+                <dt>{t('browse.recency')}</dt>
                 <dd className="num">{(m.ratingInputs.recency * 100).toFixed(0)}%</dd>
-                <dt>Author footprint</dt>
+                <dt>{t('browse.authorFootprint')}</dt>
                 <dd className="num">{(m.ratingInputs.authorReputation * 100).toFixed(0)}%</dd>
-                <dt>Essentials pack</dt>
-                <dd>{m.ratingInputs.inEssentials ? 'listed — strong signal' : 'not listed'}</dd>
-                <dt>Required by</dt>
-                <dd className="num">{m.ratingInputs.requiredByCount} catalog mod(s)</dd>
-                <dt>Local installs</dt>
+                <dt>{t('browse.essentialsPack')}</dt>
+                <dd>{m.ratingInputs.inEssentials ? t('browse.listedStrongSignal') : t('browse.notListed')}</dd>
+                <dt>{t('browse.requiredBy')}</dt>
+                <dd className="num">{t('browse.requiredByCount', { count: m.ratingInputs.requiredByCount })}</dd>
+                <dt>{t('browse.localInstalls')}</dt>
                 <dd className="num">{m.ratingInputs.installCount}</dd>
               </dl>
             </div>
 
             <div className="card pad col">
-              <strong>Release</strong>
+              <strong>{t('browse.release')}</strong>
               {m.versions.map((v) => (
                 <div key={v.id} className="row between">
                   <span>{v.versionLabel}</span>
@@ -143,13 +144,12 @@ export function ModDetail(props: { mod: CatalogMod; onClose: () => void; onInsta
               ))}
               <span className="faint">
                 {direct
-                  ? `Hosted on ${hostOf(direct)} — Modão downloads it, then shows the file-level plan.`
-                  : (kind.reason ?? 'No link Modão can fetch.') +
-                    ' Download it from the mod page and hand the archive back; the install is identical from there.'}
+                  ? t('browse.hostedOn', { host: hostOf(direct) })
+                  : (kind.reasonKey ? t(kind.reasonKey, kind.reasonParams) : t('browse.noLinkFetchable')) + t('browse.downloadAndHandBack')}
               </span>
               {m.requirementsText.length > 0 ? (
                 <>
-                  <strong style={{ marginTop: 4 }}>Stated requirements</strong>
+                  <strong style={{ marginTop: 4 }}>{t('browse.statedRequirements')}</strong>
                   <ul className="muted" style={{ margin: 0, paddingLeft: 18 }}>
                     {m.requirementsText.map((r) => (
                       <li key={r}>{r}</li>
@@ -159,7 +159,7 @@ export function ModDetail(props: { mod: CatalogMod; onClose: () => void; onInsta
               ) : null}
               {m.incompatibleText.length > 0 ? (
                 <>
-                  <strong style={{ marginTop: 4 }}>Stated incompatibilities</strong>
+                  <strong style={{ marginTop: 4 }}>{t('browse.statedIncompatibilities')}</strong>
                   <ul className="muted" style={{ margin: 0, paddingLeft: 18 }}>
                     {m.incompatibleText.map((r) => (
                       <li key={r}>{r}</li>
@@ -191,6 +191,7 @@ export function ModDetail(props: { mod: CatalogMod; onClose: () => void; onInsta
 }
 
 function Block(props: { block: ModBlock; onZoom: (src: string) => void }): JSX.Element | null {
+  const t = useT()
   const b = props.block
   if (b.type === 'heading') return <h3 className="post-h">{b.text}</h3>
   if (b.type === 'text') return <p>{b.text}</p>
@@ -206,7 +207,7 @@ function Block(props: { block: ModBlock; onZoom: (src: string) => void }): JSX.E
   if (b.type === 'image') {
     return (
       <figure className="post-figure">
-        <button onClick={() => props.onZoom(b.src)} aria-label="Enlarge screenshot">
+        <button onClick={() => props.onZoom(b.src)} aria-label={t('browse.enlargeScreenshot')}>
           <img src={b.src} alt={b.caption ?? ''} loading="lazy" />
         </button>
         {isRealCaption(b.caption) ? <figcaption>{b.caption}</figcaption> : null}
@@ -221,7 +222,7 @@ function Block(props: { block: ModBlock; onZoom: (src: string) => void }): JSX.E
           <div className="post-embed">
             <iframe
               src={embed}
-              title="Mod video"
+              title={t('browse.modVideo')}
               loading="lazy"
               allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
@@ -231,7 +232,7 @@ function Block(props: { block: ModBlock; onZoom: (src: string) => void }): JSX.E
         ) : null}
         <figcaption>
           <Button size="sm" variant="quiet" icon={<Icon.external width={12} height={12} />} onClick={() => void api.openExternal(watchUrl(b.src))}>
-            Open on {hostOf(b.src)}
+            {t('browse.openOnHost', { host: hostOf(b.src) })}
           </Button>
         </figcaption>
       </figure>
@@ -309,22 +310,19 @@ export function ManualInstall(props: {
   onPick: () => void
   onClose: () => void
 }): JSX.Element {
+  const t = useT()
   const m = props.mod
   const direct = m.versions[0]?.downloadUrl ?? null
 
   return (
     <Modal
-      title={`Install ${m.title}`}
-      subtitle={
-        m.paywalled
-          ? 'This release is early access on the author’s Patreon'
-          : 'This release has no direct link Modão can fetch'
-      }
+      title={t('browse.installModTitle', { name: m.title })}
+      subtitle={m.paywalled ? t('browse.earlyAccessSubtitle') : t('browse.noDirectLinkSubtitle')}
       onClose={props.onClose}
       width={640}
       footer={
         <>
-          <Button onClick={props.onClose}>Cancel</Button>
+          <Button onClick={props.onClose}>{t('app.cancel')}</Button>
           <span className="spacer" />
           <Button
             variant="primary"
@@ -332,7 +330,7 @@ export function ManualInstall(props: {
             onClick={props.onPick}
             icon={<Icon.folder width={13} height={13} />}
           >
-            {props.busy ? 'Reading…' : 'Choose the downloaded archive'}
+            {props.busy ? t('browse.reading') : t('browse.chooseArchive')}
           </Button>
         </>
       }
@@ -340,15 +338,15 @@ export function ManualInstall(props: {
       <div className="col" style={{ gap: 14 }}>
         <p className="muted" style={{ margin: 0 }}>
           {m.paywalled
-            ? 'Modão does not mirror or bypass paywalled files. Open the mod page, support the author if you want that build, download it, and hand the archive back here.'
-            : `${classifyDownload(direct).reason ?? 'That link is not a file Modão can fetch.'} Download it yourself, then pick the archive.`}
+            ? t('browse.paywalledExplain')
+            : reasonText(classifyDownload(direct), t, t('browse.noLinkExplainFallback')) + t('browse.downloadYourselfThenPick')}
         </p>
 
         <div className="col" style={{ gap: 12 }}>
           <div className="step">
             <span className="step-num">1</span>
             <div>
-              <strong>Open the mod page</strong>
+              <strong>{t('browse.openModPage')}</strong>
               <div className="faint mono">{m.sourceUrl}</div>
               <div className="row wrap" style={{ marginTop: 7 }}>
                 <Button
@@ -356,7 +354,7 @@ export function ManualInstall(props: {
                   icon={<Icon.external width={13} height={13} />}
                   onClick={() => void api.openExternal(m.sourceUrl)}
                 >
-                  Open mixmods.com.br
+                  {t('browse.openMixmodsSite')}
                 </Button>
                 {direct ? (
                   <Button
@@ -365,7 +363,7 @@ export function ManualInstall(props: {
                     icon={<Icon.download width={13} height={13} />}
                     onClick={() => void api.openExternal(direct)}
                   >
-                    Go straight to {hostOf(direct)}
+                    {t('browse.goStraightTo', { host: hostOf(direct) })}
                   </Button>
                 ) : null}
               </div>
@@ -375,19 +373,16 @@ export function ManualInstall(props: {
           <div className="step">
             <span className="step-num">2</span>
             <div>
-              <strong>Download the archive</strong>
-              <div className="faint">A .7z, .zip or .rar — wherever your browser puts it.</div>
+              <strong>{t('browse.downloadArchive')}</strong>
+              <div className="faint">{t('browse.archiveFormats')}</div>
             </div>
           </div>
 
           <div className="step">
             <span className="step-num">3</span>
             <div>
-              <strong>Hand it back</strong>
-              <div className="faint">
-                Modão decodes the readme, classifies every file, asks about variants and shows the full plan before
-                writing anything.
-              </div>
+              <strong>{t('browse.handItBack')}</strong>
+              <div className="faint">{t('browse.handItBackExplain')}</div>
             </div>
           </div>
         </div>
@@ -402,4 +397,13 @@ function hostOf(url: string): string {
   } catch {
     return url
   }
+}
+
+/** The classifier's explanation, said in the user's language. */
+function reasonText(
+  kind: ReturnType<typeof classifyDownload>,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+  fallback: string
+): string {
+  return kind.reasonKey ? t(kind.reasonKey, kind.reasonParams) : fallback
 }

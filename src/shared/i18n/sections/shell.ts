@@ -21,6 +21,7 @@ export const shell = {
     noGame: 'Adicione a pasta do jogo para poder jogar',
     noProfile: 'Nenhum perfil ativo',
     tasks: 'Tarefas',
+    gameTitle: 'Instalação do jogo',
     dismiss: 'Dispensar'
   },
   en: {
@@ -38,6 +39,7 @@ export const shell = {
     noGame: 'Add your game folder before playing',
     noProfile: 'No active profile',
     tasks: 'Tasks',
+    gameTitle: 'Game install',
     dismiss: 'Dismiss'
   }
 } as const

@@ -42,7 +42,9 @@ export const ptBR = {
     unknown: 'desconhecido',
     copy: 'Copiar',
     open: 'Abrir',
-    details: 'Detalhes'
+    details: 'Detalhes',
+    working: 'Trabalhando…',
+    wentWrong: 'Deu ruim'
   },
   nav: {
     setup: 'Instalação',
@@ -65,6 +67,7 @@ export const ptBR = {
     pickFolder: 'Escolha a pasta do seu GTA (San Andreas, III, Vice City ou Definitive Edition)',
     notFound: 'Nenhum executável do GTA em {path}.',
     launch: 'Jogar',
+    added: '{name} adicionado de {path}.',
     switchFirst: '{profile} é um perfil de {game} e a instalação ativa é {active}. Troque de jogo primeiro.'
   },
   crashes: {
@@ -93,6 +96,13 @@ export const ptBR = {
     crashAddress: 'Endereço do crash',
     faultLocation: 'Local da falha',
     notLookedUpTitle: 'Não consultado'
+  },
+  download: {
+    noLink: 'Nenhum link de download registrado para esta versão.',
+    invalidLink: 'O link de download registrado não é uma URL válida.',
+    landingHost: 'O {host} serve uma página de download em vez do arquivo, e recusa requisição que não seja de navegador.',
+    notARelease: 'Esse link do GitHub não é uma release.',
+    notAnArchive: 'O {host} não devolveu um link terminando em .7z, .zip ou .rar.'
   },
   errors: {
     noGame: 'Nenhuma pasta de jogo selecionada. Adicione uma instalação do GTA primeiro.',

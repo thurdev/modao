@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { motion } from 'motion/react'
 import { api } from '../api'
 import { useApp } from '../state/store'
+import { useT } from '../lib/i18n'
 import { Button, Checkbox, useAsync } from './ui'
 import { Icon } from './icons'
 import { snappy } from '../lib/motion'
@@ -17,6 +18,7 @@ import { snappy } from '../lib/motion'
  * archive with full privileges, and the installs that need it are the minority.
  */
 export function AccessBanner(): JSX.Element | null {
+  const t = useT()
   const { game, refreshGames, pushToast } = useApp()
   const [remember, setRemember] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -42,7 +44,10 @@ export function AccessBanner(): JSX.Element | null {
     try {
       const access = await api.recheckAccess()
       await refreshGames()
-      pushToast(access.writable ? 'success' : 'error', access.writable ? 'Write access confirmed.' : (access.reason ?? 'Still blocked.'))
+      pushToast(
+        access.writable ? 'success' : 'error',
+        access.writable ? t('install.access.writeConfirmed') : (access.reason ?? t('install.access.stillBlocked'))
+      )
     } catch (e) {
       pushToast('error', (e as Error).message)
     } finally {

@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import type { BisectSession, CrashIncident, CrashReport, HealthCheck } from '@shared/types'
 import { UNLOADED_NOTE } from '@shared/crash'
 import { api, relativeTime } from '../api'
+import { useT } from '../lib/i18n'
 import { useApp } from '../state/store'
 import { Badge, Button, Checkbox, Empty, ErrorNote, Loading, Modal, StatusDot, Tabs, useAsync } from '../components/ui'
 import { Icon } from '../components/icons'
@@ -12,12 +13,7 @@ import art from '../assets/empty-crashes-320.png'
 type Tab = 'check' | 'crashes' | 'bisect' | 'logs'
 type ToastFn = (kind: 'info' | 'error' | 'success', message: string) => void
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'check', label: 'Pre-launch check' },
-  { id: 'crashes', label: 'Crash history' },
-  { id: 'bisect', label: 'Guided bisect' },
-  { id: 'logs', label: 'Log timeline' }
-]
+const TAB_IDS: Tab[] = ['check', 'crashes', 'bisect', 'logs']
 
 const STATUS_TONE: Record<HealthCheck['status'], 'ok' | 'warn' | 'danger' | 'neutral'> = {
   pass: 'ok',
@@ -27,21 +23,26 @@ const STATUS_TONE: Record<HealthCheck['status'], 'ok' | 'warn' | 'danger' | 'neu
 }
 
 export function HealthScreen(): JSX.Element {
+  const t = useT()
   const { profile, pushToast } = useApp()
   const [tab, setTab] = useState<Tab>('check')
 
   if (!profile) {
     return (
       <Empty
-        title="No active profile"
-        hint="Health runs against the mods a profile has enabled. Activate one on the Profiles screen to check it, read its crashes or bisect it."
+        title={t('health.noProfile')}
+        hint={t('health.noProfileHint')}
       />
     )
   }
 
   return (
     <>
-      <Tabs value={tab} onChange={setTab} options={TABS} />
+      <Tabs
+        value={tab}
+        onChange={setTab}
+        options={TAB_IDS.map((id) => ({ id, label: t(`health.tab${id[0].toUpperCase()}${id.slice(1)}`) }))}
+      />
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
           key={tab}
@@ -63,10 +64,11 @@ export function HealthScreen(): JSX.Element {
 // ───────────────────────────── pre-launch ─────────────────────────────
 
 function PreLaunch(props: { profileId: number }): JSX.Element {
+  const t = useT()
   const report = useAsync(() => api.health(props.profileId), [props.profileId])
 
   if (report.error) return <ErrorNote message={report.error} onRetry={report.reload} />
-  if (report.loading || !report.data) return <Loading label="Running checks against the game folder…" />
+  if (report.loading || !report.data) return <Loading label={t('health.running')} />
 
   const r = report.data
   const passed = r.checks.filter((c) => c.status === 'pass').length
@@ -141,6 +143,7 @@ function PreLaunch(props: { profileId: number }): JSX.Element {
 // ───────────────────────────── crashes ─────────────────────────────
 
 function Crashes(props: { profileId: number; pushToast: ToastFn }): JSX.Element {
+  const t = useT()
   const crashes = useAsync(() => api.crashIncidents(props.profileId), [props.profileId])
   const [scanning, setScanning] = useState(false)
   const [detail, setDetail] = useState<CrashIncident | null>(null)
@@ -175,32 +178,24 @@ function Crashes(props: { profileId: number; pushToast: ToastFn }): JSX.Element 
   return (
     <>
       <div className="page-head">
-        <p>
-          Crash records come from the Windows Event Log — the Application channel, source &quot;Application Error&quot;,
-          matching gta_sa.exe. Records written by one dying process are shown as a single incident. When the fault is
-          inside gta_sa.exe the crash address is 0x400000 plus the fault offset and is looked up in the bundled
-          CrashList.txt; when it is inside a DLL the offset is relative to that DLL, so it is shown as
-          <span className="mono"> module+offset</span> and no lookup is attempted — CrashList indexes the executable
-          only. A hang leaves no exception record at all: that absence is itself the diagnosis, and points at a deadlock
-          or an infinite loop rather than a faulting address.
-        </p>
+        <p>{t('health.crashIntro')}</p>
       </div>
 
       <div className="row wrap" style={{ marginBottom: 14 }}>
         <Button variant="primary" disabled={scanning} onClick={() => void scan()} icon={<Icon.refresh width={13} height={13} />}>
-          {scanning ? 'Reading the Event Log…' : 'Scan for crashes'}
+          {scanning ? t('crashes.scanning') : t('crashes.scan')}
         </Button>
         <span className="spacer" />
         <input
           className="input"
           style={{ width: 230 }}
-          placeholder="Look up an address, e.g. 0x00749B7B"
+          placeholder={t('health.lookupPlaceholder')}
           value={manual}
           onChange={(e) => setManual(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && manual.trim() && void lookup()}
         />
         <Button onClick={() => void lookup()} disabled={!manual.trim()} icon={<Icon.search width={13} height={13} />}>
-          Look up
+          {t('health.lookup')}
         </Button>
       </div>
 
@@ -217,9 +212,9 @@ function Crashes(props: { profileId: number; pushToast: ToastFn }): JSX.Element 
           >
             <div className="row between">
               <strong className="mono">{manualResult.address}</strong>
-              <Button size="sm" variant="quiet" iconOnly aria-label="Dismiss" onClick={() => setManualResult(null)} icon={<Icon.close />} />
+              <Button size="sm" variant="quiet" iconOnly aria-label={t('shell.dismiss')} onClick={() => setManualResult(null)} icon={<Icon.close />} />
             </div>
-            <div>{manualResult.cause ?? 'Not in the bundled CrashList.'}</div>
+            <div>{manualResult.cause ?? t('health.notInList')}</div>
             {manualResult.solution ? <div className="faint">{manualResult.solution}</div> : null}
           </motion.div>
         ) : null}
@@ -228,15 +223,15 @@ function Crashes(props: { profileId: number; pushToast: ToastFn }): JSX.Element 
       {crashes.error ? (
         <ErrorNote message={crashes.error} onRetry={crashes.reload} />
       ) : crashes.loading ? (
-        <Loading label="Reading recorded crashes…" />
+        <Loading label={t('health.readingCrashes')} />
       ) : rows.length === 0 ? (
         <Empty
-          title="No crashes recorded"
-          hint="If the game stopped responding rather than closing with an error, Windows logs no exception at all — that points at a hang or a deadlock, not a crash address."
+          title={t('crashes.none')}
+          hint={t('health.noCrashesHint')}
           art={art}
           action={
             <Button size="sm" disabled={scanning} onClick={() => void scan()}>
-              Scan the Event Log
+              {t('health.scanEventLog')}
             </Button>
           }
         />
@@ -245,11 +240,11 @@ function Crashes(props: { profileId: number; pushToast: ToastFn }): JSX.Element 
           <table className="table">
             <thead>
               <tr>
-                <th>When</th>
-                <th>Kind</th>
-                <th>Faulting module</th>
-                <th>Address</th>
-                <th>Matched cause</th>
+                <th>{t('crashes.when')}</th>
+                <th>{t('crashes.kind')}</th>
+                <th>{t('crashes.module')}</th>
+                <th>{t('crashes.address')}</th>
+                <th>{t('crashes.matchedCause')}</th>
                 <th style={{ width: 140 }} />
               </tr>
             </thead>
@@ -271,8 +266,8 @@ function Crashes(props: { profileId: number; pushToast: ToastFn }): JSX.Element 
                       {c.module}
                       {c.moduleUnloaded ? (
                         <span style={{ marginLeft: 6 }}>
-                          <Badge tone="warn" title="Already unloaded when the fault hit">
-                            unloaded
+                          <Badge tone="warn" title={t('crashes.unloadedTitle')}>
+                            {t('crashes.unloaded')}
                           </Badge>
                         </span>
                       ) : null}
@@ -280,15 +275,15 @@ function Crashes(props: { profileId: number; pushToast: ToastFn }): JSX.Element 
                     <td className="mono num">{c.crashAddress || '—'}</td>
                     <td>
                       {c.addressKind === 'module' ? (
-                        <span className="faint">not looked up — the fault is not in gta_sa.exe</span>
+                        <span className="faint">{t('crashes.notLookedUp')}</span>
                       ) : (
-                        c.matchedCause ?? <span className="faint">not in CrashList</span>
+                        c.matchedCause ?? <span className="faint">{t('crashes.notInList')}</span>
                       )}
                     </td>
                     <td>
                       <div className="row-actions">
                         <Button size="sm" variant="quiet" onClick={() => setDetail(incident)} icon={<Icon.doc width={13} height={13} />}>
-                          Details
+                          {t('app.details')}
                         </Button>
                         <Button
                           size="sm"
@@ -302,7 +297,7 @@ function Crashes(props: { profileId: number; pushToast: ToastFn }): JSX.Element 
                             }
                           }}
                         >
-                          {c.resolved ? 'Reopen' : 'Resolve'}
+                          {c.resolved ? t('health.reopen') : t('health.resolve')}
                         </Button>
                       </div>
                     </td>
@@ -317,34 +312,34 @@ function Crashes(props: { profileId: number; pushToast: ToastFn }): JSX.Element 
       <AnimatePresence>
         {detail ? (
           <Modal
-            title={`Crash at ${detail.primary.crashAddress || 'unknown address'}`}
+            title={t('health.crashAt', { address: detail.primary.crashAddress || t('health.unknownAddress') })}
             subtitle={
               detail.primary.kind === 'hang'
-                ? 'Stopped responding — no exception was logged'
+                ? t('crashes.hang')
                 : detail.related.length
-                  ? `Unhandled exception · ${detail.related.length + 1} record(s) from one run of the game`
-                  : 'Unhandled exception'
+                  ? t('crashes.oneRun', { count: detail.related.length + 1 })
+                  : t('crashes.exception')
             }
             onClose={() => setDetail(null)}
             width={780}
           >
             <dl className="kv">
-              <dt>Occurred</dt>
+              <dt>{t('crashes.occurred')}</dt>
               <dd>{new Date(detail.primary.occurredAt).toLocaleString()}</dd>
-              <dt>Kind</dt>
-              <dd>{detail.primary.kind === 'hang' ? 'Stopped responding (no exception logged)' : 'Exception'}</dd>
-              <dt>Faulting module</dt>
+              <dt>{t('crashes.kind')}</dt>
+              <dd>{detail.primary.kind === 'hang' ? t('crashes.hang') : t('crashes.exception')}</dd>
+              <dt>{t('crashes.module')}</dt>
               <dd className="mono">
                 {detail.primary.moduleRaw || detail.primary.module}
                 {detail.primary.moduleUnloaded ? ' — already unloaded' : ''}
               </dd>
-              <dt>Faulting process</dt>
+              <dt>{t('crashes.process')}</dt>
               <dd className="mono">{detail.primary.processId || '—'}</dd>
-              <dt>Exception code</dt>
+              <dt>{t('crashes.exceptionCode')}</dt>
               <dd className="mono">{detail.primary.exceptionCode || '—'}</dd>
-              <dt>Fault offset</dt>
+              <dt>{t('crashes.faultOffset')}</dt>
               <dd className="mono">{detail.primary.faultOffset || '—'}</dd>
-              <dt>{detail.primary.addressKind === 'exe' ? 'Crash address' : 'Fault location'}</dt>
+              <dt>{detail.primary.addressKind === 'exe' ? t('crashes.crashAddress') : t('crashes.faultLocation')}</dt>
               <dd className="mono">
                 {detail.primary.crashAddress || '—'}
                 {detail.primary.addressKind === 'exe' ? ' (0x400000 + fault offset)' : ''}
@@ -358,18 +353,18 @@ function Crashes(props: { profileId: number; pushToast: ToastFn }): JSX.Element 
             <hr className="divider" />
             {detail.primary.addressKind === 'exe' ? (
               <>
-                <h3>Matched cause</h3>
-                <p className="muted">{detail.primary.matchedCause ?? 'This address is not in the bundled CrashList.'}</p>
+                <h3>{t('health.matchedCause')}</h3>
+                <p className="muted">{detail.primary.matchedCause ?? t('health.notInCrashList')}</p>
                 {detail.primary.matchedSolution ? (
                   <>
-                    <h3>Suggested fix</h3>
+                    <h3>{t('health.suggestedFix')}</h3>
                     <p className="muted">{detail.primary.matchedSolution}</p>
                   </>
                 ) : null}
               </>
             ) : (
               <>
-                <h3>Not looked up</h3>
+                <h3>{t('crashes.notLookedUpTitle')}</h3>
                 <p className="muted">{detail.primary.addressNote}</p>
               </>
             )}
@@ -377,7 +372,7 @@ function Crashes(props: { profileId: number; pushToast: ToastFn }): JSX.Element 
             {detail.related.length ? (
               <>
                 <hr className="divider" />
-                <h3>Other records from the same run</h3>
+                <h3>{t('crashes.otherRecords')}</h3>
                 <ul className="list">
                   {detail.related.map((r) => (
                     <li key={r.id}>
@@ -390,7 +385,7 @@ function Crashes(props: { profileId: number; pushToast: ToastFn }): JSX.Element 
               </>
             ) : null}
 
-            <h3>Raw event</h3>
+            <h3>{t('crashes.rawEvent')}</h3>
             <pre className="pre">{detail.primary.raw}</pre>
           </Modal>
         ) : null}
@@ -402,6 +397,7 @@ function Crashes(props: { profileId: number; pushToast: ToastFn }): JSX.Element 
 // ───────────────────────────── bisect ─────────────────────────────
 
 function Bisect(props: { profileId: number; pushToast: ToastFn }): JSX.Element {
+  const t = useT()
   const [session, setSession] = useState<BisectSession | null>(null)
   const [busy, setBusy] = useState(false)
   const current = useAsync(() => api.bisectCurrent(props.profileId), [props.profileId])
@@ -419,7 +415,7 @@ function Bisect(props: { profileId: number; pushToast: ToastFn }): JSX.Element {
   }
 
   if (current.error) return <ErrorNote message={current.error} onRetry={current.reload} />
-  if (current.loading) return <Loading label="Looking for an unfinished bisect…" />
+  if (current.loading) return <Loading label={t('health.lookingForBisect')} />
 
   return (
     <>
@@ -551,6 +547,7 @@ function Bisect(props: { profileId: number; pushToast: ToastFn }): JSX.Element {
 // ───────────────────────────── logs ─────────────────────────────
 
 function Logs(props: { profileId: number }): JSX.Element {
+  const t = useT()
   const logs = useAsync(() => api.logs(props.profileId), [props.profileId])
   const [onlyProblems, setOnlyProblems] = useState(false)
   const entries = (logs.data ?? []).filter((l) => !onlyProblems || l.level !== 'info')
@@ -559,7 +556,7 @@ function Logs(props: { profileId: number }): JSX.Element {
     <>
       <div className="row wrap" style={{ marginBottom: 12 }}>
         <div className="row" style={{ gap: 7 }}>
-          <Checkbox on={onlyProblems} onChange={setOnlyProblems} label="Warnings and errors only" />
+          <Checkbox on={onlyProblems} onChange={setOnlyProblems} label={t('health.onlyProblems')} />
           <span style={{ cursor: 'pointer' }} onClick={() => setOnlyProblems(!onlyProblems)}>
             Warnings and errors only
           </span>
@@ -576,10 +573,10 @@ function Logs(props: { profileId: number }): JSX.Element {
       {logs.error ? (
         <ErrorNote message={logs.error} onRetry={logs.reload} />
       ) : logs.loading ? (
-        <Loading label="Collecting modloader.log, VehFuncs.log and any per-mod logs…" />
+        <Loading label={t('health.collectingLogs')} />
       ) : entries.length === 0 ? (
         <Empty
-          title={onlyProblems ? 'No warnings or errors' : 'No log files found'}
+          title={onlyProblems ? t('health.noWarnings') : t('health.noLogs')}
           hint={
             onlyProblems
               ? 'Every collected line is informational. Turn the filter off to read the whole timeline.'

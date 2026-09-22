@@ -4,6 +4,7 @@ import type { InstalledMod } from '@shared/types'
 import { DESTINATION_LABELS } from '@shared/types'
 import { api, formatBytes, relativeTime } from '../api'
 import { useApp } from '../state/store'
+import { useT } from '../lib/i18n'
 import { Badge, Button, Checkbox, Confirm, Empty, ErrorNote, Loading, Modal, Search, Stepper, Switch, useAsync } from '../components/ui'
 import { Icon } from '../components/icons'
 import { itemVariants, listVariants, snappy } from '../lib/motion'
@@ -12,6 +13,7 @@ import art from '../assets/empty-library-320.png'
 type SortKey = 'title' | 'priority' | 'size' | 'installedAt' | 'conflicts'
 
 export function LibraryScreen(): JSX.Element {
+  const t = useT()
   const { profile, pushToast, setPlan, setPlanBusy, planBusy, unmanaged, adoptUnmanaged } = useApp()
   const [adopting, setAdopting] = useState(false)
   const [sort, setSort] = useState<SortKey>('title')
@@ -155,26 +157,23 @@ export function LibraryScreen(): JSX.Element {
         <div className="notice" data-kind="warn" style={{ marginBottom: 12 }}>
           <span className="notice-mark" />
           <div className="col" style={{ gap: 8 }}>
-            <strong>
-              {unmanaged.total} mod{unmanaged.total === 1 ? '' : 's'} in the game folder {unmanaged.total === 1 ? 'is' : 'are'} not
-              tracked by {profile.name}
-            </strong>
+            <strong>{t('library.untrackedTitle', { count: unmanaged.total, profile: profile.name })}</strong>
             <span className="faint">
               {[
-                unmanaged.folders.length ? `${unmanaged.folders.length} Mod Loader folder(s)` : '',
-                unmanaged.asi.length ? `${unmanaged.asi.length} .asi plugin(s)` : '',
-                unmanaged.cleo.length ? `${unmanaged.cleo.length} CLEO file(s)` : ''
+                unmanaged.folders.length ? t('library.untrackedFolders', { count: unmanaged.folders.length }) : '',
+                unmanaged.asi.length ? t('library.untrackedAsi', { count: unmanaged.asi.length }) : '',
+                unmanaged.cleo.length ? t('library.untrackedCleo', { count: unmanaged.cleo.length }) : ''
               ]
                 .filter(Boolean)
                 .join(', ')}
               {' — '}
               {[...unmanaged.folders, ...unmanaged.asi, ...unmanaged.cleo].slice(0, 6).join(', ')}
-              {unmanaged.total > 6 ? ` and ${unmanaged.total - 6} more` : ''}. Adopting indexes them in place, with the
-              priorities already in modloader.ini. No file is moved, renamed or rewritten.
+              {unmanaged.total > 6 ? t('library.untrackedMore', { count: unmanaged.total - 6 }) : ''}.{' '}
+              {t('library.untrackedHint')}
             </span>
             <span className="row">
               <Button variant="accent" size="sm" disabled={adopting} onClick={adopt} icon={<Icon.download width={13} height={13} />}>
-                {adopting ? 'Scanning…' : `Adopt into ${profile.name}`}
+                {adopting ? t('library.scanning') : t('library.adoptInto', { profile: profile.name })}
               </Button>
             </span>
           </div>
@@ -182,23 +181,23 @@ export function LibraryScreen(): JSX.Element {
       ) : null}
 
       <div className="row wrap" style={{ marginBottom: 12 }}>
-        <Search value={search} onChange={setSearch} placeholder="Filter by name or author…" />
+        <Search value={search} onChange={setSearch} placeholder={t('library.filterPlaceholder')} />
         <Button
           size="sm"
           variant={onlyProblems ? 'accent' : 'default'}
           onClick={() => setOnlyProblems((v) => !v)}
           icon={<Icon.warn width={13} height={13} />}
         >
-          Needs attention
+          {t('library.needsAttention')}
         </Button>
         <Button variant="primary" icon={<Icon.plus width={13} height={13} />} disabled={planBusy} onClick={installFromFile}>
-          Install from file…
+          {t('library.installFromFile')}
         </Button>
         <span className="spacer" />
         <span className="faint num">
-          {rows.length} mod(s) · {formatBytes(totals.size)}
-          {totals.conflicts ? ` · ${totals.conflicts} conflicting file(s)` : ''}
-          {totals.updates ? ` · ${totals.updates} update(s)` : ''}
+          {t('library.countAndSize', { count: rows.length, size: formatBytes(totals.size) })}
+          {totals.conflicts ? t('library.conflictingFiles', { count: totals.conflicts }) : ''}
+          {totals.updates ? t('library.updates', { count: totals.updates }) : ''}
         </span>
       </div>
 
@@ -213,16 +212,16 @@ export function LibraryScreen(): JSX.Element {
             style={{ marginBottom: 10 }}
           >
             <div className="row" style={{ padding: '9px 13px' }}>
-              <Badge tone="accent">{selected.size} selected</Badge>
+              <Badge tone="accent">{t('library.selected', { count: selected.size })}</Badge>
               <Button size="sm" onClick={() => void bulk(true)}>
-                Enable
+                {t('library.enable')}
               </Button>
               <Button size="sm" onClick={() => void bulk(false)}>
-                Disable
+                {t('library.disable')}
               </Button>
               <span className="spacer" />
               <Button size="sm" variant="quiet" onClick={() => setSelected(new Set())}>
-                Clear
+                {t('library.clear')}
               </Button>
             </div>
           </motion.div>
@@ -232,15 +231,15 @@ export function LibraryScreen(): JSX.Element {
       {mods.error ? (
         <ErrorNote message={mods.error} onRetry={mods.reload} />
       ) : mods.loading ? (
-        <Loading label="Reading the install index…" />
+        <Loading label={t('library.reading')} />
       ) : rows.length === 0 ? (
         <Empty
-          title={search || onlyProblems ? 'Nothing matches' : 'Nothing installed in this profile'}
+          title={search || onlyProblems ? t('library.nothingMatches') : t('library.nothingInstalled')}
           art={art}
           hint={
             search || onlyProblems
-              ? 'Clear the filters to see everything in this profile.'
-              : 'Install from the Browse screen, or from an archive you already downloaded. Modão shows the full file-level plan before it writes anything.'
+              ? t('library.clearFiltersHint')
+              : t('library.nothingInstalledHint')
           }
           action={
             search || onlyProblems ? (
@@ -251,13 +250,13 @@ export function LibraryScreen(): JSX.Element {
                   setOnlyProblems(false)
                 }}
               >
-                Clear filters
+                {t('library.clearFilters')}
               </Button>
             ) : (
               <span className="row wrap" style={{ justifyContent: 'center' }}>
                 {unmanaged ? (
                   <Button variant="primary" disabled={adopting} onClick={adopt}>
-                    {adopting ? 'Scanning…' : `Adopt the ${unmanaged.total} mod(s) already in the game folder`}
+                    {adopting ? t('library.scanning') : t('library.adoptAll', { count: unmanaged.total })}
                   </Button>
                 ) : null}
                 <Button variant={unmanaged ? 'default' : 'primary'} onClick={installFromFile}>
@@ -274,7 +273,7 @@ export function LibraryScreen(): JSX.Element {
               <tr>
                 <th style={{ width: 34 }}>
                   <Checkbox
-                    label="Select all"
+                    label={t('library.selectAll')}
                     on={selected.size === rows.length && rows.length > 0}
                     onChange={(v) => setSelected(v ? new Set(rows.map((r) => r.installId)) : new Set())}
                   />
@@ -295,7 +294,7 @@ export function LibraryScreen(): JSX.Element {
                 <tr key={m.installId} className={m.enabled ? '' : 'off'}>
                   <td>
                     <Checkbox
-                      label={`Select ${m.title}`}
+                      label={t('library.selectOne', { name: m.title })}
                       on={selected.has(m.installId)}
                       onChange={(v) => {
                         const next = new Set(selected)
@@ -308,7 +307,7 @@ export function LibraryScreen(): JSX.Element {
                   <td>
                     <Switch
                       on={m.enabled}
-                      label={`Enable ${m.title}`}
+                      label={t('library.enableOne', { name: m.title })}
                       onChange={(v) => void toggle(m, v)}
                     />
                   </td>
@@ -354,7 +353,7 @@ export function LibraryScreen(): JSX.Element {
                           variant="quiet"
                           iconOnly
                           aria-label="Open source page"
-                          title="Open its MixMods page"
+                          title={t('library.openPage')}
                           onClick={() => void api.openExternal(m.sourceUrl)}
                           icon={<Icon.external />}
                         />
@@ -364,7 +363,7 @@ export function LibraryScreen(): JSX.Element {
                         variant="quiet"
                         iconOnly
                         aria-label="Readme"
-                        title="Show the raw readme"
+                        title={t('library.showReadme')}
                         onClick={() => setReadmeFor(m)}
                         icon={<Icon.doc />}
                       />
@@ -373,7 +372,7 @@ export function LibraryScreen(): JSX.Element {
                         variant="quiet"
                         iconOnly
                         aria-label="Uninstall"
-                        title="Uninstall"
+                        title={t('library.uninstall')}
                         onClick={() => setUninstalling(m)}
                         icon={<Icon.trash />}
                       />
@@ -406,10 +405,11 @@ export function LibraryScreen(): JSX.Element {
 }
 
 function ReadmeModal(props: { mod: InstalledMod; onClose: () => void }): JSX.Element {
+  const t = useT()
   const readme = useAsync(() => api.readme(props.mod.installId), [props.mod.installId])
   return (
     <Modal
-      title={`Readme — ${props.mod.title}`}
+      title={t('library.readmeTitle', { name: props.mod.title })}
       subtitle="Exactly as the archive shipped it, decoded from Windows-1252."
       onClose={props.onClose}
       width={760}
@@ -428,6 +428,7 @@ function ReadmeModal(props: { mod: InstalledMod; onClose: () => void }): JSX.Ele
 }
 
 function DetailModal(props: { mod: InstalledMod; onClose: () => void; onChanged: () => void }): JSX.Element {
+  const t = useT()
   const m = props.mod
   const [busy, setBusy] = useState<string | null>(null)
   return (
@@ -461,7 +462,7 @@ function DetailModal(props: { mod: InstalledMod; onClose: () => void; onChanged:
       {m.subMods.length > 0 ? (
         <>
           <hr className="divider" />
-          <h3>Sub-mods</h3>
+          <h3>{t('library.subMods')}</h3>
           <p className="faint">
             Nested folders inside a Mod Loader mod are independent units — Mod Loader treats each as its own mod, so they
             can be turned off one at a time without uninstalling the whole thing.
@@ -504,12 +505,13 @@ function DetailModal(props: { mod: InstalledMod; onClose: () => void; onChanged:
 }
 
 function UninstallModal(props: { mod: InstalledMod; onClose: () => void; onDone: () => void }): JSX.Element {
+  const t = useT()
   const preview = useAsync(() => api.rollbackPreview(props.mod.installId), [props.mod.installId])
   const pushToast = useApp((s) => s.pushToast)
   const [busy, setBusy] = useState(false)
   return (
     <Confirm
-      title={`Uninstall ${props.mod.title}?`}
+      title={t('library.uninstallTitle', { name: props.mod.title })}
       danger
       busy={busy}
       confirmLabel="Uninstall"

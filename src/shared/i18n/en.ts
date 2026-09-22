@@ -45,7 +45,9 @@ export const en: DeepPartial<typeof ptBR> = {
     unknown: 'unknown',
     copy: 'Copy',
     open: 'Open',
-    details: 'Details'
+    details: 'Details',
+    working: 'Working…',
+    wentWrong: 'Something went wrong'
   },
   nav: {
     setup: 'Set up',
@@ -68,6 +70,7 @@ export const en: DeepPartial<typeof ptBR> = {
     pickFolder: 'Select your GTA folder (San Andreas, III, Vice City or the Definitive Edition)',
     notFound: 'No GTA executable in {path}.',
     launch: 'Play',
+    added: '{name} added from {path}.',
     switchFirst: '{profile} is a {game} profile and the active install is {active}. Switch to that game first.'
   },
   crashes: {
@@ -96,6 +99,13 @@ export const en: DeepPartial<typeof ptBR> = {
     crashAddress: 'Crash address',
     faultLocation: 'Fault location',
     notLookedUpTitle: 'Not looked up'
+  },
+  download: {
+    noLink: 'No download link is recorded for this release.',
+    invalidLink: 'The recorded download link is not a valid URL.',
+    landingHost: '{host} serves a download page rather than the file itself, and refuses requests that are not a browser.',
+    notARelease: 'That GitHub link is not a release.',
+    notAnArchive: '{host} did not give a link ending in .7z, .zip or .rar.'
   },
   errors: {
     noGame: 'No game folder selected. Add a GTA install first.',

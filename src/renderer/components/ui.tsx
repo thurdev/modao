@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { Icon } from './icons'
+import { useT } from '../lib/i18n'
 import { collapseVariants, modalVariants, scrimVariants, snappy, springy } from '../lib/motion'
 
 // ───────────────────────────── buttons and inputs ─────────────────────────────
@@ -207,6 +208,7 @@ export function Confirm(props: {
   onConfirm: () => void | Promise<void>
   onClose: () => void
 }): JSX.Element {
+  const t = useT()
   return (
     <Modal
       title={props.title}
@@ -214,10 +216,10 @@ export function Confirm(props: {
       width={640}
       footer={
         <>
-          <Button onClick={props.onClose}>Cancel</Button>
+          <Button onClick={props.onClose}>{t('app.cancel')}</Button>
           <span className="spacer" />
           <Button variant={props.danger ? 'danger' : 'primary'} disabled={props.busy} onClick={() => void props.onConfirm()}>
-            {props.busy ? 'Working…' : props.confirmLabel}
+            {props.busy ? t('app.working') : props.confirmLabel}
           </Button>
         </>
       }
@@ -336,6 +338,7 @@ export function useAsync<T>(
 }
 
 export function Loading(props: { label?: string }): JSX.Element {
+  const t = useT()
   return (
     <div className="row faint" style={{ padding: '14px 2px' }}>
       <motion.span
@@ -343,22 +346,23 @@ export function Loading(props: { label?: string }): JSX.Element {
         animate={{ opacity: [0.35, 1, 0.35] }}
         transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
       />
-      {props.label ?? 'Loading…'}
+      {props.label ?? t('app.loading')}
     </div>
   )
 }
 
 export function ErrorNote(props: { message: string; onRetry?: () => void }): JSX.Element {
+  const t = useT()
   return (
     <div className="notice" data-kind="error">
       <span className="notice-mark" />
       <div className="col" style={{ gap: 6 }}>
-        <strong>Something went wrong</strong>
+        <strong>{t('app.wentWrong')}</strong>
         <span className="muted">{props.message}</span>
         {props.onRetry ? (
           <span>
             <Button size="sm" onClick={props.onRetry}>
-              Try again
+              {t('app.retry')}
             </Button>
           </span>
         ) : null}

@@ -4,6 +4,7 @@ import { GAME_ORDER, gameDefinition, type GameKind } from '@shared/games'
 import { useApp } from '../state/store'
 import { api } from '../api'
 import { Icon } from './icons'
+import { useT } from '../lib/i18n'
 import { snappy } from '../lib/motion'
 
 /**
@@ -13,6 +14,7 @@ import { snappy } from '../lib/motion'
  * filter, the whole app follows whichever install is selected here.
  */
 export function GamePicker(): JSX.Element {
+  const t = useT()
   const { games, game, setActiveGame, pushToast, refreshGames } = useApp()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -41,7 +43,7 @@ export function GamePicker(): JSX.Element {
       const added = await api.addGame(folder)
       await refreshGames()
       await setActiveGame(added.id)
-      pushToast('success', `${added.gameName} added from ${added.path}.`)
+      pushToast('success', t('game.added', { name: added.gameName, path: added.path }))
       setOpen(false)
     } catch (e) {
       pushToast('error', (e as Error).message)
@@ -56,14 +58,14 @@ export function GamePicker(): JSX.Element {
         className="game-current"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        title={game?.path ?? 'No game folder selected yet'}
+        title={game?.path ?? t('game.none')}
       >
         <span className="game-chip" data-game={game?.kind ?? 'sa'}>
           {current?.shortName ?? '—'}
         </span>
         <span className="game-names">
-          <span className="game-name">{current?.name ?? 'No game selected'}</span>
-          <span className="game-path">{game ? game.path : 'Add your install to begin'}</span>
+          <span className="game-name">{current?.name ?? t('game.none')}</span>
+          <span className="game-path">{game ? game.path : t('game.addFirst')}</span>
         </span>
         <Icon.chevron className={open ? 'rot' : ''} width={12} height={12} />
       </button>
@@ -90,7 +92,7 @@ export function GamePicker(): JSX.Element {
             ))}
             {others.length === 0 ? (
               <div className="game-empty">
-                Only one install so far. Modão manages {GAME_ORDER.map((k) => gameDefinition(k).shortName).join(', ')}.
+                {t('game.onlyOne', { list: GAME_ORDER.map((k) => gameDefinition(k).shortName).join(', ') })}
               </div>
             ) : null}
             <button className="game-option add" disabled={busy} onClick={() => void addAnother()}>
@@ -98,8 +100,8 @@ export function GamePicker(): JSX.Element {
                 <Icon.plus width={12} height={12} />
               </span>
               <span className="game-names">
-                <span className="game-name">Add another install</span>
-                <span className="game-path">San Andreas, III, Vice City or the Definitive Edition</span>
+                <span className="game-name">{t('game.addAnother')}</span>
+                <span className="game-path">{t('game.addAnotherHint')}</span>
               </span>
             </button>
           </motion.div>

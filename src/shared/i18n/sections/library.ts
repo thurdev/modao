@@ -6,6 +6,86 @@
  * Placeholders are `{name}`; a `count` variable selects `_one` / `_other`.
  */
 export const library = {
-  pt: {},
-  en: {}
+  pt: {
+    intro:
+      'Tudo que está instalado no perfil ativo. Ligar e desligar um mod, mudar a prioridade dele e desinstalar mexem só neste perfil e no bloco dele no modloader.ini.',
+    untrackedTitle_one: '{count} mod na pasta do jogo não é rastreado por {profile}',
+    untrackedTitle_other: '{count} mods na pasta do jogo não são rastreados por {profile}',
+    untrackedFolders: '{count} pasta(s) do Mod Loader',
+    untrackedAsi: '{count} plugin(s) .asi',
+    untrackedCleo: '{count} arquivo(s) CLEO',
+    untrackedMore: ' e mais {count}',
+    untrackedHint:
+      'Adotar indexa no lugar, com as prioridades que já estão no modloader.ini. Nenhum arquivo é movido, renomeado ou reescrito.',
+    adoptInto: 'Adotar em {profile}',
+    adoptAll: 'Adotar os {count} mod(s) que já estão na pasta do jogo',
+    scanning: 'Procurando…',
+    filterPlaceholder: 'Filtrar por nome ou autor…',
+    needsAttention: 'Precisa de atenção',
+    installFromFile: 'Instalar de um arquivo…',
+    countAndSize: '{count} mod(s) · {size}',
+    conflictingFiles: ' · {count} arquivo(s) em conflito',
+    updates: ' · {count} atualização(ões)',
+    selected: '{count} selecionado(s)',
+    enable: 'Ligar',
+    disable: 'Desligar',
+    clear: 'Limpar',
+    reading: 'Lendo o índice de instalação…',
+    nothingMatches: 'Nada encontrado',
+    nothingInstalled: 'Nada instalado neste perfil',
+    clearFiltersHint: 'Tire os filtros para ver tudo deste perfil.',
+    nothingInstalledHint:
+      'Instale pela tela Explorar, ou de um arquivo que você já baixou. O Modão mostra o plano completo, arquivo por arquivo, antes de escrever qualquer coisa.',
+    clearFilters: 'Limpar filtros',
+    selectAll: 'Selecionar tudo',
+    selectOne: 'Selecionar {name}',
+    enableOne: 'Ligar {name}',
+    openPage: 'Abrir a página no MixMods',
+    showReadme: 'Ver o leiame original',
+    uninstall: 'Desinstalar',
+    readmeTitle: 'Leiame — {name}',
+    subMods: 'Sub-mods',
+    uninstallTitle: 'Desinstalar {name}?'
+  },
+  en: {
+    intro:
+      "Everything installed in the active profile. Enabling, disabling, changing a mod's priority and uninstalling touch this profile and its block in modloader.ini, nothing else.",
+    untrackedTitle_one: '{count} mod in the game folder is not tracked by {profile}',
+    untrackedTitle_other: '{count} mods in the game folder are not tracked by {profile}',
+    untrackedFolders: '{count} Mod Loader folder(s)',
+    untrackedAsi: '{count} .asi plugin(s)',
+    untrackedCleo: '{count} CLEO file(s)',
+    untrackedMore: ' and {count} more',
+    untrackedHint:
+      'Adopting indexes them in place, with the priorities already in modloader.ini. No file is moved, renamed or rewritten.',
+    adoptInto: 'Adopt into {profile}',
+    adoptAll: 'Adopt the {count} mod(s) already in the game folder',
+    scanning: 'Scanning…',
+    filterPlaceholder: 'Filter by name or author…',
+    needsAttention: 'Needs attention',
+    installFromFile: 'Install from file…',
+    countAndSize: '{count} mod(s) · {size}',
+    conflictingFiles: ' · {count} conflicting file(s)',
+    updates: ' · {count} update(s)',
+    selected: '{count} selected',
+    enable: 'Enable',
+    disable: 'Disable',
+    clear: 'Clear',
+    reading: 'Reading the install index…',
+    nothingMatches: 'Nothing matches',
+    nothingInstalled: 'Nothing installed in this profile',
+    clearFiltersHint: 'Clear the filters to see everything in this profile.',
+    nothingInstalledHint:
+      'Install from the Browse screen, or from an archive you already downloaded. Modão shows the full file-level plan before it writes anything.',
+    clearFilters: 'Clear filters',
+    selectAll: 'Select all',
+    selectOne: 'Select {name}',
+    enableOne: 'Enable {name}',
+    openPage: 'Open its MixMods page',
+    showReadme: 'Show the raw readme',
+    uninstall: 'Uninstall',
+    readmeTitle: 'Readme — {name}',
+    subMods: 'Sub-mods',
+    uninstallTitle: 'Uninstall {name}?'
+  }
 } as const

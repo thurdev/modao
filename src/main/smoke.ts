@@ -43,10 +43,18 @@ export async function runSmoke(): Promise<number> {
     catalog.mods.every((m) => m.sourceUrl.startsWith('https://www.mixmods.com.br/')),
     catalog.mods.find((m) => !m.sourceUrl.startsWith('https://www.mixmods.com.br/'))?.slug
   )
+  // The bundled catalogue is a way to find someone else's work, not a copy of
+  // it: a summary and a link ship with the app, and the author's post is read
+  // from MixMods when the user opens the mod.
   check(
-    'the catalogue carries the mod pages as written, not just a summary',
-    catalog.mods.filter((m) => m.blocks.length > 0).length > catalog.mods.length / 2,
-    `${catalog.mods.filter((m) => m.blocks.length > 0).length}/${catalog.mods.length} with page blocks`
+    'the bundled catalogue carries a summary, not the whole post',
+    catalog.mods.every((m) => m.blocks.length === 0),
+    `${catalog.mods.filter((m) => m.blocks.length > 0).length} entries still carry page blocks`
+  )
+  check(
+    'every entry still has something to read and a link to the original',
+    catalog.mods.every((m) => m.description.trim().length > 0 && m.sourceUrl.length > 0),
+    catalog.mods.find((m) => !m.description.trim())?.slug
   )
   const paywalled = catalog.mods.filter((m) => m.paywalled)
   check('paywalled releases are flagged and never carry a direct download', paywalled.every((m) => m.versions.every((v) => !v.downloadUrl) || m.paywalled), paywalled.map((m) => m.slug))

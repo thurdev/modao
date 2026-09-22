@@ -86,16 +86,18 @@ export function SettingsScreen(): JSX.Element {
       {/* ── catalog ─────────────────────────────────────────── */}
       <motion.section variants={itemVariants} className="card">
         <div className="card-head">
-          <h3>Catalog</h3>
+          <h3>{t('settings.catalog')}</h3>
           <span className="spacer" />
           <span className="faint">
-            {seed.data ? `${seed.data.count} mods indexed` : ''}
-            {seed.data?.lastCrawl ? ` · last crawl ${formatDate(seed.data.lastCrawl)}` : ' · never crawled'}
+            {seed.data ? t('settings.modsIndexed', { count: seed.data.count }) : ''}
+            {seed.data?.lastCrawl
+              ? t('settings.lastCrawl', { date: formatDate(seed.data.lastCrawl) })
+              : t('settings.neverCrawled')}
           </span>
         </div>
         <Row
-          title="Index MixMods over the network"
-          desc="Off by default. When on, Modão crawls mod pages at one request per second, honours robots.txt, caches with ETag/Last-Modified and re-reads a page at most once a day. Paywalled early-access releases are never downloaded — only linked."
+          title={t('settings.indexTitle')}
+          desc={t('settings.indexDesc')}
           control={
             <Switch
               label="Enable catalog crawling"
@@ -105,8 +107,8 @@ export function SettingsScreen(): JSX.Element {
           }
         />
         <Row
-          title="Pages per run"
-          desc="How many mod pages one indexing run may visit. 0 means every GTA: San Andreas and SA:DE page on the site — a few thousand, paced at one request per second, resumable and cancellable. A page read in the last day comes from cache, so re-running is cheap."
+          title={t('settings.pagesPerRun')}
+          desc={t('settings.pagesPerRunDesc')}
           control={
             <input
               className="input num"
@@ -120,8 +122,8 @@ export function SettingsScreen(): JSX.Element {
           }
         />
         <Row
-          title="Catalog data"
-          desc="Re-import the bundled seed catalog, or start an indexing run now."
+          title={t('settings.catalogData')}
+          desc={t('settings.catalogDataDesc')}
           control={
             <div className="row">
               <Button
@@ -133,7 +135,7 @@ export function SettingsScreen(): JSX.Element {
                   pushToast('success', `Seed catalog reloaded: ${r.count} mods.`)
                 }}
               >
-                Reload seed
+                {t('settings.reloadSeed')}
               </Button>
               <Button
                 size="sm"
@@ -144,7 +146,7 @@ export function SettingsScreen(): JSX.Element {
                   pushToast(r.started ? 'info' : 'error', r.message)
                 }}
               >
-                Index now
+                {t('settings.indexNow')}
               </Button>
             </div>
           }
@@ -154,11 +156,11 @@ export function SettingsScreen(): JSX.Element {
       {/* ── behaviour ─────────────────────────────────────────── */}
       <motion.section variants={itemVariants} className="card">
         <div className="card-head">
-          <h3>Behaviour</h3>
+          <h3>{t('settings.behaviour')}</h3>
         </div>
         <Row
-          title="Read the Event Log after playing"
-          desc="Looks for an Application Error record for gta_sa.exe and resolves the crash address against CrashList.txt."
+          title={t('settings.scanCrashes')}
+          desc={t('settings.scanCrashesDesc')}
           control={
             <Switch
               label="Scan for crashes on launch"
@@ -168,8 +170,8 @@ export function SettingsScreen(): JSX.Element {
           }
         />
         <Row
-          title="Snapshot saves automatically"
-          desc="Takes a save snapshot before every profile switch. The last 10 automatic snapshots per profile are kept; older ones move to quarantine rather than being deleted."
+          title={t('settings.autoSnapshot')}
+          desc={t('settings.autoSnapshotDesc')}
           control={
             <Switch
               label="Automatic save snapshots"
@@ -179,8 +181,8 @@ export function SettingsScreen(): JSX.Element {
           }
         />
         <Row
-          title="Local install telemetry"
-          desc="Counts how often you install a mod and whether you disable it soon after. Used only to inform the synthesised ranking on this machine."
+          title={t('settings.telemetry')}
+          desc={t('settings.telemetryDesc')}
           control={
             <Switch
               label="Local telemetry"
@@ -194,7 +196,7 @@ export function SettingsScreen(): JSX.Element {
       {/* ── game folders ─────────────────────────────────────────── */}
       <motion.section variants={itemVariants} className="card">
         <div className="card-head">
-          <h3>Game folders</h3>
+          <h3>{t('settings.gameFolders')}</h3>
           <span className="spacer" />
           <Button
             size="sm"
@@ -211,7 +213,7 @@ export function SettingsScreen(): JSX.Element {
               }
             }}
           >
-            Add folder
+            {t('settings.addFolder')}
           </Button>
         </div>
         <div className="card-body col">
@@ -245,10 +247,10 @@ export function SettingsScreen(): JSX.Element {
                       await refreshGames()
                     }}
                   >
-                    Use this
+                    {t('settings.useThis')}
                   </Button>
                 ) : null}
-                <Button size="sm" variant="quiet" iconOnly aria-label="Forget" onClick={() => setRemoving(g)} icon={<Icon.trash />} />
+                <Button size="sm" variant="quiet" iconOnly aria-label={t('settings.forget')} onClick={() => setRemoving(g)} icon={<Icon.trash />} />
               </div>
             </div>
           ))}
@@ -258,7 +260,7 @@ export function SettingsScreen(): JSX.Element {
       {/* ── storage ─────────────────────────────────────────── */}
       <motion.section variants={itemVariants} className="card">
         <div className="card-head">
-          <h3>Storage</h3>
+          <h3>{t('settings.storage')}</h3>
           <span className="spacer" />
           {storage.data ? (
             <span className="faint mono ellipsis" title={storage.data.userData}>
@@ -287,13 +289,13 @@ export function SettingsScreen(): JSX.Element {
               </p>
               <div className="row wrap">
                 <Button size="sm" disabled={busy === 'http'} onClick={() => void clear('http')}>
-                  Clear page cache
+                  {t('settings.clearPageCache')}
                 </Button>
                 <Button size="sm" disabled={busy === 'archives'} onClick={() => void clear('archives')}>
-                  Delete downloaded archives
+                  {t('settings.deleteArchives')}
                 </Button>
                 <Button size="sm" variant="danger" disabled={busy === 'quarantine'} onClick={() => void clear('quarantine')}>
-                  Empty quarantine
+                  {t('settings.emptyQuarantine')}
                 </Button>
                 <span className="spacer" />
                 <Button size="sm" variant="quiet" onClick={() => void api.revealPath(storage.data!.userData)}>
@@ -353,6 +355,7 @@ export function SettingsScreen(): JSX.Element {
 }
 
 function Row(props: { title: string; desc: string; control: React.ReactNode }): JSX.Element {
+  const t = useT()
   return (
     <div className="setting-row">
       <div>
@@ -367,6 +370,7 @@ function Row(props: { title: string; desc: string; control: React.ReactNode }): 
 function StorageBar(props: {
   report: { storeBytes: number; archivesBytes: number; snapshotBytes: number; quarantineBytes: number; cacheBytes: number; dbBytes: number }
 }): JSX.Element {
+  const t = useT()
   const r = props.report
   const parts = [
     { v: r.storeBytes, c: 'var(--accent)' },
@@ -393,6 +397,7 @@ function StorageBar(props: {
 }
 
 function Legend(props: { label: string; value: number; color: string }): JSX.Element {
+  const t = useT()
   return (
     <span className="row" style={{ gap: 6 }}>
       <span style={{ width: 8, height: 8, borderRadius: 2, background: props.color }} />

@@ -46,15 +46,32 @@ export interface DownloadKind {
   host: string
   /** Why it cannot be fetched, in words the UI can show as-is. */
   reason: string | null
+  /** i18n key and parameters for `reason`, so the UI can say it in the user's language. */
+  reasonKey: string | null
+  reasonParams?: Record<string, string>
 }
 
 export function classifyDownload(url: string | null): DownloadKind {
-  if (!url) return { direct: false, kind: 'none', host: '', reason: 'No download link is recorded for this release.' }
+  if (!url) {
+    return {
+      direct: false,
+      kind: 'none',
+      host: '',
+      reason: 'No download link is recorded for this release.',
+      reasonKey: 'download.noLink'
+    }
+  }
   let parsed: URL
   try {
     parsed = new URL(url)
   } catch {
-    return { direct: false, kind: 'none', host: '', reason: 'The recorded download link is not a valid URL.' }
+    return {
+      direct: false,
+      kind: 'none',
+      host: '',
+      reason: 'The recorded download link is not a valid URL.',
+      reasonKey: 'download.invalidLink'
+    }
   }
   const host = parsed.hostname.replace(/^www\./, '')
 
@@ -63,7 +80,9 @@ export function classifyDownload(url: string | null): DownloadKind {
       direct: false,
       kind: 'landing',
       host,
-      reason: `${host} serves a download page rather than the file itself, and refuses requests that are not a browser.`
+      reason: `${host} serves a download page rather than the file itself, and refuses requests that are not a browser.`,
+      reasonKey: 'download.landingHost',
+      reasonParams: { host }
     }
   }
 
@@ -71,15 +90,30 @@ export function classifyDownload(url: string | null): DownloadKind {
     // An asset URL is the file. A release page is not - but GitHub publishes
     // its releases through an API, so Modão can find the asset itself
     // rather than sending the user off to look for it.
-    if (/\/releases\/download\//.test(parsed.pathname)) return { direct: true, kind: 'file', host, reason: null }
-    if (githubRepo(parsed)) return { direct: true, kind: 'github-release', host, reason: null }
-    return { direct: false, kind: 'landing', host, reason: 'That GitHub link is not a release.' }
+    if (/\/releases\/download\//.test(parsed.pathname)) {
+      return { direct: true, kind: 'file', host, reason: null, reasonKey: null }
+    }
+    if (githubRepo(parsed)) return { direct: true, kind: 'github-release', host, reason: null, reasonKey: null }
+    return {
+      direct: false,
+      kind: 'landing',
+      host,
+      reason: 'That GitHub link is not a release.',
+      reasonKey: 'download.notARelease'
+    }
   }
 
   if (!ARCHIVE_EXTENSION.test(parsed.pathname)) {
-    return { direct: false, kind: 'landing', host, reason: `${host} did not give a link ending in .7z, .zip or .rar.` }
+    return {
+      direct: false,
+      kind: 'landing',
+      host,
+      reason: `${host} did not give a link ending in .7z, .zip or .rar.`,
+      reasonKey: 'download.notAnArchive',
+      reasonParams: { host }
+    }
   }
-  return { direct: true, kind: 'file', host, reason: null }
+  return { direct: true, kind: 'file', host, reason: null, reasonKey: null }
 }
 
 /** owner/repo for any github.com/<owner>/<repo>/releases… URL. */

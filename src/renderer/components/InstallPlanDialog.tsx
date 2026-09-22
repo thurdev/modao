@@ -4,6 +4,7 @@ import type { DestinationClass, PlannedFile } from '@shared/types'
 import { DESTINATION_LABELS } from '@shared/types'
 import { api, formatBytes } from '../api'
 import { useApp } from '../state/store'
+import { useT } from '../lib/i18n'
 import { Badge, Button, Disclosure, Modal } from './ui'
 import { Icon } from './icons'
 import { itemVariants, listVariants, snappy } from '../lib/motion'
@@ -16,6 +17,7 @@ const DESTINATIONS = Object.keys(DESTINATION_LABELS) as DestinationClass[]
  * single byte is written.
  */
 export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | null {
+  const t = useT()
   const plan = useApp((s) => s.plan)
   const setPlan = useApp((s) => s.setPlan)
   const busy = useApp((s) => s.planBusy)
@@ -98,36 +100,36 @@ export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | 
                   void api.openExternal(plan.sourceUrl!)
                 }}
               >
-                source page
+                {t('install.plan.sourcePage')}
               </a>
             </>
           ) : null}
           {' · '}
-          {plan.files.length} file(s), {formatBytes(plan.totalSize)}
-          {overwrites.length ? ` · ${overwrites.length} would be displaced` : ''}
+          {t('install.plan.fileCountSize', { count: plan.files.length, size: formatBytes(plan.totalSize) })}
+          {overwrites.length ? t('install.plan.displaced', { count: overwrites.length }) : ''}
         </>
       }
       onClose={discard}
       footer={
         <>
           <Button onClick={discard} disabled={busy}>
-            Cancel
+            {t('app.cancel')}
           </Button>
           {plan.readmes.length > 0 ? (
             <Button variant="quiet" onClick={() => setShowReadme((v) => !v)} icon={<Icon.doc width={13} height={13} />}>
-              {showReadme ? 'Hide raw readme' : 'Raw readme'}
+              {showReadme ? t('install.plan.hideReadme') : t('install.plan.rawReadme')}
             </Button>
           ) : null}
           <span className="spacer" />
           <span className="faint">
             {plan.requiresVariantChoice
-              ? 'Pick a variant to continue'
+              ? t('install.plan.pickVariant')
               : blockers.length
                 ? blockers[0].message
-                : 'Nothing is written until you confirm'}
+                : t('install.plan.nothingWritten')}
           </span>
           <Button variant="primary" disabled={!canApply || busy} onClick={apply}>
-            {busy ? 'Working…' : `Install ${plan.files.length} file(s)`}
+            {busy ? t('install.plan.working') : t('install.plan.installButton', { count: plan.files.length })}
           </Button>
         </>
       }
@@ -154,7 +156,7 @@ export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | 
               {group.question}
             </header>
             <div className="panel-body col">
-              {group.hint ? <div className="faint">Readme says: “{group.hint}”</div> : null}
+              {group.hint ? <div className="faint">{t('install.plan.readmeSays', { hint: group.hint })}</div> : null}
               {group.options.map((o) => {
                 const selected = plan.files.some((f) => f.sourcePath.startsWith(`${o.path}/`))
                 return (
@@ -169,10 +171,10 @@ export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | 
                     <span style={{ flex: 1, minWidth: 0 }}>
                       <span className="row" style={{ gap: 7 }}>
                         <strong>{o.label}</strong>
-                        {o.recommended ? <Badge tone="ok">recommended</Badge> : null}
+                        {o.recommended ? <Badge tone="ok">{t('install.plan.recommended')}</Badge> : null}
                       </span>
                       <span className="faint">
-                        {o.fileCount} file(s), {formatBytes(o.size)}
+                        {t('install.plan.fileCountSize', { count: o.fileCount, size: formatBytes(o.size) })}
                         {o.note ? ` — ${o.note}` : ''}
                       </span>
                     </span>
@@ -187,18 +189,18 @@ export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | 
           <motion.section variants={itemVariants} className="panel">
             <header>
               <Icon.doc width={14} height={14} />
-              Readme
+              {t('install.plan.readmeHeader')}
               <Badge>{plan.readmes[0].encoding}</Badge>
               <Badge>{plan.readmes[0].language}</Badge>
               <span className="spacer" />
               <span className="faint" style={{ fontWeight: 400 }}>
-                {plan.readmes[0].instructions.length} instruction(s) parsed
+                {t('install.plan.instructionsParsed', { count: plan.readmes[0].instructions.length })}
               </span>
             </header>
             <div className="panel-body col">
               {plan.readmes[0].instructions.length === 0 ? (
                 <p className="faint" style={{ margin: 0 }}>
-                  No install instruction line was recognised. The plan below comes from inspecting the archive itself.
+                  {t('install.plan.noInstructionLine')}
                 </p>
               ) : (
                 plan.readmes[0].instructions.map((ins, idx) => (
@@ -206,14 +208,14 @@ export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | 
                     <Badge tone="accent">{DESTINATION_LABELS[ins.destination]}</Badge>
                     <div style={{ minWidth: 0 }}>
                       <div className="mono">“{ins.line}”</div>
-                      {ins.folder ? <div className="faint">Folder named in the readme: {ins.folder}</div> : null}
+                      {ins.folder ? <div className="faint">{t('install.plan.folderNamedInReadme', { folder: ins.folder })}</div> : null}
                     </div>
                   </div>
                 ))
               )}
               {plan.readmes[0].requirementUrls.length > 0 ? (
                 <div className="faint row wrap" style={{ gap: 8 }}>
-                  Links in the readme:
+                  {t('install.plan.linksInReadme')}
                   {plan.readmes[0].requirementUrls.map((u) => (
                     <a
                       key={u}
@@ -241,20 +243,22 @@ export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | 
           <motion.section variants={itemVariants} className="panel">
             <header>
               <Icon.bolt width={14} height={14} />
-              Dependency plan
+              {t('install.plan.dependencyPlan')}
             </header>
             <div className="panel-body col">
               {plan.dependencies.map((d, i) => (
                 <div key={i} className="row top" style={{ gap: 9 }}>
                   <Badge tone={d.resolution === 'blocking' ? 'danger' : d.satisfied ? 'ok' : 'warn'}>
-                    {d.kind === 'conflicts' ? 'must not coexist' : d.kind === 'alt' ? 'one of' : 'requires'}
+                    {d.kind === 'conflicts' ? t('install.plan.mustNotCoexist') : d.kind === 'alt' ? t('install.plan.oneOf') : t('install.plan.requires')}
                   </Badge>
                   <div style={{ minWidth: 0 }}>
                     <strong>{d.title}</strong>
                     {d.versionRange ? <span className="faint"> {d.versionRange}</span> : null}
                     {d.alternatives ? (
                       <div className="faint">
-                        {d.alternatives.map((a) => `${a.title}${a.satisfied ? ' (installed)' : ''}`).join('  or  ')}
+                        {d.alternatives
+                          .map((a) => `${a.title}${a.satisfied ? t('install.plan.installedSuffix') : ''}`)
+                          .join(`  ${t('install.plan.or')}  `)}
                       </div>
                     ) : null}
                     {d.note ? <div className="faint">{d.note}</div> : null}
@@ -268,13 +272,13 @@ export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | 
         <motion.section variants={itemVariants} className="panel">
           <header>
             <Icon.folder width={14} height={14} />
-            File placement
+            {t('install.plan.filePlacement')}
             <span className="faint" style={{ fontWeight: 400 }}>
-              every path is relative to the game folder
+              {t('install.plan.relativeHint')}
             </span>
             <span className="spacer" />
             <Button size="sm" variant="quiet" onClick={() => setShowFiles((v) => !v)}>
-              {showFiles ? 'Collapse' : 'Show every file'}
+              {showFiles ? t('install.plan.collapse') : t('install.plan.showEveryFile')}
             </Button>
           </header>
           <div className="panel-body col" style={{ gap: 7 }}>
@@ -282,10 +286,13 @@ export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | 
               <div key={dest} className="row between">
                 <span className="row" style={{ gap: 8, minWidth: 0 }}>
                   <Badge tone={dest === 'overlay' ? 'warn' : 'accent'}>{DESTINATION_LABELS[dest]}</Badge>
-                  <span className="mono ellipsis">{commonPrefix(files)}</span>
+                  <span className="mono ellipsis">{commonPrefix(files, t('install.plan.gameRoot'))}</span>
                 </span>
                 <span className="faint num">
-                  {files.length} file(s) · {formatBytes(files.reduce((a, f) => a + f.size, 0))}
+                  {t('install.plan.fileCountSizeDot', {
+                    count: files.length,
+                    size: formatBytes(files.reduce((a, f) => a + f.size, 0))
+                  })}
                 </span>
               </div>
             ))}
@@ -304,7 +311,11 @@ export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | 
                     <span className="ellipsis" title={`${f.sourcePath} → ${f.targetRelative}`}>
                       {f.targetRelative}
                       {f.overwrites ? (
-                        <Badge tone="warn">{f.overwritesMod ? `replaces ${f.overwritesMod}` : 'overwrites'}</Badge>
+                        <Badge tone="warn">
+                          {f.overwritesMod
+                            ? t('install.plan.replacesMod', { mod: f.overwritesMod })
+                            : t('install.plan.overwritesLabel')}
+                        </Badge>
                       ) : null}
                     </span>
                     <span className="faint num">{formatBytes(f.size)}</span>
@@ -331,7 +342,7 @@ export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | 
   )
 }
 
-function commonPrefix(files: PlannedFile[]): string {
+function commonPrefix(files: PlannedFile[], gameRootLabel: string): string {
   if (files.length === 0) return ''
   let prefix = files[0].targetRelative.split('/').slice(0, -1).join('/')
   for (const f of files) {
@@ -339,5 +350,5 @@ function commonPrefix(files: PlannedFile[]): string {
       prefix = prefix.split('/').slice(0, -1).join('/')
     }
   }
-  return prefix ? `${prefix}/` : '<game root>'
+  return prefix ? `${prefix}/` : gameRootLabel
 }
