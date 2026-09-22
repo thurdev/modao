@@ -23,8 +23,9 @@ import { applyPlan, createPlan, choose, uninstall } from './install/engine'
 import { listInstalled, setPriority, setSubModEnabled } from './library'
 import { listConflicts } from './conflicts'
 import { readIniFile, readKeys, getSection } from './game/modloaderIni'
-import { walk, sha256File } from './util/fsx'
+import { walk, sha256File, createJunction, removeLinkOrDir } from './util/fsx'
 import { V1_US_SIZE, V1_US_TIMESTAMP } from './game/pe'
+import { runHealthCheck } from './diagnostics/health'
 import type { InstalledMod, SubMod } from '@shared/types'
 
 /**
@@ -936,6 +937,55 @@ export async function runE2E(): Promise<number> {
   check('one entry: and the file survived the replacement', fs.existsSync(path.join(game, 'scripts', 'TrilogyChaosMod.SA.asi')))
   void story
   void again
+
+  // --- item 08: duplicate .asi through a junction, found by hash -------------
+  // The field report: III.VC.SA.LimitAdjuster.asi lived in BOTH scripts\ and a
+  // junctioned modloader\Open Limit Adjuster\, byte-identical. Two instances
+  // patched the same limits and fought - the ped-model limit never took, and
+  // the game crashed. A plain recursive scan reported "no duplicates" the
+  // whole time because it never followed the junction; fsx.walk does, but
+  // nothing pointed it at the game tree until now.
+  const oaSource = path.join(tmp, 'Open Limit Adjuster payload')
+  await fsp.mkdir(oaSource, { recursive: true })
+  const adjusterBytes = fakePe(4096, 0x60000000, 0x2102)
+  await fsp.writeFile(path.join(oaSource, 'III.VC.SA.LimitAdjuster.asi'), adjusterBytes)
+  await createJunction(path.join(game, 'modloader', 'Open Limit Adjuster'), oaSource)
+  await fsp.writeFile(path.join(game, 'scripts', 'III.VC.SA.LimitAdjuster.asi'), adjusterBytes)
+
+  const dupReport = await runHealthCheck(risky.id)
+  const dupCheck = dupReport.checks.find((c) => c.id === 'duplicate-asi')
+  check('duplicate .asi: the copy reached only through a junction is not skipped', dupCheck?.status === 'fail', dupCheck)
+  check(
+    'duplicate .asi: both paths are named - the scripts\\ copy and the junctioned modloader\\ one',
+    !!dupCheck?.items?.some(
+      (i) =>
+        i.includes(path.join('scripts', 'III.VC.SA.LimitAdjuster.asi')) &&
+        i.includes(path.join('modloader', 'Open Limit Adjuster', 'III.VC.SA.LimitAdjuster.asi'))
+    ),
+    dupCheck?.items
+  )
+
+  // --- item 08: a second, DIFFERENT limit adjuster stacked on the first ------
+  // The field install also had SimpleLimitAdjuster_Enex active alongside Open
+  // Limit Adjuster; the CrashList warns explicitly that stacking limit
+  // adjusters crashes the game. limitAdjusterNames() is a single boolean regex
+  // used everywhere via .some() - this exercises the distinct-count path.
+  await fsp.writeFile(path.join(game, 'scripts', 'SimpleLimitAdjuster_Enex.asi'), fakePe(2048, 0x60000000, 0x2102))
+  const stackedReport = await runHealthCheck(risky.id)
+  const stackedCheck = stackedReport.checks.find((c) => c.id === 'stacked-adjuster')
+  check('stacked adjusters: two different products in one profile are flagged', stackedCheck?.status === 'fail', stackedCheck)
+  check(
+    'stacked adjusters: both products are named',
+    !!stackedCheck?.items?.some((i) => i.includes('Open Limit Adjuster')) &&
+      !!stackedCheck?.items?.some((i) => i.includes('SimpleLimitAdjuster')),
+    stackedCheck?.items
+  )
+
+  // Cleaned up so nothing after this point inherits a game folder with two
+  // limit adjusters fighting in it.
+  await removeLinkOrDir(path.join(game, 'modloader', 'Open Limit Adjuster'))
+  await fsp.rm(path.join(game, 'scripts', 'III.VC.SA.LimitAdjuster.asi'), { force: true })
+  await fsp.rm(path.join(game, 'scripts', 'SimpleLimitAdjuster_Enex.asi'), { force: true })
 
   getDb().prepare('DELETE FROM profile').run()
   await fsp.rm(tmp, { recursive: true, force: true }).catch(() => undefined)

@@ -50,6 +50,8 @@ import { requirementMet } from '../src/shared/requirements'
 import { catalogKind } from '../src/shared/catalogKind'
 import { parseCrashDump, parseModLoaderLog } from '../src/main/diagnostics/modloaderLog'
 import { limitAdjusterNames, parseStreamIni, SAFE_STREAMING_MEMORY_MB } from '../src/main/game/streamIni'
+import { identifyLimitAdjusters } from '../src/shared/limitAdjusters'
+import { groupDuplicateAssets } from '../src/shared/duplicateAssets'
 import { pluginEvidence } from '../src/main/formats/strings'
 import { decodeMangledHex, extractMangledAddresses } from '../src/shared/mangled'
 import { findHookCollisions } from '../src/shared/hookCollisions'
@@ -753,6 +755,79 @@ check(
   ['OpenLimitAdjuster.asi', 'III.VC.SA.LimitAdjuster.asi', 'fastman92limitAdjuster.asi'].every((n) =>
     limitAdjusterNames().test(n)
   )
+)
+
+// --- limit-adjuster IDENTITY, not just presence ------------------------------
+// The field install had Open Limit Adjuster (shipped as III.VC.SA.LimitAdjuster.asi)
+// AND SimpleLimitAdjuster_Enex.asi active together; the CrashList warns that
+// stacking limit adjusters crashes the game. limitAdjusterNames() is a boolean
+// used everywhere via .some() and cannot see that two DIFFERENT ones are present
+// at once - identifyLimitAdjusters() is the piece that counts distinct products.
+check(
+  'limit adjusters: a single product present is not a stack',
+  identifyLimitAdjusters(['modloader/Open Limit Adjuster/III.VC.SA.LimitAdjuster.asi']).length === 1
+)
+check(
+  'limit adjusters: Open Limit Adjuster is one product, not two, even though its file name ' +
+    'also matches the bare "LimitAdjuster" pattern',
+  identifyLimitAdjusters(['modloader/Open Limit Adjuster/III.VC.SA.LimitAdjuster.asi']).map((p) => p.id).join(',') ===
+    'open-limit-adjuster'
+)
+check(
+  'limit adjusters: Open Limit Adjuster plus SimpleLimitAdjuster_Enex is a stack of two',
+  identifyLimitAdjusters([
+    'modloader/Open Limit Adjuster/III.VC.SA.LimitAdjuster.asi',
+    'scripts/SimpleLimitAdjuster_Enex.asi'
+  ]).length === 2
+)
+check(
+  'limit adjusters: the stack names both products with the files that identified them',
+  (() => {
+    const found = identifyLimitAdjusters([
+      'modloader/Open Limit Adjuster/III.VC.SA.LimitAdjuster.asi',
+      'scripts/SimpleLimitAdjuster_Enex.asi'
+    ])
+    const open = found.find((p) => p.id === 'open-limit-adjuster')
+    const simple = found.find((p) => p.id === 'simple-limit-adjuster')
+    return (
+      !!open &&
+      open.matches.includes('modloader/Open Limit Adjuster/III.VC.SA.LimitAdjuster.asi') &&
+      !!simple &&
+      simple.matches.includes('scripts/SimpleLimitAdjuster_Enex.asi')
+    )
+  })()
+)
+check('limit adjusters: fastman92\'s build is its own product, distinct from the others', identifyLimitAdjusters(['fastman92limitAdjuster.asi']).map((p) => p.id).join(',') === 'fastman92-limit-adjuster')
+check('limit adjusters: no adjuster anywhere is zero products, not a stack', identifyLimitAdjusters(['ReadMe.txt', 'CLEO.asi']).length === 0)
+
+// --- duplicate .asi across scripts\ and a junctioned modloader\ folder ------
+check(
+  'duplicate assets: byte-identical files at two paths are grouped, naming both',
+  (() => {
+    const groups = groupDuplicateAssets([
+      { name: 'III.VC.SA.LimitAdjuster.asi', path: 'scripts/III.VC.SA.LimitAdjuster.asi', hash: 'abc' },
+      { name: 'III.VC.SA.LimitAdjuster.asi', path: 'modloader/Open Limit Adjuster/III.VC.SA.LimitAdjuster.asi', hash: 'abc' }
+    ])
+    return (
+      groups.length === 1 &&
+      groups[0].paths.includes('scripts/III.VC.SA.LimitAdjuster.asi') &&
+      groups[0].paths.includes('modloader/Open Limit Adjuster/III.VC.SA.LimitAdjuster.asi')
+    )
+  })()
+)
+check(
+  'duplicate assets: same name, different bytes is not a duplicate',
+  groupDuplicateAssets([
+    { name: 'x.asi', path: 'scripts/x.asi', hash: 'aaa' },
+    { name: 'x.asi', path: 'modloader/Mod/x.asi', hash: 'bbb' }
+  ]).length === 0
+)
+check(
+  'duplicate assets: same path counted twice (overlapping scan roots) is not a duplicate of itself',
+  groupDuplicateAssets([
+    { name: 'x.asi', path: 'scripts/x.asi', hash: 'aaa' },
+    { name: 'x.asi', path: 'scripts/x.asi', hash: 'aaa' }
+  ]).length === 0
 )
 
 // --- what a plugin says about itself -----------------------------------------
@@ -1891,6 +1966,28 @@ check(
 )
 const offsetMiss = vaToFileOffset(synthImageBase, synthSections, synthImageBase + 0x9000)
 check('disasm: a VA outside every section converts to nothing', offsetMiss === null, offsetMiss)
+
+// A .bss-like section: virtualSize exceeds rawSize, because its uninitialised
+// tail has no bytes on disk at all. An address inside the raw-backed part
+// still resolves; one inside the tail must report nothing rather than a
+// wrong offset computed from bytes that do not exist in the file.
+const sectionsWithBssTail = [
+  ...synthSections,
+  { name: '.bss', virtualAddress: 0x8000, virtualSize: 0x3000, rawSize: 0x1000, rawPointer: 0x7400 }
+]
+const bssBackedHit = vaToFileOffset(synthImageBase, sectionsWithBssTail, synthImageBase + 0x8500)
+check(
+  'disasm: an address inside a bss-like section but within its raw-backed range still resolves',
+  bssBackedHit?.section === '.bss' && bssBackedHit?.fileOffset === 0x7900,
+  bssBackedHit
+)
+const bssTailMiss = vaToFileOffset(synthImageBase, sectionsWithBssTail, synthImageBase + 0x9500)
+check(
+  'disasm: an address in a bss-like section\'s uninitialised tail (virtualSize > rawSize) has no file bytes, not a wrong offset',
+  bssTailMiss === null,
+  bssTailMiss
+)
+
 const hexLines = formatHexDump(Buffer.from(Array.from({ length: 16 }, (_, i) => i)), 0x600, 0x602)
 check('disasm: the byte at the marked offset is bracketed in the hex dump', hexLines[0]?.includes('[02]'), hexLines)
 

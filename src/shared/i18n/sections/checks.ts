@@ -110,6 +110,20 @@ export const checks = {
     hookFound_other: '{count} endereços têm mais de um mod hookando eles',
     hookDetail:
       'Um plugin-sdk .asi compilado sem código-fonte guarda os endereços que ele hooka como nomes ofuscados no próprio símbolo — o Modão decodifica isso. Dois mods hookando o mesmo endereço não aparecem como conflito de arquivo: os dois .asi instalam sem problema, e só um dos hooks sobrevive em tempo de execução.',
+    dupTitle: 'Plugins duplicados',
+    dupNone: 'Nenhum .asi/.cleo duplicado entre a pasta de .asi, scripts\\, cleo\\ e modloader\\',
+    dupFound_one: '1 arquivo está duplicado em mais de um lugar',
+    dupFound_other: '{count} arquivos estão duplicados em mais de um lugar',
+    dupDetail:
+      'O mesmo plugin em dois lugares ao mesmo tempo (por exemplo, uma cópia em scripts\\ e outra dentro de uma pasta de mod em modloader\\) faz as duas instâncias tentar aplicar o mesmo limite duas vezes — foi assim que um limite de modelos de pedestre nunca entrou em vigor e o jogo travou. A varredura segue junções de diretório, então uma pasta de mod materializada como junção é revistada por dentro, não pulada.',
+    dupItem: '{name}: os mesmos bytes em {count} lugares — {paths}',
+    stackedTitle: 'Vários limit adjusters ao mesmo tempo',
+    stackedNone: 'No máximo um limit adjuster ativo neste perfil',
+    stackedFound_one: '1 limit adjuster diferente encontrado',
+    stackedFound_other: '{count} limit adjusters diferentes encontrados ao mesmo tempo',
+    stackedDetail:
+      'O CrashList avisa explicitamente que empilhar limit adjusters derruba o jogo: dois produtos diferentes reescrevem os mesmos limites, um por cima do outro. Desative todos menos um.',
+    stackedItem: '{label}: {paths}',
     unknown: 'desconhecido'
   },
   en: {
@@ -216,6 +230,20 @@ export const checks = {
     hookFound_other: '{count} addresses have more than one mod hooking them',
     hookDetail:
       'A plugin-sdk .asi built with no source code stores the addresses it hooks as obfuscated names in its own symbol table - Modão decodes that. Two mods hooking the same address never show up as a file conflict: both .asi files install fine, and only one hook survives at runtime.',
+    dupTitle: 'Duplicate plugins',
+    dupNone: 'No duplicate .asi/.cleo files across the ASI directory, scripts\\, cleo\\ and modloader\\',
+    dupFound_one: '1 file is duplicated in more than one place',
+    dupFound_other: '{count} files are duplicated in more than one place',
+    dupDetail:
+      'The same plugin in two places at once (a copy in scripts\\ and another inside a mod folder in modloader\\, say) makes both instances try to apply the same limit twice - this is exactly how a pedestrian-model limit never took effect and the game crashed. The scan follows directory junctions, so a mod folder materialised as a junction is looked inside rather than skipped.',
+    dupItem: '{name}: the same bytes at {count} places - {paths}',
+    stackedTitle: 'Several limit adjusters at once',
+    stackedNone: 'At most one limit adjuster active in this profile',
+    stackedFound_one: '1 different limit adjuster found',
+    stackedFound_other: '{count} different limit adjusters found active at once',
+    stackedDetail:
+      'The CrashList warns explicitly that stacking limit adjusters crashes the game: two different products rewrite the same limits, one on top of the other. Disable all but one.',
+    stackedItem: '{label}: {paths}',
     unknown: 'unknown'
   }
 } as const

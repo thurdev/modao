@@ -15,6 +15,7 @@ import { listConflicts, listHookCollisions } from '../conflicts'
 import { profileDependencyProblems } from '../deps/resolver'
 import { analyzeTxd } from '../formats/txd'
 import { storeDir } from '../store/contentStore'
+import { duplicateAssetCheck, stackedAdjusterCheck } from './duplicateAssets'
 
 /** The pre-launch check: everything that can be known before the game starts. */
 export async function runHealthCheck(profileId: number): Promise<HealthReport> {
@@ -201,6 +202,15 @@ export async function runHealthCheck(profileId: number): Promise<HealthReport> {
   // 14. Two mods hooking the same address - invisible to the file-conflict
   // check above, since both .asi files install cleanly.
   checks.push(await hookCollisionCheck(profileId))
+
+  // 15. The same plugin binary sitting at two paths at once - byte-identical
+  // copies in scripts\ and a junctioned modloader\ folder both patch the same
+  // limits and fight (see src/main/diagnostics/duplicateAssets.ts).
+  checks.push(await duplicateAssetCheck(game))
+
+  // 16. Two DIFFERENT limit adjusters materialised in one profile - the
+  // CrashList warns explicitly that stacking them crashes the game.
+  checks.push(await stackedAdjusterCheck(game))
 
   const blocking = checks.filter((c) => c.status === 'fail').length
   const warnings = checks.filter((c) => c.status === 'warn').length
