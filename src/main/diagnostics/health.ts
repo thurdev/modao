@@ -1,6 +1,8 @@
 import path from 'node:path'
 import type { HealthCheck, HealthReport, TxdAnalysis } from '@shared/types'
 import { getDb } from '../db'
+import { t } from '../util/i18n'
+import { gameDefinition } from '@shared/games'
 import { exists, walk } from '../util/fsx'
 import { requireActiveGame } from '../game/detect'
 import { checkGameExe } from '../game/pe'
@@ -17,63 +19,75 @@ export async function runHealthCheck(profileId: number): Promise<HealthReport> {
 
   // 1. Executable
   try {
-    const verdict = await checkGameExe(path.join(game.path, 'gta_sa.exe'))
+    // The exe to read is whichever one identifies this game; only San Andreas
+    // has a known-good stock build to compare against.
+    const exeName = gameDefinition(game.kind).exeNames[0]
+    const verdict = await checkGameExe(path.join(game.path, exeName))
     checks.push({
       id: 'exe',
-      title: 'Game executable',
-      status: verdict.isV1UsOriginal ? 'pass' : 'warn',
-      summary: verdict.isV1UsOriginal
-        ? 'v1.0 US, unmodified (14,383,616 bytes, PE timestamp 0x427101CA)'
-        : 'Not a stock v1.0 US executable',
+      title: t('checks.exeTitle'),
+      status: game.kind !== 'sa' ? 'skip' : verdict.isV1UsOriginal ? 'pass' : 'warn',
+      summary:
+        game.kind !== 'sa'
+          ? t('checks.exeOther', { game: game.gameName })
+          : verdict.isV1UsOriginal
+            ? t('checks.exeStock')
+            : t('checks.exeNotStock'),
       detail: verdict.summary,
       items: [
-        `Size: ${verdict.pe.sizeBytes.toLocaleString()} bytes (v1.0 US is 14,383,616)`,
-        `PE timestamp: 0x${verdict.pe.timestamp.toString(16).toUpperCase()} (v1.0 US is 0x427101CA)`,
-        `SHA-256: ${verdict.pe.sha256.slice(0, 32)}...`
+        t('checks.exeSize', { size: verdict.pe.sizeBytes.toLocaleString() }),
+        t('checks.exeTimestamp', { value: `0x${verdict.pe.timestamp.toString(16).toUpperCase()}` }),
+        t('checks.exeSha', { value: verdict.pe.sha256.slice(0, 32) })
       ]
     })
     checks.push({
       id: 'laa',
-      title: 'LARGE_ADDRESS_AWARE',
+      title: t('checks.laaTitle'),
       status: verdict.largeAddressAware ? 'pass' : 'warn',
-      summary: verdict.largeAddressAware
-        ? 'Set - the game can address up to 4 GB'
-        : 'Not set - the game is limited to 2 GB, which large texture packs exhaust',
-      detail: `PE Characteristics word: 0x${verdict.pe.characteristics.toString(16).padStart(4, '0')} (LAA is bit 0x0020). Modão never patches the executable; use an external patcher if you want this changed.`
+      summary: verdict.largeAddressAware ? t('checks.laaSet') : t('checks.laaUnset'),
+      detail: t('checks.laaDetail', {
+        value: `0x${verdict.pe.characteristics.toString(16).padStart(4, '0')}`
+      })
     })
   } catch (e) {
-    checks.push({ id: 'exe', title: 'Game executable', status: 'fail', summary: (e as Error).message })
+    checks.push({ id: 'exe', title: t('checks.exeTitle'), status: 'fail', summary: (e as Error).message })
   }
 
   // 2. Write access - nothing else matters if the folder is read-only
   const access = probeWriteAccess(game.path, true)
   checks.push({
     id: 'write-access',
-    title: 'Write access to the game folder',
+    title: t('checks.writeTitle'),
     status: access.writable ? 'pass' : 'fail',
     summary: access.writable
-      ? `Modão can write to ${access.probedPath}`
-      : `Windows denies writes to ${access.probedPath}${access.code ? ` (${access.code})` : ''}`,
+      ? t('checks.writeOk', { path: access.probedPath })
+      : t('checks.writeDenied', { path: access.probedPath, code: access.code ? ` (${access.code})` : '' }),
     detail: access.reason ?? undefined
   })
 
   // 3. Mod Loader and the ASI directory
   checks.push({
     id: 'modloader',
-    title: 'Mod Loader',
-    status: game.hasModLoader ? 'pass' : 'fail',
-    summary: game.hasModLoader ? `Installed${game.modLoaderVersion ? ` (${game.modLoaderVersion})` : ''}` : 'Not installed',
-    detail: game.hasModLoader ? undefined : 'Without Mod Loader nothing in modloader\\ is loaded by the game.'
+    title: t('checks.modloaderTitle'),
+    status: !game.supportsModLoader ? 'skip' : game.hasModLoader ? 'pass' : 'fail',
+    summary: !game.supportsModLoader
+      ? t('checks.modloaderNotApplicable')
+      : game.hasModLoader
+        ? t('checks.modloaderInstalled', { version: game.modLoaderVersion ? ` (${game.modLoaderVersion})` : '' })
+        : t('checks.modloaderMissing'),
+    detail: game.hasModLoader || !game.supportsModLoader ? undefined : t('checks.modloaderDetail')
   })
   checks.push({
     id: 'asi',
-    title: 'ASI loader and directory',
+    title: t('checks.asiTitle'),
     status: game.asiLoader ? 'pass' : 'warn',
     summary: game.asiLoader
-      ? `${path.basename(game.asiLoader)} present; .asi plugins load from ${asiLabel(game.path, game.asiDirectory)}`
-      : 'No ASI loader found - .asi plugins will not load',
-    detail:
-      'The ASI directory is detected from where modloader.asi actually lives rather than assumed: some installs load from the game root, repacks often load from scripts\\.'
+      ? t('checks.asiPresent', {
+          loader: path.basename(game.asiLoader),
+          dir: asiLabel(game.path, game.asiDirectory)
+        })
+      : t('checks.asiMissing'),
+    detail: t('checks.asiDetail')
   })
 
   // 3. CLEO against plugin requirements
@@ -89,20 +103,22 @@ export async function runHealthCheck(profileId: number): Promise<HealthReport> {
     const major = Number.parseFloat((cleoVersion ?? '0').replace(/[^\d.]/g, '')) || 0
     checks.push({
       id: 'cleo-plus',
-      title: 'CLEO+ version gate',
+      title: t('checks.cleoPlusTitle'),
       status: major >= 4.4 ? 'pass' : 'fail',
-      summary: major >= 4.4 ? `CLEO ${cleoVersion} satisfies CLEO+` : `CLEO+ is installed but CLEO ${cleoVersion ?? 'unknown'} is too old`,
-      detail:
+      summary:
         major >= 4.4
-          ? undefined
-          : 'CLEO+ against CLEO 4.3 fails at startup with a fatal dialog: "The ordinal 22 could not be located in the dynamic link library CLEO+.cleo". Update CLEO to 4.4 or newer.'
+          ? t('checks.cleoPlusOk', { version: cleoVersion ?? t('checks.unknown') })
+          : t('checks.cleoPlusTooOld', { version: cleoVersion ?? t('checks.unknown') }),
+      detail: major >= 4.4 ? undefined : t('checks.cleoPlusDetail')
     })
   } else {
     checks.push({
       id: 'cleo',
-      title: 'CLEO',
+      title: t('checks.cleoTitle'),
       status: cleoVersion ? 'pass' : 'skip',
-      summary: cleoVersion ? `CLEO ${cleoVersion} detected, ${cleoPlugins.length} file(s) in cleo\\` : 'CLEO not installed',
+      summary: cleoVersion
+        ? t('checks.cleoDetected', { version: cleoVersion, count: cleoPlugins.length })
+        : t('checks.cleoMissing'),
       detail: cleoPlugins.length ? cleoPlugins.slice(0, 8).map((p) => p.relative_path).join(', ') : undefined
     })
   }
@@ -111,10 +127,13 @@ export async function runHealthCheck(profileId: number): Promise<HealthReport> {
   const depProblems = profileDependencyProblems(profileId, game)
   checks.push({
     id: 'dependencies',
-    title: 'Dependencies',
+    title: t('checks.depsTitle'),
     status: depProblems.some((d) => d.resolution === 'blocking') ? 'fail' : depProblems.length ? 'warn' : 'pass',
-    summary: depProblems.length === 0 ? 'Every requirement is satisfied' : `${depProblems.length} unresolved`,
-    items: depProblems.map((d) => `${d.kind === 'conflicts' ? 'Conflict' : 'Missing'}: ${d.title}${d.note ? ` - ${d.note}` : ''}`)
+    summary: depProblems.length === 0 ? t('checks.depsOk') : t('checks.depsUnresolved', { count: depProblems.length }),
+    items: depProblems.map(
+      (d) =>
+        `${d.kind === 'conflicts' ? t('checks.depsConflict') : t('checks.depsMissing')}: ${d.title}${d.note ? ` - ${d.note}` : ''}`
+    )
   })
 
   // 5. File conflicts
@@ -122,27 +141,34 @@ export async function runHealthCheck(profileId: number): Promise<HealthReport> {
   const unresolved = conflicts.filter((c) => !c.winner)
   checks.push({
     id: 'conflicts',
-    title: 'File conflicts',
+    title: t('checks.conflictsTitle'),
     status: unresolved.length ? 'warn' : conflicts.length ? 'pass' : 'pass',
     summary:
       conflicts.length === 0
-        ? 'No duplicated files between mods'
-        : `${conflicts.length} duplicated path(s); ${conflicts.length - unresolved.length} resolved by priority`,
-    items: conflicts.slice(0, 10).map((c) => `${c.relativePath} -> ${c.winner ? `${c.winner.title} wins (priority ${c.winner.priority})` : 'no winner: every claimant is disabled or priority 0'}`)
+        ? t('checks.conflictsNone')
+        : t('checks.conflictsSome', { count: conflicts.length, resolved: conflicts.length - unresolved.length }),
+    items: conflicts
+      .slice(0, 10)
+      .map(
+        (c) =>
+          `${c.relativePath} -> ${
+            c.winner
+              ? t('checks.conflictsWinner', { title: c.winner.title, priority: c.winner.priority })
+              : t('checks.conflictsNoWinner')
+          }`
+      )
   })
 
   // 6. Textures
   const textureProblems = await scanTextures(profileId)
   checks.push({
     id: 'textures',
-    title: 'Texture dimensions',
+    title: t('checks.texturesTitle'),
     status: textureProblems.npot.length ? 'warn' : 'pass',
     summary: textureProblems.npot.length
-      ? `${textureProblems.npot.length} non-power-of-two texture(s) across ${textureProblems.scanned} .txd file(s)`
-      : `${textureProblems.scanned} .txd file(s) scanned, all dimensions are powers of two`,
-    detail: textureProblems.npot.length
-      ? 'Non-power-of-two textures are a documented cause of crashes (0x00749B7B) and of textures failing to render.'
-      : undefined,
+      ? t('checks.texturesBad', { count: textureProblems.npot.length, scanned: textureProblems.scanned })
+      : t('checks.texturesOk', { scanned: textureProblems.scanned }),
+    detail: textureProblems.npot.length ? t('checks.texturesDetail') : undefined,
     items: textureProblems.npot.slice(0, 12)
   })
 
@@ -163,9 +189,9 @@ export async function runHealthCheck(profileId: number): Promise<HealthReport> {
 }
 
 function asiLabel(gamePath: string, asiDir: string | null): string {
-  if (!asiDir) return 'unknown'
+  if (!asiDir) return t('checks.asiUnknown')
   const rel = path.relative(gamePath, asiDir)
-  return rel === '' ? 'the game root' : `${rel}\\`
+  return rel === '' ? t('checks.asiGameRoot') : `${rel}\\`
 }
 
 interface TextureScan {
@@ -215,12 +241,10 @@ async function oversizedCheck(profileId: number): Promise<HealthCheck> {
   }
   return {
     id: 'size',
-    title: 'Asset size',
+    title: t('checks.sizeTitle'),
     status: big.length ? 'warn' : 'pass',
-    summary: `${(total / 1024 ** 3).toFixed(2)} GB of enabled mods`,
-    detail: big.length
-      ? 'Large packs plus a 2 GB address space is the usual cause of out-of-memory crashes mid-game.'
-      : undefined,
+    summary: t('checks.sizeSummary', { size: (total / 1024 ** 3).toFixed(2) }),
+    detail: big.length ? t('checks.sizeDetail') : undefined,
     items: big
   }
 }

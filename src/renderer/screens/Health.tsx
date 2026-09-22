@@ -78,24 +78,24 @@ function PreLaunch(props: { profileId: number }): JSX.Element {
 
   const verdict = r.ok
     ? warned > 0
-      ? `Nothing blocks a launch, but ${warned} check${warned === 1 ? '' : 's'} found something worth reading before you play.`
-      : 'Every check passed. This profile is ready to launch.'
-    : `${r.blocking} issue${r.blocking === 1 ? '' : 's'} will stop the game from starting cleanly. Fix those first; the ${r.warnings} warning${r.warnings === 1 ? '' : 's'} can wait.`
+      ? t('health.verdictWarned', { count: warned })
+      : t('health.verdictClean')
+    : t('health.verdictBlocked', { count: r.blocking, warnings: r.warnings })
 
   return (
     <>
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="card-head">
           <Badge tone={r.ok ? 'ok' : 'danger'} dot>
-            {r.ok ? 'Ready to launch' : `${r.blocking} blocking`}
+            {r.ok ? t('health.readyToLaunch') : t('health.blockingCount', { count: r.blocking })}
           </Badge>
-          <Badge tone="ok">{passed} pass</Badge>
-          <Badge tone={warned > 0 ? 'warn' : 'neutral'}>{warned} warn</Badge>
-          <Badge tone={failed > 0 ? 'danger' : 'neutral'}>{failed} fail</Badge>
-          {skipped > 0 ? <Badge>{skipped} skipped</Badge> : null}
+          <Badge tone="ok">{t('health.passCount', { count: passed })}</Badge>
+          <Badge tone={warned > 0 ? 'warn' : 'neutral'}>{t('health.warnCount', { count: warned })}</Badge>
+          <Badge tone={failed > 0 ? 'danger' : 'neutral'}>{t('health.failCount', { count: failed })}</Badge>
+          {skipped > 0 ? <Badge>{t('health.skippedCount', { count: skipped })}</Badge> : null}
           <span className="spacer" />
           <Button size="sm" onClick={report.reload} icon={<Icon.refresh width={13} height={13} />}>
-            Re-run
+            {t('health.rerun')}
           </Button>
         </div>
         <div className="card-body" style={{ paddingTop: 12, paddingBottom: 12 }}>
@@ -107,7 +107,7 @@ function PreLaunch(props: { profileId: number }): JSX.Element {
               {r.gamePath}
             </span>
             <span>·</span>
-            <span>checked {relativeTime(r.generatedAt, t)}</span>
+            <span>{t('health.checkedAt', { when: relativeTime(r.generatedAt, t) })}</span>
           </div>
         </div>
       </div>
@@ -119,7 +119,7 @@ function PreLaunch(props: { profileId: number }): JSX.Element {
             <div className="col" style={{ gap: 4 }}>
               <div className="row wrap" style={{ gap: 8 }}>
                 <strong>{c.title}</strong>
-                <Badge tone={STATUS_TONE[c.status]}>{c.status}</Badge>
+                <Badge tone={STATUS_TONE[c.status]}>{t(`health.status.${c.status}`)}</Badge>
               </div>
               <div className="muted">{c.summary}</div>
               {c.detail ? <div className="faint">{c.detail}</div> : null}

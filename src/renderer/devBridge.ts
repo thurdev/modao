@@ -226,7 +226,7 @@ function mockPlan(chosenGroup: string): unknown {
     ],
     warnings: [
       { severity: resolved ? 'warn' : 'warn', code: 'overwrite', message: '2 file(s) already exist at their destination.', detail: 'Every one of them is backed up before it is replaced and restored on uninstall.' },
-      { severity: 'info', code: 'npot-texture', message: 'LOADSCS.txd contains 1 non-power-of-two texture.', detail: 'hud_bad 300x128' }
+      { severity: 'info', code: 'npot-texture', message: 'LOADSCS.txd tem 1 textura fora de potência de dois.', detail: 'hud_bad 300x128' }
     ],
     totalSize: 107_257_856,
     requiresVariantChoice: !resolved
@@ -255,27 +255,27 @@ export function installDevBridge(): void {
           blocking: 1,
           warnings: 2,
           checks: [
-            { id: 'exe', title: 'Game executable', status: 'pass', summary: 'v1.0 US, unmodified (14,383,616 bytes, PE timestamp 0x427101CA)' },
+            { id: 'exe', title: 'Executável do jogo', status: 'pass', summary: 'v1.0 US, sem modificação (14.383.616 bytes, timestamp PE 0x427101CA)' },
             {
               id: 'laa',
               title: 'LARGE_ADDRESS_AWARE',
               status: 'warn',
-              summary: 'Not set - the game is limited to 2 GB, which large texture packs exhaust',
+              summary: 'Desligado — o jogo fica limitado a 2 GB, que pacote de textura grande esgota',
               detail: 'PE Characteristics word: 0x010e (LAA is bit 0x0020). Modão never patches the executable.'
             },
-            { id: 'modloader', title: 'Mod Loader', status: 'pass', summary: 'Installed (0.3.7)' },
+            { id: 'modloader', title: 'Mod Loader', status: 'pass', summary: 'Instalado (0.3.7)' },
             {
               id: 'cleo-plus',
-              title: 'CLEO+ version gate',
+              title: 'Versão do CLEO exigida pelo CLEO+',
               status: 'fail',
-              summary: 'CLEO+ is installed but CLEO 4.3 is too old',
+              summary: 'O CLEO+ está instalado mas o CLEO 4.3 é velho demais',
               detail: 'CLEO+ against CLEO 4.3 fails at startup with "The ordinal 22 could not be located in the dynamic link library CLEO+.cleo".'
             },
             {
               id: 'textures',
-              title: 'Texture dimensions',
+              title: 'Dimensão das texturas',
               status: 'warn',
-              summary: '1 non-power-of-two texture across 38 .txd files',
+              summary: '1 textura fora de potência de dois em 38 arquivos .txd',
               items: ['modloader/HD Ped Pack/models/hud.txd: hud_bad is 300x128']
             }
           ]
@@ -292,7 +292,7 @@ export function installDevBridge(): void {
             exceptionCode: '0xc0000005',
             crashAddress: '0x00749B7B',
             matchedCause: 'Tentando criar um modelo que nao existe, ou o .txd nao existe. Ou nome de arquivo longo demais.',
-            matchedSolution: 'Check the mod installed last: a model with no matching .txd, or a non-power-of-two texture.',
+            matchedSolution: 'Veja o último mod instalado: um modelo sem o .txd correspondente, ou uma textura fora de potência de dois.',
             resolved: false,
             kind: 'exception',
             raw: 'Faulting application name: gta_sa.exe\nFaulting module name: gta_sa.exe\nException code: 0xc0000005\nFault offset: 0x00349b7b'
