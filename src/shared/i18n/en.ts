@@ -114,6 +114,23 @@ export const en: DeepPartial<typeof ptBR> = {
     diskFull: 'The disk holding {path} is full.',
     missing: '{path} is missing. It may have been moved or deleted outside Modão.'
   },
+  updates: {
+    available: 'Version {version} is out',
+    optional: 'You are on {current}. Updating is optional - nothing is installed unless you say so.',
+    open: 'See the release',
+    dismiss: 'Not now',
+    title: 'Updates',
+    checkOnStart: 'Look for an update when the app starts',
+    checkOnStartDesc:
+      'One request a day to the GitHub releases page. Nothing about you is sent, and no update installs itself.',
+    check: 'Check now',
+    checking: 'Checking…',
+    upToDate: 'You are on the latest version ({current}).',
+    found: 'Version {version} is available - you are on {current}.',
+    never: 'Never checked.',
+    lastChecked: 'Last checked {when}.',
+    failed: 'Could not check: {error}'
+  },
   time: {
     never: 'never',
     justNow: 'just now',

@@ -14,6 +14,7 @@ import type {
   SwitchJournal,
   SwitchPlan,
   SwitchVerification,
+  UpdateStatus,
   IfpAnalysis,
   ImgAnalysis,
   InstallPlan,
@@ -32,6 +33,10 @@ import type {
 /** Every IPC channel the renderer may call. Keep this list narrow and typed. */
 export interface ModãoApi {
   app: {
+    /** Is there a newer release? Never installs anything by itself. */
+    checkUpdate(force?: boolean): Promise<UpdateStatus>
+    /** Stop offering this exact version. */
+    dismissUpdate(version: string): Promise<void>
     settings(): Promise<AppSettings>
     setSetting(key: keyof AppSettings, value: unknown): Promise<AppSettings>
     openExternal(url: string): Promise<void>
@@ -170,6 +175,8 @@ export interface ModãoApi {
 /** Flat channel list, derived at runtime from the shape above. */
 export const IPC_CHANNELS = [
   'app:settings',
+  'app:checkUpdate',
+  'app:dismissUpdate',
   'app:setSetting',
   'app:openExternal',
   'app:revealPath',

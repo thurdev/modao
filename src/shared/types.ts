@@ -482,6 +482,8 @@ export interface AppSettings {
   scanCrashesOnLaunch: boolean
   /** Snapshot the live save folder automatically on a profile switch. */
   autoSnapshotSaves: boolean
+  /** Ask GitHub for a newer release when the app starts. */
+  checkUpdatesOnStart: boolean
 }
 
 /** Byte totals for everything Modão owns under userData. */
@@ -619,4 +621,17 @@ export interface ModLoaderLogReport {
   mods: ModLoaderModReport[]
   looseUnhandled: string[]
   crash: ModLoaderCrash | null
+}
+
+/** What the app knows about a newer release. It never installs one on its own. */
+export interface UpdateStatus {
+  current: string
+  latest: string | null
+  available: boolean
+  dismissed: boolean
+  releaseUrl: string | null
+  publishedAt: string | null
+  notes: string | null
+  checkedAt: string | null
+  error: string | null
 }

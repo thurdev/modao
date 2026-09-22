@@ -505,6 +505,19 @@ h3 {
   background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
 }
+/*
+ * The dropdown a <select> opens is drawn by the OS, not by this stylesheet.
+ * With appearance:none and no explicit colours, Chromium renders that list
+ * against nothing - on the dark theme the game switcher's options came out
+ * transparent and unreadable. Painting the options (and the group labels the
+ * profile picker uses) fixes the popup in both themes.
+ */
+.select option,
+.select optgroup {
+  background: var(--surface);
+  color: var(--text);
+}
+
 .input::placeholder {
   color: var(--text-faint);
 }

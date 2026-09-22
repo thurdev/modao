@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'motion/react'
-import type { AppSettings, CacheKind, GameInstall } from '@shared/types'
-import { api, formatBytes, formatDate } from '../api'
+import type { AppSettings, CacheKind, GameInstall, UpdateStatus } from '@shared/types'
+import { api, formatBytes, formatDate, relativeTime } from '../api'
 import { useApp } from '../state/store'
 import { LANGUAGES } from '@shared/i18n'
 import { useT } from '../lib/i18n'
@@ -11,6 +11,12 @@ import { itemVariants, listVariants } from '../lib/motion'
 
 export function SettingsScreen(): JSX.Element {
   const t = useT()
+  const [update, setUpdate] = useState<UpdateStatus | null>(null)
+  const [checking, setChecking] = useState(false)
+  // The screen shows what the last check found, without starting a new one.
+  useEffect(() => {
+    void api.checkUpdate().then(setUpdate).catch(() => undefined)
+  }, [])
   const { settings, setSetting, games, game, refreshGames, pushToast, profiles } = useApp()
   const storage = useAsync(() => api.storage(), [])
   const seed = useAsync(() => api.seedInfo(), [])
@@ -79,6 +85,69 @@ export function SettingsScreen(): JSX.Element {
               <option value="dark">{t('settings.themeDark')}</option>
               <option value="light">{t('settings.themeLight')}</option>
             </select>
+          }
+        />
+      </motion.section>
+
+      {/* ── updates ─────────────────────────────────────────── */}
+      <motion.section variants={itemVariants} className="card">
+        <div className="card-head">
+          <h3>{t('updates.title')}</h3>
+          <span className="spacer" />
+          <span className="faint">
+            {update?.error
+              ? t('updates.failed', { error: update.error })
+              : update?.available
+                ? t('updates.found', { version: update.latest ?? '', current: update.current })
+                : update
+                  ? t('updates.upToDate', { current: update.current })
+                  : ''}
+          </span>
+        </div>
+        <Row
+          title={t('updates.checkOnStart')}
+          desc={t('updates.checkOnStartDesc')}
+          control={
+            <Switch
+              on={settings.checkUpdatesOnStart}
+              label={t('updates.checkOnStart')}
+              onChange={(v: boolean) => void setSetting('checkUpdatesOnStart', v)}
+            />
+          }
+        />
+        <Row
+          title={t('updates.title')}
+          desc={
+            update?.checkedAt ? t('updates.lastChecked', { when: relativeTime(update.checkedAt, t) }) : t('updates.never')
+          }
+          control={
+            <span className="row">
+              <Button
+                size="sm"
+                disabled={checking}
+                icon={<Icon.refresh width={13} height={13} />}
+                onClick={async () => {
+                  setChecking(true)
+                  try {
+                    setUpdate(await api.checkUpdate(true))
+                  } finally {
+                    setChecking(false)
+                  }
+                }}
+              >
+                {checking ? t('updates.checking') : t('updates.check')}
+              </Button>
+              {update?.available && update.releaseUrl ? (
+                <Button
+                  size="sm"
+                  variant="accent"
+                  icon={<Icon.external width={13} height={13} />}
+                  onClick={() => void api.openExternal(update.releaseUrl!)}
+                >
+                  {t('updates.open')}
+                </Button>
+              ) : null}
+            </span>
           }
         />
       </motion.section>

@@ -1,0 +1,96 @@
+# Every push to main becomes an installer.
+#
+# The point is that there is never a "which build is this?" question: the
+# version is bumped here, the tag matches it, and the release carries the exact
+# installer produced from that commit. Nothing is built on a developer machine
+# and uploaded by hand.
+#
+# It runs on Windows because that is what the app targets: electron-builder
+# produces an NSIS installer and better-sqlite3 is rebuilt against Electron's
+# ABI, neither of which cross-compiles usefully from Linux.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    # Documentation and the published index change often and change nothing
+    # about the binary.
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'index/**'
+      - '.github/ISSUE_TEMPLATE/**'
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Which part of the version to raise'
+        required: false
+        default: patch
+        type: choice
+        options: [patch, minor, major]
+
+permissions:
+  contents: write
+
+concurrency:
+  # One release at a time: two runs bumping the version at once would race on
+  # the tag and produce two releases from one commit.
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    # The bump commit this workflow pushes must not start the workflow again.
+    if: "!contains(github.event.head_commit.message, 'chore(release):')"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test:units
+
+      # The end-to-end suite drives a real Electron window against a synthetic
+      # game folder. It is run on a developer machine before a push; on a
+      # headless runner it buys flakiness rather than confidence.
+
+      - name: Bump version
+        id: bump
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          npm version "${{ github.event.inputs.bump || 'patch' }}" --no-git-tag-version
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          git add package.json package-lock.json
+          git commit -m "chore(release): v$VERSION"
+          git tag "v$VERSION"
+          git push origin HEAD:main --follow-tags
+
+      - name: Build the installer
+        run: npm run dist
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.bump.outputs.version }}
+          name: Modão ${{ steps.bump.outputs.version }}
+          generate_release_notes: true
+          files: |
+            dist/Modao-Setup-${{ steps.bump.outputs.version }}.exe
+            dist/Modao-Setup-${{ steps.bump.outputs.version }}.exe.blockmap

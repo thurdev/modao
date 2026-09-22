@@ -5,6 +5,7 @@ import { useApp, type Screen } from './state/store'
 import { screenVariants, snappy, springy, toastVariants } from './lib/motion'
 import { Icon } from './components/icons'
 import { GamePicker } from './components/GamePicker'
+import { UpdateNotice } from './components/UpdateNotice'
 import { useT } from './lib/i18n'
 import { Button, ErrorNote, Progress } from './components/ui'
 import { AccessBanner } from './components/AccessBanner'
@@ -213,6 +214,7 @@ export function App(): JSX.Element {
 
         <div className="content">
           <AccessBanner />
+          <UpdateNotice />
           {/*
             No exit animation on screen changes: AnimatePresence has to keep the
             outgoing screen mounted while it fades, and a screen that re-renders

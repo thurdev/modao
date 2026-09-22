@@ -24,6 +24,7 @@ import type {
   SwitchJournal,
   SwitchPlan,
   SwitchVerification,
+  UpdateStatus,
   Progress,
   SaveSnapshot,
   TxdAnalysis
@@ -55,6 +56,8 @@ export const api = {
   onToast: (cb: (t: { kind: 'info' | 'error' | 'success'; message: string }) => void): (() => void) =>
     bridge().onToast(cb),
 
+  checkUpdate: (force?: boolean) => call<UpdateStatus>('app:checkUpdate', force),
+  dismissUpdate: (version: string) => call<void>('app:dismissUpdate', version),
   settings: () => call<AppSettings>('app:settings'),
   setSetting: (key: keyof AppSettings, value: unknown) => call<AppSettings>('app:setSetting', key, value),
   openExternal: (url: string) => call<void>('app:openExternal', url),

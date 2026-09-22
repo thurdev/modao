@@ -111,6 +111,23 @@ export const ptBR = {
     diskFull: 'O disco que tem {path} está cheio.',
     missing: '{path} não existe. Pode ter sido movida ou apagada fora do Modão.'
   },
+  updates: {
+    available: 'Saiu a versão {version}',
+    optional: 'Você está na {current}. Atualizar é opcional — nada é instalado sem você mandar.',
+    open: 'Ver a release',
+    dismiss: 'Agora não',
+    title: 'Atualizações',
+    checkOnStart: 'Procurar atualização ao abrir',
+    checkOnStartDesc:
+      'Uma consulta por dia à página de releases do GitHub. Nada sobre você é enviado, e nenhuma atualização é instalada sozinha.',
+    check: 'Procurar agora',
+    checking: 'Procurando…',
+    upToDate: 'Você está na versão mais recente ({current}).',
+    found: 'Versão {version} disponível — você está na {current}.',
+    never: 'Nunca verificado.',
+    lastChecked: 'Última verificação {when}.',
+    failed: 'Não deu para verificar: {error}'
+  },
   time: {
     never: 'nunca',
     justNow: 'agora',

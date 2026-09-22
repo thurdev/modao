@@ -101,7 +101,8 @@ function settings(): AppSettings {
     crawlEnabled: getSetting('catalog.crawlEnabled', '0') === '1',
     crawlMaxPages: readNumber('catalog.crawlMaxPages', 0, 0, 5000),
     scanCrashesOnLaunch: getSetting('diagnostics.scanCrashesOnLaunch', '1') === '1',
-    autoSnapshotSaves: getSetting('saves.autoSnapshot', '1') === '1'
+    autoSnapshotSaves: getSetting('saves.autoSnapshot', '1') === '1',
+    checkUpdatesOnStart: getSetting('updates.checkOnStart', '1') === '1'
   }
 }
 
@@ -263,6 +264,14 @@ function requireWritableGame(): void {
 export function registerIpc(): void {
   // --- app ------------------------------------------------------------------
   ipcMain.handle('app:settings', () => settings())
+  ipcMain.handle('app:checkUpdate', async (_e, force?: boolean) => {
+    const { checkForUpdate } = await import('./util/updates')
+    return checkForUpdate(force === true)
+  })
+  ipcMain.handle('app:dismissUpdate', async (_e, version: string) => {
+    const { dismissUpdate } = await import('./util/updates')
+    dismissUpdate(version)
+  })
   ipcMain.handle('app:setSetting', (_e, key: keyof AppSettings, value: unknown) => {
     const map: Partial<Record<keyof AppSettings, string>> = {
       theme: 'ui.theme',
@@ -271,7 +280,8 @@ export function registerIpc(): void {
       crawlEnabled: 'catalog.crawlEnabled',
       crawlMaxPages: 'catalog.crawlMaxPages',
       scanCrashesOnLaunch: 'diagnostics.scanCrashesOnLaunch',
-      autoSnapshotSaves: 'saves.autoSnapshot'
+      autoSnapshotSaves: 'saves.autoSnapshot',
+      checkUpdatesOnStart: 'updates.checkOnStart'
     }
     const dbKey = map[key]
     if (dbKey) setSetting(dbKey, typeof value === 'boolean' ? (value ? '1' : '0') : String(value))
