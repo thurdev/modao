@@ -18,6 +18,7 @@ import { settings } from './sections/settings'
 import { shell } from './sections/shell'
 import { install } from './sections/install'
 import { checks } from './sections/checks'
+import { messages } from './sections/messages'
 
 export const en: DeepPartial<typeof ptBR> = {
   profiles: profiles.en,
@@ -30,6 +31,7 @@ export const en: DeepPartial<typeof ptBR> = {
   shell: shell.en,
   install: install.en,
   checks: checks.en,
+  messages: messages.en,
   app: {
     name: 'Modão',
     tagline: 'mod manager',

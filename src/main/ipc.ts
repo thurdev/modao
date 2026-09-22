@@ -53,7 +53,7 @@ import { listCrashes, listIncidents, scanCrashes, setCrashResolved } from './dia
 import { listJournals, planSwitch, verifySwitch } from './profiles/switchTx'
 import { gameDefinition, type GameKind } from '@shared/games'
 import { DEFAULT_LANGUAGE, isLanguage } from '@shared/i18n'
-import { setMainLanguage } from './util/i18n'
+import { setMainLanguage, t } from './util/i18n'
 import { lookup } from './diagnostics/crashlist'
 import { collectLogs } from './diagnostics/logs'
 import { abortBisect, applyBisectStep, currentBisect, recordResult, startBisect } from './diagnostics/bisect'
@@ -120,7 +120,7 @@ function readNumber(key: string, fallback: number, min: number, max: number): nu
  */
 function requireProfile(id: number): number {
   const row = getDb().prepare('SELECT id FROM profile WHERE id = ?').get(id) as { id: number } | undefined
-  if (!row) throw new Error(`Profile #${id} no longer exists. Pick a profile and try again.`)
+  if (!row) throw new Error(t('messages.profile.gone', { id }))
   return row.id
 }
 
@@ -145,12 +145,9 @@ export async function runPendingCrashScan(): Promise<void> {
   try {
     const result = await scanCrashes(pending.profileId)
     if (result.added > 0) {
-      toast('error', `${result.added} new crash record(s) read from the Event Log. Open Health for the matched cause.`)
+      toast('error', t('messages.crashes.newRecords', { count: result.added }))
     } else if (result.found === 0) {
-      toast(
-        'info',
-        'No crash record for gta_sa.exe after that session. If the game stopped responding rather than closing, that absence is the diagnosis: a hang leaves no exception entry.'
-      )
+      toast('info', t('messages.crashes.noneFound'))
     }
   } catch {
     // Reading the Event Log can fail on a locked-down machine. That is not an app error.
@@ -245,7 +242,7 @@ export async function relaunchElevated(remember: boolean): Promise<void> {
   }
 
   log('elevated instance started; this one is standing down')
-  toast('info', 'Modão is restarting with administrator rights.')
+  toast('info', t('messages.elevation.restarting'))
   // exit() rather than quit(): nothing here may veto the handoff, and the
   // elevated copy is already waiting for the lock.
   setTimeout(() => app.exit(0), 400)
@@ -260,7 +257,7 @@ function requireWritableGame(): void {
   const game = requireActiveGame()
   const access = probeWriteAccess(game.path)
   if (access.writable) return
-  throw new Error(access.reason ?? `Modão cannot write to ${game.path}.`)
+  throw new Error(access.reason ?? t('messages.access.cannotWrite', { path: game.path }))
 }
 
 export function registerIpc(): void {
@@ -283,7 +280,7 @@ export function registerIpc(): void {
     return settings()
   })
   ipcMain.handle('app:openExternal', async (_e, url: string) => {
-    if (!/^https?:\/\//i.test(url)) throw new Error('Refusing to open a non-http URL.')
+    if (!/^https?:\/\//i.test(url)) throw new Error(t('messages.app.nonHttpUrl'))
     await shell.openExternal(url)
   })
   ipcMain.handle('app:revealPath', async (_e, p: string) => {
@@ -300,7 +297,7 @@ export function registerIpc(): void {
   })
   ipcMain.handle('app:clearCache', async (_e, kind: CacheKind) => {
     const result = await clearCache(kind)
-    toast('success', `Freed ${(result.freed / 1024 / 1024).toFixed(1)} MB.`)
+    toast('success', t('messages.cache.freed', { size: (result.freed / 1024 / 1024).toFixed(1) }))
     return result
   })
 
@@ -310,9 +307,9 @@ export function registerIpc(): void {
   ipcMain.handle('game:add', (_e, p: string, kind?: GameKind) => addGame(p, undefined, kind))
   ipcMain.handle('game:pickFolder', async () => {
     const res = await dialog.showOpenDialog({
-      title: 'Select your GTA folder (San Andreas, III, Vice City or the Definitive Edition)',
+      title: t('messages.game.pickFolderTitle'),
       properties: ['openDirectory'],
-      buttonLabel: 'Use this folder'
+      buttonLabel: t('messages.game.pickFolderButton')
     })
     return res.canceled ? null : res.filePaths[0]
   })
@@ -327,7 +324,7 @@ export function registerIpc(): void {
     try {
       const result = await adoptInstall(profileName, (d, t) => progress(task.id, 'Adopting existing install', 'indexing', d, t))
       task.end()
-      toast('success', `Adopted ${result.adopted} mod folder(s) - no files were moved.`)
+      toast('success', t('messages.game.adoptedNoMove', { count: result.adopted }))
       return result
     } catch (e) {
       task.end((e as Error).message)
@@ -345,8 +342,8 @@ export function registerIpc(): void {
       toast(
         result.adopted > 0 ? 'success' : 'info',
         result.adopted > 0
-          ? `Adopted ${result.adopted} mod(s) already in the game folder - no file was moved.`
-          : 'Nothing new found in the game folder; this profile already tracks everything there.'
+          ? t('messages.game.adoptedIntoProfile', { count: result.adopted })
+          : t('messages.game.nothingNewInFolder')
       )
       return result
     } catch (e) {
@@ -361,7 +358,7 @@ export function registerIpc(): void {
     const exe = gameDefinition(game.kind)
       .exeNames.map((name) => path.join(game.path, name))
       .find((candidate) => exists(candidate))
-    if (!exe) throw new Error(`The executable for ${game.gameName} is not in ${game.path}.`)
+    if (!exe) throw new Error(t('messages.game.exeNotFound', { game: game.gameName, path: game.path }))
     const profile = await activeProfile()
     if (profile) getDb().prepare('UPDATE profile SET last_played_at = ? WHERE id = ?').run(new Date().toISOString(), profile.id)
     const ok = await shell.openPath(exe)
@@ -392,10 +389,13 @@ export function registerIpc(): void {
       if (result.verification && !result.verification.ok) {
         toast(
           'error',
-          `${profile.name} was switched in but did not verify: ${result.verification.problems[0] ?? 'see the switch report'}`
+          t('messages.profile.switchNotVerified', {
+            profile: profile.name,
+            problem: result.verification.problems[0] ?? t('messages.profile.seeSwitchReport')
+          })
         )
       } else {
-        toast('success', `${profile.name} active in ${(result.elapsedMs / 1000).toFixed(1)}s`)
+        toast('success', t('messages.profile.switchedActive', { profile: profile.name, seconds: (result.elapsedMs / 1000).toFixed(1) }))
       }
       return {
         profile,
@@ -417,7 +417,7 @@ export function registerIpc(): void {
     try {
       const result = await restorePreviousState(journalId)
       task.end()
-      toast('success', `Restored ${result.restored} file(s) from the pre-switch backup.`)
+      toast('success', t('messages.profile.restoredFiles', { count: result.restored }))
       return result
     } catch (e) {
       task.end((e as Error).message)
@@ -429,9 +429,9 @@ export function registerIpc(): void {
   ipcMain.handle('profiles:exportArchive', async (_e, id: number) => {
     const manifest = buildManifest(id)
     const res = await dialog.showSaveDialog({
-      title: 'Export profile',
+      title: t('messages.profile.exportTitle'),
       defaultPath: `${manifest.profile.name.replace(/[^\w -]/g, '')}.modao.json`,
-      filters: [{ name: 'Modão profile', extensions: ['json'] }]
+      filters: [{ name: t('messages.profile.fileFilterName'), extensions: ['json'] }]
     })
     if (res.canceled || !res.filePath) return null
     await fsp.writeFile(res.filePath, JSON.stringify(manifest, null, 2), 'utf8')
@@ -439,8 +439,8 @@ export function registerIpc(): void {
   })
   ipcMain.handle('profiles:importArchive', async (): Promise<ImportResult | null> => {
     const res = await dialog.showOpenDialog({
-      title: 'Import profile',
-      filters: [{ name: 'Modão profile', extensions: ['json'] }],
+      title: t('messages.profile.importTitle'),
+      filters: [{ name: t('messages.profile.fileFilterName'), extensions: ['json'] }],
       properties: ['openFile']
     })
     if (res.canceled) return null
@@ -449,7 +449,7 @@ export function registerIpc(): void {
     if (result.needsDownload.length) {
       toast(
         'info',
-        `${result.resolved} mod(s) restored from the local store; ${result.needsDownload.length} still need downloading.`
+        t('messages.profile.importSummary', { resolved: result.resolved, needsDownload: result.needsDownload.length })
       )
     }
     return result
@@ -468,7 +468,7 @@ export function registerIpc(): void {
   ipcMain.handle('library:uninstall', async (_e, installId: number) => {
     requireWritableGame()
     const result = await uninstall(installId)
-    toast('success', `Uninstalled: ${result.restored} displaced file(s) restored.`)
+    toast('success', t('messages.library.uninstalled', { count: result.restored }))
     return result
   })
   ipcMain.handle('library:rollbackPreview', (_e, installId: number) => rollbackPreview(installId))
@@ -489,7 +489,7 @@ export function registerIpc(): void {
   })
   ipcMain.handle('catalog:refresh', async (_e, modId: number) => {
     const ok = await refreshMod(modId)
-    if (!ok) toast('info', 'That page could not be refreshed (cached, disallowed by robots.txt, or offline).')
+    if (!ok) toast('info', t('messages.catalog.refreshFailed'))
     const profile = await activeProfile()
     return getCatalogMod(modId, profile?.id ?? null)
   })
@@ -498,8 +498,7 @@ export function registerIpc(): void {
       return {
         started: false,
         taskId: '',
-        message:
-          'Catalog crawling is off. Turn it on in Settings > Catalog. Modão ships an offline seed catalog and only crawls when you ask it to.'
+        message: t('messages.catalog.crawlDisabled')
       }
     }
     const task = newTask('Indexing MixMods')
@@ -511,24 +510,24 @@ export function registerIpc(): void {
       .then((report) => {
         setSetting('catalog.lastCrawl', new Date().toISOString())
         task.end()
-        const parts = [`${report.indexed} new`, `${report.updated} updated`]
-        if (report.skipped) parts.push(`${report.skipped} skipped`)
-        if (report.errors.length) parts.push(`${report.errors.length} error(s)`)
+        const parts = [t('messages.catalog.crawlNew', { count: report.indexed }), t('messages.catalog.crawlUpdated', { count: report.updated })]
+        if (report.skipped) parts.push(t('messages.catalog.crawlSkipped', { count: report.skipped }))
+        if (report.errors.length) parts.push(t('messages.catalog.crawlErrors', { count: report.errors.length }))
         toast(
           report.indexed + report.updated > 0 ? 'success' : 'info',
-          `Indexed ${report.visited} MixMods page(s): ${parts.join(', ')}.`
+          t('messages.catalog.crawlResult', { visited: report.visited, parts: parts.join(', ') })
         )
       })
       .catch((e: Error) => {
         task.end(e.message)
         toast('error', e.message)
       })
-    return { started: true, taskId: task.id, message: 'Crawling at 1 request/sec, honouring robots.txt.' }
+    return { started: true, taskId: task.id, message: t('messages.catalog.crawlStarted') }
   })
   ipcMain.handle('catalog:seedInfo', () => seedInfo())
   ipcMain.handle('catalog:reseed', async () => {
     const count = await loadSeedCatalog(true)
-    toast('success', `Re-read the offline seed catalog: ${count} mod(s).`)
+    toast('success', t('messages.catalog.reseeded', { count }))
     return { count }
   })
 
@@ -543,16 +542,12 @@ export function registerIpc(): void {
       .get(modVersionId) as
       | { id: number; download_url: string | null; version_label: string; mod_id: number; title: string; author: string; source_url: string; paywalled: number }
       | undefined
-    if (!row) throw new Error('That version no longer exists.')
+    if (!row) throw new Error(t('messages.install.versionGone'))
     if (row.paywalled) {
-      throw new Error(
-        `${row.title} is early access on the author's Patreon. Modão will not mirror or download paywalled files - open the source page and support the author instead.`
-      )
+      throw new Error(t('messages.install.paywalled', { title: row.title }))
     }
     if (!row.download_url) {
-      throw new Error(
-        `No download link is recorded for ${row.title}. Open its MixMods page, download it, and use "Install from file".`
-      )
+      throw new Error(t('messages.install.noDownloadLink', { title: row.title }))
     }
     const expected = (getDb().prepare('SELECT sha256 FROM mod_version WHERE id = ?').get(modVersionId) as { sha256: string | null })
       .sha256
@@ -580,8 +575,8 @@ export function registerIpc(): void {
 
   ipcMain.handle('install:planFromFile', async (_e, profileId: number) => {
     const res = await dialog.showOpenDialog({
-      title: 'Select a mod archive',
-      filters: [{ name: 'Mod archives', extensions: ['7z', 'zip', 'rar'] }],
+      title: t('messages.install.pickArchiveTitle'),
+      filters: [{ name: t('messages.install.archiveFilterName'), extensions: ['7z', 'zip', 'rar'] }],
       properties: ['openFile']
     })
     if (res.canceled) return null
@@ -615,9 +610,13 @@ export function registerIpc(): void {
     requireWritableGame()
     const task = newTask('Applying install plan')
     try {
-      const result = await applyPlan(planId, profileId, (phase, c, t) => progress(task.id, 'Applying install plan', phase, c, t))
+      const result = await applyPlan(planId, profileId, (phase, c, tot) => progress(task.id, 'Applying install plan', phase, c, tot))
       task.end()
-      toast('success', `Installed ${result.written} file(s) (${result.mode}); ${result.backedUp} displaced file(s) backed up.`)
+      const modeLabel = t(`messages.install.mode.${result.mode}`)
+      toast(
+        'success',
+        t('messages.install.installedSummary', { written: result.written, mode: modeLabel, backedUp: result.backedUp })
+      )
       return result
     } catch (e) {
       task.end((e as Error).message)
@@ -645,7 +644,7 @@ export function registerIpc(): void {
   ipcMain.handle('conflicts:applyPriorities', async (_e, profileId: number, changes: { installId: number; priority: number }[]) => {
     requireWritableGame()
     await applyPriorities(requireProfile(profileId), changes)
-    toast('success', 'Priorities written to modloader.ini.')
+    toast('success', t('messages.conflicts.prioritiesWritten'))
   })
 
   // --- analysis -------------------------------------------------------------
@@ -660,13 +659,13 @@ export function registerIpc(): void {
   ipcMain.handle('saves:snapshot', (_e, profileId: number, label: string) => snapshot(requireProfile(profileId), label || 'manual', false))
   ipcMain.handle('saves:restore', async (_e, snapshotId: number) => {
     await restoreSnapshot(snapshotId)
-    toast('success', 'Saves restored. The previous state was snapshotted first.')
+    toast('success', t('messages.saves.restored'))
   })
   ipcMain.handle('saves:currentSlots', (_e, profileId: number) => currentSlots(requireProfile(profileId)))
   ipcMain.handle('saves:detectExisting', () => detectExistingSaves())
   ipcMain.handle('saves:importExisting', async (_e, profileId: number, label: string) => {
     const result = await importExistingSaves(requireProfile(profileId), label || 'Imported from your existing install')
-    toast('success', `Copied ${result.slots} save slot(s) into this profile; your own save folder was left untouched.`)
+    toast('success', t('messages.saves.imported', { slots: result.slots }))
     return result
   })
 

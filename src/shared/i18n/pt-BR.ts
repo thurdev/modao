@@ -15,6 +15,7 @@ import { settings } from './sections/settings'
 import { shell } from './sections/shell'
 import { install } from './sections/install'
 import { checks } from './sections/checks'
+import { messages } from './sections/messages'
 
 export const ptBR = {
   profiles: profiles.pt,
@@ -27,6 +28,7 @@ export const ptBR = {
   shell: shell.pt,
   install: install.pt,
   checks: checks.pt,
+  messages: messages.pt,
   app: {
     name: 'Modão',
     tagline: 'gerenciador de mods',

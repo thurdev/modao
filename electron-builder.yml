@@ -1,5 +1,8 @@
 appId: dev.modao.app
 productName: Modão
+# The window and the installer say "Modão"; the file on disk stays ASCII, because an
+# accent in an executable name trips shortcuts, scripts and the odd antivirus.
+executableName: Modao
 directories:
   buildResources: build
   output: dist
