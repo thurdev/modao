@@ -571,6 +571,21 @@ function DryRunReport(props: { plan: SwitchPlan; onForgetMissing?: () => void })
         <dd>{plan.unmanaged.length ? plan.unmanaged.join(', ') : t('profiles.nothing')}</dd>
       </dl>
 
+      {plan.willBeOverwritten.length ? (
+        <div className="notice" data-kind="warn">
+          <span className="notice-mark" />
+          <div>
+            <strong>{t('profiles.willBeOverwritten', { count: plan.willBeOverwritten.length })}</strong>
+            <ul className="list">
+              {plan.willBeOverwritten.map((rel) => (
+                <li key={rel}>{rel}</li>
+              ))}
+            </ul>
+            <span className="faint">{t('profiles.willBeOverwrittenHint')}</span>
+          </div>
+        </div>
+      ) : null}
+
       {plan.unresolved.length ? (
         <div className="notice" data-kind="warn">
           <span className="notice-mark" />

@@ -603,7 +603,11 @@ export async function uninstall(installId: number): Promise<UninstallResult> {
   const { restored } = await dematerialise(
     game,
     mine.map((f) => f.relative_path),
-    mine.filter((f) => f.backup_path).map((f) => ({ relativePath: f.relative_path, backupPath: f.backup_path! }))
+    mine.filter((f) => f.backup_path).map((f) => ({ relativePath: f.relative_path, backupPath: f.backup_path! })),
+    // Every path here is this install's alone (shared ones were filtered out above),
+    // its bytes are in the store, and anything the user edited went to quarantine
+    // a few lines up. Uninstall is the one caller that may take what it wrote.
+    { mayRemoveFile: () => true }
   )
 
   db.transaction(() => {

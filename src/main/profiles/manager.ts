@@ -3,7 +3,7 @@ import fsp from 'node:fs/promises'
 import type { Profile, SnapshotEntry, SwitchVerification } from '@shared/types'
 import { getDb } from '../db'
 import { Paths } from '../util/paths'
-import { exists, isDirectory, isLink, moveSafe, slugify, walk } from '../util/fsx'
+import { exists, isDirectory, isLink, moveSafe, slugify, timestampSlug, walk } from '../util/fsx'
 import { activeGame, requireActiveGame } from '../game/detect'
 import { gameDefinition, type GameKind } from '@shared/games'
 import { clampPriority } from '../game/modloaderIni'
@@ -233,6 +233,12 @@ export interface ActivateResult {
   /** The journal row this switch was recorded in, for "Restore previous state". */
   journalId: number | null
   verification: SwitchVerification | null
+  /**
+   * Game-relative paths of files that were copied to quarantine during this
+   * switch, either because the user had edited them or because an incoming mod
+   * needed their exact path. Quarantine is never cleared on its own.
+   */
+  quarantined: string[]
 }
 
 /**
@@ -271,7 +277,7 @@ export async function activateProfile(
     )
   }
   if (current?.id === id) {
-    return { elapsedMs: 0, log: [`${target.name} is already active.`], journalId: null, verification: null }
+    return { elapsedMs: 0, log: [`${target.name} is already active.`], journalId: null, verification: null, quarantined: [] }
   }
 
   onProgress?.('plan', 0, 1)
@@ -286,6 +292,27 @@ export async function activateProfile(
 
   const journal = openJournal(current?.id ?? null, id)
   let snapshot: SnapshotEntry[] = []
+  const quarantined: string[] = []
+
+  /**
+   * Copies every path out and proves the copy by hash before the switch is
+   * allowed to touch any of them. Used for the outgoing profile's own files and
+   * for the user's own files that an incoming mod is about to displace - the
+   * second set used not to be snapshotted at all.
+   */
+  const snapshotAndVerify = async (relativePaths: string[]): Promise<void> => {
+    const unique = [...new Set(relativePaths)]
+    if (unique.length === 0) return
+    snapshot = await snapshotFiles(game.path, unique, journal.snapshotDir)
+    const verified = await verifySnapshot(snapshot)
+    if (!verified.ok) {
+      throw new Error(
+        'The backup taken before the switch did not verify, so nothing was changed:\n  ' + verified.problems.slice(0, 5).join('\n  ')
+      )
+    }
+    recordManifest(journal.id, snapshot)
+    log.push(`Backed up ${snapshot.length} file(s) to ${journal.snapshotDir}, every copy verified by hash.`)
+  }
 
   try {
     if (current) {
@@ -300,18 +327,20 @@ export async function activateProfile(
       for (const f of ingested.failed) log.push(`Note: ${f.label} - ${f.reason}`)
 
       onProgress?.('snapshot', 0, 1)
-      const toSnapshot = (await planSwitch(id)).outgoing
-        .filter((p) => p.action === 'snapshot-and-remove')
-        .map((p) => p.relativePath)
-      snapshot = await snapshotFiles(game.path, toSnapshot, journal.snapshotDir)
-      const verified = await verifySnapshot(snapshot)
-      if (!verified.ok) {
-        throw new Error(
-          'The backup taken before the switch did not verify, so nothing was changed:\n  ' + verified.problems.slice(0, 5).join('\n  ')
+      // Re-planned after the ingest: adopted installs now have a store key, so
+      // what is removable has changed since the plan the caller saw.
+      const replan = await planSwitch(id)
+      await snapshotAndVerify([
+        ...replan.outgoing.filter((p) => p.action === 'snapshot-and-remove').map((p) => p.relativePath),
+        ...replan.willBeOverwritten
+      ])
+      if (replan.willBeOverwritten.length) {
+        log.push(
+          `${replan.willBeOverwritten.length} file(s) you put in the game folder yourself sit where ${target.name} installs its own: ` +
+            `${replan.willBeOverwritten.slice(0, 5).join(', ')}${replan.willBeOverwritten.length > 5 ? ', ...' : ''}. ` +
+            'They were backed up and copied to quarantine before being replaced.'
         )
       }
-      recordManifest(journal.id, snapshot)
-      log.push(`Backed up ${snapshot.length} file(s) to ${journal.snapshotDir}, every copy verified by hash.`)
 
       onProgress?.('unlink', 0, 1)
       const snapshotted = new Set(snapshot.map((e) => ownedKey(e.relativePath)))
@@ -324,14 +353,21 @@ export async function activateProfile(
         )
       }
       if (out.quarantined.length) {
+        quarantined.push(...out.quarantined)
         log.push(
           `${out.quarantined.length} file(s) you edited after installing were copied to quarantine before the link went: ` +
             `${out.quarantined.slice(0, 5).join(', ')}${out.quarantined.length > 5 ? ', ...' : ''}`
         )
       }
-      if (plan.unmanaged.length) {
-        log.push(`${plan.unmanaged.length} unmanaged file(s) in the game folder were left untouched.`)
+      const leftAlone = plan.unmanaged.filter((rel) => !plan.willBeOverwritten.includes(rel))
+      if (leftAlone.length) {
+        log.push(`${leftAlone.length} unmanaged file(s) in the game folder were left untouched.`)
       }
+    } else if (plan.willBeOverwritten.length) {
+      // No profile is active, so there is no outgoing snapshot - but the user's
+      // own files at the incoming paths still need one.
+      onProgress?.('snapshot', 0, 1)
+      await snapshotAndVerify(plan.willBeOverwritten)
     }
 
     onProgress?.('saves', 0, 1)
@@ -344,6 +380,14 @@ export async function activateProfile(
     onProgress?.('link', 0, 1)
     const inResult = await materialiseProfile(id, (d, t) => onProgress?.('link', d, t))
     log.push(...inResult.log)
+    for (const s of inResult.skipped) log.push(`Not materialised - ${s}`)
+    if (inResult.quarantined.length) {
+      quarantined.push(...inResult.quarantined)
+      log.push(
+        `${inResult.quarantined.length} file(s) already in the game folder were copied to quarantine before ${target.name} took their path: ` +
+          `${inResult.quarantined.slice(0, 5).join(', ')}${inResult.quarantined.length > 5 ? ', ...' : ''}`
+      )
+    }
 
     db.transaction(() => {
       db.prepare('UPDATE profile SET is_active = 0').run()
@@ -363,7 +407,7 @@ export async function activateProfile(
         : `Switch applied but did NOT verify: ${verification.problems.join(' ')}`
     )
 
-    return { elapsedMs: Date.now() - t0, log, journalId: journal.id, verification }
+    return { elapsedMs: Date.now() - t0, log, journalId: journal.id, verification, quarantined }
   } catch (e) {
     setJournalState(journal.id, 'failed', (e as Error).message)
     throw e
@@ -374,6 +418,12 @@ export async function activateProfile(
  * Rolls a switch back to the state its snapshot recorded: whatever the switch
  * linked in is taken out, every file in the verified backup goes back where it
  * came from, the saves swap back, and the previous profile is active again.
+ *
+ * Vacating the profile that is active right now is the same removal a switch
+ * does, so it gets the same interlock. It used to run with no options at all,
+ * which meant no snapshot set, which meant every tracked real file of that
+ * profile was deleted outright - and for an adopted install (no store copy, no
+ * recorded hash) there was nothing anywhere to put back.
  */
 export async function restorePreviousState(journalId?: number): Promise<{ log: string[]; restored: number }> {
   const db = getDb()
@@ -384,8 +434,53 @@ export async function restorePreviousState(journalId?: number): Promise<{ log: s
   const log: string[] = []
   const current = db.prepare('SELECT id, name FROM profile WHERE is_active = 1').get() as { id: number; name: string } | undefined
   if (current) {
-    const out = await dematerialiseProfile(current.id, {})
+    const game = requireActiveGame()
+    // Adopted content exists only in the game folder; it has to exist somewhere
+    // else before that folder can be vacated.
+    const ingested = await ingestUnstoredInstalls(current.id, game.path)
+    if (ingested.ingested) {
+      log.push(`Copied ${ingested.ingested} adopted mod(s) (${ingested.files} file(s)) of ${current.name} into the Modão store first.`)
+    }
+    for (const f of ingested.failed) log.push(`Note: ${f.label} - ${f.reason}`)
+
+    const undoDir = path.join(Paths.profileBackups(current.id), `undo-${String(journal.id).padStart(4, '0')}-${timestampSlug()}`)
+    const live = (
+      db
+        .prepare(
+          `SELECT DISTINCT f.relative_path p FROM install_file f JOIN install i ON i.id = f.install_id WHERE i.profile_id = ?`
+        )
+        .all(current.id) as { p: string }[]
+    )
+      .map((r) => r.p)
+      .filter((rel) => {
+        const abs = path.join(game.path, rel)
+        return exists(abs) && !isLink(abs) && !isDirectory(abs)
+      })
+    const undo = await snapshotFiles(game.path, live, undoDir)
+    const verified = await verifySnapshot(undo)
+    if (!verified.ok) {
+      throw new Error(
+        `The backup of ${current.name} taken before the restore did not verify, so nothing was changed:\n  ` +
+          verified.problems.slice(0, 5).join('\n  ')
+      )
+    }
+    if (undo.length) log.push(`Backed up ${undo.length} file(s) of ${current.name} to ${undoDir} before removing them.`)
+
+    const snapshotted = new Set(undo.map((e) => ownedKey(e.relativePath)))
+    const out = await dematerialiseProfile(current.id, { snapshotted })
     log.push(`Removed ${out.removed} item(s) that ${current.name} had materialised.`)
+    if (out.quarantined.length) {
+      log.push(
+        `${out.quarantined.length} file(s) you edited were copied to quarantine first: ` +
+          `${out.quarantined.slice(0, 5).join(', ')}${out.quarantined.length > 5 ? ', ...' : ''}`
+      )
+    }
+    if (out.leftInPlace.length) {
+      log.push(
+        `${out.leftInPlace.length} file(s) stayed in the game folder because no verified backup of them exists: ` +
+          `${out.leftInPlace.slice(0, 5).join(', ')}${out.leftInPlace.length > 5 ? ', ...' : ''}`
+      )
+    }
   }
   const result = await restoreFromJournal(journal.id)
   log.push(`Restored ${result.restored} file(s) from ${journal.snapshotDir}.`)

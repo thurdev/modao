@@ -190,6 +190,25 @@ export async function copyRecursive(from: string, to: string): Promise<void> {
   }
 }
 
+/**
+ * A second reference to the same bytes, for when one copy has to be reachable
+ * from two places at once - a displaced file is both the backup that will be
+ * put back and the quarantine entry the user can see. Hardlinks inside one
+ * volume, so mirroring a multi-gigabyte mod folder costs nothing; falls back to
+ * a real copy across volumes.
+ */
+export async function mirrorRecursive(from: string, to: string): Promise<void> {
+  const st = await fsp.stat(from)
+  if (st.isDirectory()) {
+    await fsp.mkdir(to, { recursive: true })
+    for (const e of await fsp.readdir(from, { withFileTypes: true })) {
+      await mirrorRecursive(path.join(from, e.name), path.join(to, e.name))
+    }
+    return
+  }
+  await linkOrCopyFile(from, to)
+}
+
 export function slugify(name: string): string {
   return name
     .normalize('NFD')

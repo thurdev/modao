@@ -57,6 +57,10 @@ export const profiles = {
     toStoreFirst: 'A copiar para o acervo antes',
     untouched: 'Intocado, fora do controle do Modão',
     nothing: 'nada',
+    willBeOverwritten_one: '{count} arquivo seu está exatamente onde este perfil instala o dele',
+    willBeOverwritten_other: '{count} arquivos seus estão exatamente onde este perfil instala os dele',
+    willBeOverwrittenHint:
+      'Nada é apagado: cada um vai para o backup verificado da troca e para a quarentena antes de o mod assumir o caminho, e volta quando você sair deste perfil.',
     wouldRefuse: '{count} mod(s) não puderam ser materializados — a troca se recusaria a rodar',
     outgoingSummary: '{count} arquivo(s) · {size} copiados para backup antes',
     incomingSummary: '{count} arquivo(s)',
@@ -122,6 +126,10 @@ export const profiles = {
     toStoreFirst: 'To copy into the store first',
     untouched: 'Untouched, not managed by Modão',
     nothing: 'nothing',
+    willBeOverwritten_one: '{count} file of yours sits exactly where this profile installs its own',
+    willBeOverwritten_other: '{count} files of yours sit exactly where this profile installs its own',
+    willBeOverwrittenHint:
+      'Nothing is deleted: each one goes into the switch’s verified backup and into quarantine before the mod takes the path, and comes back when you leave this profile.',
     wouldRefuse: '{count} mod(s) could not be materialised — the switch would refuse to run',
     outgoingSummary: '{count} file(s) · {size} backed up first',
     incomingSummary: '{count} file(s)',

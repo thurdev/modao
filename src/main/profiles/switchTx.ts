@@ -144,6 +144,12 @@ export async function planSwitch(toProfileId: number): Promise<SwitchPlan> {
   // appear, with nothing said about it.
   const incoming: SwitchFilePlan[] = []
   const unresolved: SwitchPlan['unresolved'] = []
+  // Split by where the bytes are, because that is what decides whether a file
+  // sitting at an incoming path belongs to Modão or to the user. An adopted
+  // install IS the file in the game folder. A store-backed install is about to
+  // put its own copy over whatever is there.
+  const adoptedInPlace = new Set<string>()
+  const fromStore = new Set<string>()
   const targetRows = installsOf(to.id)
   const targetFiles = filesOfProfile(to.id)
   const filesByInstall = new Map<number, FileRow[]>()
@@ -171,6 +177,7 @@ export async function planSwitch(toProfileId: number): Promise<SwitchPlan> {
         continue
       }
       for (const f of live) {
+        adoptedInPlace.add(f.relative_path.toLowerCase())
         incoming.push({
           relativePath: f.relative_path,
           action: 'materialise',
@@ -200,6 +207,7 @@ export async function planSwitch(toProfileId: number): Promise<SwitchPlan> {
     }
     for (const f of files) {
       if (missing.includes(f)) continue
+      fromStore.add(f.relative_path.toLowerCase())
       incoming.push({
         relativePath: f.relative_path,
         action: 'materialise',
@@ -211,7 +219,19 @@ export async function planSwitch(toProfileId: number): Promise<SwitchPlan> {
     }
   }
 
-  const unmanaged = await unmanagedFiles(game.path, new Set([...outgoing, ...incoming].map((p) => p.relativePath.toLowerCase())))
+  // What Modão can account for: the files the outgoing profile put there, and
+  // the files an adopted incoming install literally IS. Everything else loose
+  // in scripts\ and cleo\ is the user's.
+  //
+  // The incoming profile's store-backed targets are deliberately NOT in here.
+  // Folding them in hid the one case that matters: a file of the user's at a
+  // path the incoming profile is about to write. It was filtered out of the
+  // report and then destroyed without ever being named.
+  const unmanaged = await unmanagedFiles(
+    game.path,
+    new Set([...outgoing.map((p) => p.relativePath.toLowerCase()), ...adoptedInPlace])
+  )
+  const willBeOverwritten = unmanaged.filter((rel) => fromStore.has(rel.toLowerCase()))
 
   const priorities: Record<string, number> = {}
   for (const row of targetRows) {
@@ -229,6 +249,7 @@ export async function planSwitch(toProfileId: number): Promise<SwitchPlan> {
     toIngest,
     unresolved,
     unmanaged,
+    willBeOverwritten,
     iniPath: path.join(game.path, iniRelativePath()),
     iniPriorities: priorities,
     totalBytes
@@ -239,6 +260,11 @@ export async function planSwitch(toProfileId: number): Promise<SwitchPlan> {
  * Loose plugins in the game folder that no managed install claims. A switch
  * leaves these exactly where they are: they are the user's, Modão did not put
  * them there, and removing them is what destroyed an install once already.
+ *
+ * The one exception is a path the incoming profile itself writes, which cannot
+ * be left in place. Those come back in `willBeOverwritten` as well as here:
+ * they are snapshotted with the rest of the switch and copied to quarantine
+ * before the mod takes the path, so the file survives either way.
  */
 async function unmanagedFiles(gamePath: string, known: Set<string>): Promise<string[]> {
   const out: string[] = []

@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { getDb } from '../db'
 import { Paths } from '../util/paths'
+import { timestampSlug } from '../util/fsx'
 import { activeGame, requireActiveGame } from '../game/detect'
 import { applyProfileToIni, readIniFile, writeIniFile } from '../game/modloaderIni'
 import { dematerialise, materialise, ownedKey, quarantineEdited } from '../store/contentStore'
@@ -16,6 +17,37 @@ interface InstallRow {
 
 export function installsOf(profileId: number): InstallRow[] {
   return getDb().prepare('SELECT * FROM install WHERE profile_id = ? ORDER BY id').all(profileId) as InstallRow[]
+}
+
+/**
+ * Every path the REST of this profile owns, in the one spelling ownership is
+ * compared under - the same meaning the install path has always used.
+ *
+ * The install now being written must not be in here. Its own targets are
+ * exactly the paths whose current occupant has to be looked at, and a switch
+ * that handed in its own targets answered "already ours" about every one of
+ * them: a user's loose scripts\MixSets.asi was force-removed with no backup,
+ * no snapshot and no quarantine the moment a profile carrying a MixSets.asi
+ * was materialised.
+ */
+function pathsOwnedByOtherInstalls(profileId: number, exceptInstallId: number): Set<string> {
+  const rows = getDb()
+    .prepare(
+      `SELECT f.relative_path p FROM install_file f JOIN install i ON i.id = f.install_id
+        WHERE i.profile_id = ? AND i.id != ?`
+    )
+    .all(profileId, exceptInstallId) as { p: string }[]
+  return new Set(rows.map((r) => ownedKey(r.p)))
+}
+
+/**
+ * Where the user can find content a mod displaced from its own path. Stamped
+ * with the moment it happened, so a later switch adds an entry rather than
+ * writing over the one already there: quarantine keeps what it is given until
+ * the user clears it.
+ */
+function displacedQuarantineDir(profileId: number, installId: number, at: string): string {
+  return path.join(Paths.quarantine(), 'displaced', String(profileId), at, String(installId))
 }
 
 interface InstallFileRow {
@@ -65,23 +97,33 @@ export function iniProfileName(name: string): string {
 export async function materialiseProfile(
   profileId: number,
   onProgress?: (done: number, total: number, label: string) => void
-): Promise<{ links: number; backedUp: number; log: string[] }> {
+): Promise<{ links: number; backedUp: number; quarantined: string[]; skipped: string[]; log: string[] }> {
   const game = requireActiveGame()
   const rows = installsOf(profileId).filter((r) => r.enabled)
   const log: string[] = []
+  const quarantined: string[] = []
+  const displacedAt = timestampSlug()
+  const skipped: string[] = []
   let links = 0
   let backedUp = 0
   let done = 0
   for (const row of rows) {
     const files = filesOf(row.id).map((f) => f.relative_path)
-    if (!row.store_key || files.length === 0) continue
+    if (!row.store_key || files.length === 0) {
+      // Adopted installs are already in place and have nothing to link; anything
+      // else here would just not appear, so say which and why.
+      if (files.length === 0) skipped.push(`${row.folder_name ?? `install ${row.id}`}: no files are recorded for it`)
+      continue
+    }
     const result = await materialise(game, row.store_key, files, {
       allowJunction: files.every((f) => f.startsWith('modloader/')),
       backupDir: path.join(Paths.profileBackups(profileId), String(row.id)),
-      ownedPaths: new Set(files.map(ownedKey))
+      ownedPaths: pathsOwnedByOtherInstalls(profileId, row.id),
+      quarantineDir: displacedQuarantineDir(profileId, row.id, displacedAt)
     })
     links += result.files
     backedUp += result.backedUp.length
+    quarantined.push(...result.quarantined.map((q) => q.relativePath))
     if (result.backedUp.length) {
       const stmt = getDb().prepare('UPDATE install_file SET backup_path = ?, was_overwrite = 1 WHERE install_id = ? AND relative_path = ?')
       for (const b of result.backedUp) stmt.run(b.backupPath, row.id, b.relativePath)
@@ -90,7 +132,7 @@ export async function materialiseProfile(
     onProgress?.(++done, rows.length, row.folder_name ?? String(row.id))
   }
   await syncProfileIni(profileId)
-  return { links, backedUp, log }
+  return { links, backedUp, quarantined, skipped, log }
 }
 
 /**
@@ -132,7 +174,9 @@ export async function dematerialiseProfile(
       game,
       files.map((f) => f.relative_path),
       files.filter((f) => f.backup_path).map((f) => ({ relativePath: f.relative_path, backupPath: f.backup_path! })),
-      { mayRemoveFile: snapshotted ? (rel) => snapshotted.has(ownedKey(rel)) : undefined }
+      // No snapshot set means no verified copy of anything, so nothing real may
+      // go. The caller gets every path back in `leftInPlace` and can say so.
+      { mayRemoveFile: snapshotted ? (rel) => snapshotted.has(ownedKey(rel)) : () => false }
     )
     removed += r.removed
     restored += r.restored
@@ -162,10 +206,19 @@ export async function remateriliseInstall(installId: number): Promise<void> {
       {
         allowJunction: files.every((f) => f.relative_path.startsWith('modloader/')),
         backupDir: path.join(Paths.profileBackups(row.profile_id), String(installId)),
-        ownedPaths: new Set(files.map((f) => ownedKey(f.relative_path)))
+        ownedPaths: pathsOwnedByOtherInstalls(row.profile_id, installId),
+        quarantineDir: displacedQuarantineDir(row.profile_id, installId, timestampSlug())
       }
     )
   } else {
+    // A file the user edited after it was written is theirs, not ours to drop,
+    // whichever way it leaves the game folder. Uninstall has always done this;
+    // disabling a mod is the same removal and used not to.
+    await quarantineEdited(
+      game.path,
+      files.map((f) => ({ relativePath: f.relative_path, sha256: f.sha256 })),
+      path.join(Paths.quarantine(), 'disabled', String(installId))
+    )
     // Disabling one mod must not take files another install still provides -
     // and must not remove anything the store cannot put back.
     const shared = new Set(

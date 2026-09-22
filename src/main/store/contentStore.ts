@@ -15,6 +15,12 @@ import {
   sha256File,
   walk
 } from '../util/fsx'
+import { displaceForeign, type DisplacedFile, type QuarantinedFile } from './displace'
+
+// The ownership decision lives in ./displace so a plain Node test can load it;
+// everything already imports it from here.
+export { displaceForeign, isOwned, ownedKey } from './displace'
+export type { DisplacedFile, QuarantinedFile } from './displace'
 
 /**
  * Modão keeps exactly one copy of every mod payload in userData and
@@ -63,7 +69,9 @@ export type MaterialiseMode = 'junction' | 'hardlink' | 'copy'
 export interface MaterialiseResult {
   mode: MaterialiseMode
   files: number
-  backedUp: { relativePath: string; backupPath: string }[]
+  backedUp: DisplacedFile[]
+  /** Copies of displaced foreign content the user can go and find. */
+  quarantined: QuarantinedFile[]
 }
 
 /**
@@ -73,15 +81,31 @@ export interface MaterialiseResult {
  * instant regardless of size. A mod that something overlays is materialised as
  * individual hardlinks so the overlay can replace a file without mutating the
  * shared store copy. Cross-volume installs fall back to copying.
+ *
+ * `ownedPaths` is the set of paths owned by the OTHER installs of this profile.
+ * Anything at a target that is not in that set and is not a link is the user's,
+ * and is copied out before the target is taken.
  */
 export async function materialise(
   game: GameInstall,
   key: string,
   targets: string[],
-  opts: { allowJunction: boolean; backupDir: string; ownedPaths: Set<string> }
+  opts: { allowJunction: boolean; backupDir: string; ownedPaths: Set<string>; quarantineDir?: string }
 ): Promise<MaterialiseResult> {
   const src = storeDir(key)
   const backedUp: MaterialiseResult['backedUp'] = []
+  const quarantined: MaterialiseResult['quarantined'] = []
+  const displace = async (target: string, relativePath: string): Promise<void> => {
+    const r = await displaceForeign({
+      target,
+      relativePath,
+      ownedPaths: opts.ownedPaths,
+      backupDir: opts.backupDir,
+      quarantineDir: opts.quarantineDir
+    })
+    if (r.backedUp) backedUp.push(r.backedUp)
+    if (r.quarantined) quarantined.push(r.quarantined)
+  }
   const folderTargets = new Set<string>()
   for (const t of targets) {
     const m = /^modloader\/([^/]+)\//.exec(t)
@@ -96,10 +120,10 @@ export async function materialise(
   if (canJunction) {
     for (const folder of folderTargets) {
       const link = path.join(game.path, folder)
-      await backupIfForeign(link, opts.backupDir, opts.ownedPaths, backedUp, folder)
+      await displace(link, folder)
       await createJunction(link, path.join(src, folder))
     }
-    return { mode: 'junction', files: targets.length, backedUp }
+    return { mode: 'junction', files: targets.length, backedUp, quarantined }
   }
 
   let mode: MaterialiseMode = sameVolume(src, game.path) ? 'hardlink' : 'copy'
@@ -107,69 +131,10 @@ export async function materialise(
     const from = path.join(src, t)
     const to = path.join(game.path, t)
     if (!exists(from)) continue
-    await backupIfForeign(to, opts.backupDir, opts.ownedPaths, backedUp, t)
+    await displace(to, t)
     mode = await linkOrCopyFile(from, to)
   }
-  return { mode, files: targets.length, backedUp }
-}
-
-/**
- * The single spelling every game-relative path is compared under. Mod Loader
- * paths reach us from SQLite, from the plan and from Windows itself, so they
- * are folded to lowercase with forward slashes before either side of an
- * ownership test looks at them.
- */
-export function ownedKey(relativePath: string): string {
-  return relativePath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '').toLowerCase()
-}
-
-/**
- * Is what sits at this path Modão's own content?
- *
- * The owned set is a set of files, but a junction is placed at a folder
- * (`modloader/<mod>`), so the two are compared at the same granularity: a
- * folder is ours when any file we track lives inside it. Without this a
- * junction target could never match, and every mod folder Modão had itself
- * written would be treated as a foreign file and "backed up" on every switch.
- */
-function isOwned(ownedPaths: Set<string>, relativePath: string): boolean {
-  const key = ownedKey(relativePath)
-  if (ownedPaths.has(key)) return true
-  const prefix = `${key}/`
-  for (const owned of ownedPaths) {
-    if (owned.startsWith(prefix)) return true
-  }
-  return false
-}
-
-/**
- * Anything already at the target that Modão did not put there is preserved,
- * never overwritten in place - but only a copy that actually happened is
- * recorded as a backup. A link is not user content: it points at the store (or
- * at whatever another tool linked), so there is nothing to copy and nothing to
- * restore later, and recording one would promise a restore that could not
- * happen.
- */
-async function backupIfForeign(
-  target: string,
-  backupDir: string,
-  ownedPaths: Set<string>,
-  log: MaterialiseResult['backedUp'],
-  relativePath: string
-): Promise<void> {
-  const linked = isLink(target)
-  if (!exists(target) && !linked) return
-  if (linked || isOwned(ownedPaths, relativePath)) {
-    await removeLinkOrDir(target)
-    return
-  }
-  const backupPath = path.join(backupDir, relativePath)
-  await fsp.mkdir(path.dirname(backupPath), { recursive: true })
-  // An exception here aborts before the removal: nothing goes that was not copied first.
-  if (isDirectory(target)) await copyRecursive(target, backupPath)
-  else await fsp.copyFile(target, backupPath)
-  log.push({ relativePath, backupPath })
-  await removeLinkOrDir(target)
+  return { mode, files: targets.length, backedUp, quarantined }
 }
 
 /** One install-tracked file, as Modão recorded it at the moment it wrote it. */
@@ -216,12 +181,17 @@ export async function quarantineEdited(gamePath: string, files: TrackedFile[], q
  * when the caller can say, for that exact path, that a verified copy exists
  * somewhere else. Anything it refuses is left where it is and reported, because
  * a file Modão cannot put back is a file Modão must not take away.
+ *
+ * It is deliberately NOT optional. "Restore previous state" once passed no
+ * options at all and every tracked file of the active profile was deleted with
+ * nothing anywhere to put back; a caller now has to write down, in the call,
+ * why it is allowed to remove what it removes.
  */
 export async function dematerialise(
   game: GameInstall,
   targets: string[],
-  backups: { relativePath: string; backupPath: string }[],
-  opts: { mayRemoveFile?: (relativePath: string) => boolean } = {}
+  backups: DisplacedFile[],
+  opts: { mayRemoveFile: (relativePath: string) => boolean }
 ): Promise<{ removed: number; restored: number; skipped: string[] }> {
   let removed = 0
   const skipped: string[] = []
@@ -242,7 +212,7 @@ export async function dematerialise(
     const p = path.join(game.path, t)
     if (!exists(p) || isDirectory(p)) continue
     // A link points at the store; the content survives its removal.
-    if (!isLink(p) && opts.mayRemoveFile && !opts.mayRemoveFile(t)) {
+    if (!isLink(p) && !opts.mayRemoveFile(t)) {
       skipped.push(t)
       continue
     }

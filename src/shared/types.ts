@@ -581,8 +581,14 @@ export interface SwitchPlan {
   incoming: SwitchFilePlan[]
   toIngest: { installId: number; label: string; files: number }[]
   unresolved: { installId: number; label: string; reason: string }[]
-  /** Files in the game folder no managed mod claims. A switch never touches these. */
+  /** Files in the game folder no managed mod claims. A switch leaves these alone. */
   unmanaged: string[]
+  /**
+   * The subset of `unmanaged` whose path the incoming profile writes, so it
+   * cannot be left in place. Each one is snapshotted with the rest of the
+   * switch and copied to quarantine before the mod takes the path.
+   */
+  willBeOverwritten: string[]
   iniPath: string
   iniPriorities: Record<string, number>
   totalBytes: number
