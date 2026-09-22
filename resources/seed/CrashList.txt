@@ -1,0 +1,20 @@
+; CrashList.txt - bundled excerpt of the community crash-address database
+; shipped with CrashInfo (Junior_Djjr / MixMods). Refreshable from within
+; ModVault; entries are community-maintained and may be incomplete.
+;
+; Format:  <address> = <cause in pt-BR> | <solution>
+; The crash address is 0x400000 (image base) + the fault offset reported by
+; the Windows Event Log.
+
+00749B7B = Tentando criar um modelo que nao existe, ou o .txd nao existe. Ou nome de arquivo longo demais. | Verifique o mod instalado por ultimo: modelo sem .txd correspondente, nome de arquivo muito longo, ou textura com dimensao que nao e potencia de dois dentro do .txd.
+004C0DB4 = Problema com veiculo: modelo, handling ou vehicle.ide invalido. | Confira o vehicle.ide e o handling.cfg do ultimo mod de veiculo instalado.
+00532FCE = Problema ao carregar colisao (.col) ou o arquivo esta corrompido. | Reinstale o mod de mapa mais recente; verifique arquivos .col duplicados entre mods.
+005B8E9B = Falha de streaming: limite de memoria de streaming estourado. | Aumente o streaming memory (Open Limit Adjuster / SilentPatch) ou remova pacotes de textura grandes.
+006F4B2A = Animacao ausente: o .ifp instalado nao contem uma animacao que o jogo pediu. | Um mod substituiu ped.ifp sem incluir todas as animacoes originais. Lembre-se que natacao fica em swim.ifp, nao em ped.ifp.
+004D4A90 = Script CLEO chamando opcode inexistente ou versao errada da CLEO. | Verifique a versao da CLEO; CLEO+ exige CLEO 4.4 ou superior.
+0053E58E = Crash no loop principal, normalmente memoria esgotada (2 GB). | Ative LARGE_ADDRESS_AWARE no executavel usando um patcher externo, ou reduza pacotes de texturas.
+005A419F = Erro ao renderizar: textura invalida ou dimensao nao potencia de dois. | Abra o .txd suspeito e corrija as texturas cujas dimensoes nao sao potencia de dois.
+00704F5B = Falha ao ler data/*.ide ou *.ipl (linha mal formada). | Verifique o ultimo mod que adicionou objetos ao mapa.
+00614107 = Arquivo de audio ausente ou corrompido em audio/. | Restaure os arquivos de audio originais do jogo.
+00464D30 = Falha em RwTextureRead: dicionario de texturas corrompido. | O .txd esta corrompido ou foi salvo com uma versao incompativel do RenderWare.
+0056E150 = Problema no carregamento do save game. | Restaure um snapshot de save anterior; nao apague o save atual.

@@ -1,0 +1,123 @@
+{
+  "format": "modao-dependencies",
+  "version": 1,
+  "note": "Curated dependency graph, keyed by the MixMods post slug. The scraper reads prose, not structured data, so these relationships are maintained by hand from the mod pages and from what the scene documents. Slugs that are not in the catalogue are ignored.",
+  "frameworks": {
+    "modloader": "Mod Loader - every modloader-folder mod needs it",
+    "cleoplus": "CLEO+ - requires CLEO 4.4 or newer",
+    "sa-silent-asi-loader": "Silent's ASI Loader - loads .asi plugins"
+  },
+  "dependencies": [
+    {
+      "mod": "cleoplus",
+      "kind": "requires",
+      "target": "cleo",
+      "versionRange": ">=4.4",
+      "note": "CLEO+ calls exports that only exist from CLEO 4.4 onwards. Against CLEO 4.3 the game dies at startup with \"The ordinal 22 could not be located in the dynamic link library CLEO+.cleo\"."
+    },
+    {
+      "mod": "sa-proper-fixes",
+      "kind": "alt",
+      "altGroup": "render-pipeline",
+      "target": "sa-proper-shaders",
+      "note": "Proper Fixes assumes a corrected render pipeline underneath - either Proper Shaders or SkyGfx."
+    },
+    {
+      "mod": "sa-proper-fixes",
+      "kind": "alt",
+      "altGroup": "render-pipeline",
+      "target": "sa-skygfx",
+      "note": "Proper Fixes assumes a corrected render pipeline underneath - either Proper Shaders or SkyGfx."
+    },
+    {
+      "mod": "sa-proper-shaders",
+      "kind": "conflicts",
+      "target": "sa-skygfx",
+      "note": "Both replace the render pipeline; running both produces broken lighting or a crash."
+    },
+    {
+      "mod": "sa-proper-shaders",
+      "kind": "conflicts",
+      "target": "ped-spec",
+      "note": "Proper Shaders already handles ped specular lighting."
+    },
+    {
+      "mod": "sa-proper-shaders",
+      "kind": "requires",
+      "target": "sa-silent-asi-loader",
+      "note": "Ships as an .asi plugin."
+    },
+    {
+      "mod": "sa-skygfx",
+      "kind": "requires",
+      "target": "sa-silent-asi-loader",
+      "note": "Ships as an .asi plugin."
+    },
+    {
+      "mod": "sa-vehfuncs",
+      "kind": "requires",
+      "target": "modloader",
+      "note": "Installs as a Mod Loader folder."
+    },
+    {
+      "mod": "sa-vehfuncs",
+      "kind": "requires",
+      "target": "sa-silent-asi-loader",
+      "note": "Ships gsx.asi alongside its Mod Loader folder."
+    },
+    {
+      "mod": "sa-mixsets",
+      "kind": "requires",
+      "target": "sa-silent-asi-loader",
+      "note": "Ships as an .asi plugin."
+    },
+    {
+      "mod": "sa-project2dfx",
+      "kind": "requires",
+      "target": "sa-silent-asi-loader",
+      "note": "Ships as an .asi plugin."
+    },
+    {
+      "mod": "crashinfo",
+      "kind": "requires",
+      "target": "sa-silent-asi-loader",
+      "note": "Ships as an .asi plugin; it is what produces the crash address Modão looks up."
+    },
+    {
+      "mod": "sa-silentpatch",
+      "kind": "requires",
+      "target": "sa-silent-asi-loader",
+      "note": "Ships as an .asi plugin."
+    },
+    {
+      "mod": "improved-streaming",
+      "kind": "requires",
+      "target": "sa-silent-asi-loader",
+      "note": "Ships as an .asi plugin."
+    },
+    {
+      "mod": "open-limit-adjuster",
+      "kind": "conflicts",
+      "target": "fastman92-limit-adjuster",
+      "note": "Two limit adjusters patching the same engine limits at once is a documented way to crash on load."
+    },
+    {
+      "mod": "renderhook-by-petkagta",
+      "kind": "conflicts",
+      "target": "sa-proper-shaders",
+      "note": "Both take over rendering."
+    },
+    {
+      "mod": "renderhook-by-petkagta",
+      "kind": "conflicts",
+      "target": "sa-skygfx",
+      "note": "Both take over rendering."
+    },
+    {
+      "mod": "enb-series-v0-430-asi-complex-shadows-soft-particles",
+      "kind": "conflicts",
+      "target": "renderhook-by-petkagta",
+      "note": "ENB and RenderHook both hook the same D3D entry points."
+    }
+  ]
+}
