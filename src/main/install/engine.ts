@@ -548,6 +548,8 @@ function ensureLocalModVersion(plan: InstallPlan): number {
 export interface UninstallResult {
   restored: number
   quarantined: string[]
+  /** Paths left in place because another install in this profile also owns them. */
+  kept: string[]
 }
 
 /** Uninstall restores the game folder to exactly the state it had before the install. */
@@ -570,10 +572,18 @@ export async function uninstall(installId: number): Promise<UninstallResult> {
     path.join(Paths.quarantine(), String(installId))
   )
 
+  // A file another install in this profile also owns is not this install's to
+  // remove. Two copies of the same pack, one disabled, share every path: the
+  // disabled one was deleted to tidy up and it took gta_sa.exe, modloader.asi
+  // and CLEO.asi with it - files the copy that stayed was still providing.
+  const sharedWith = sharedPaths(install.profile_id, installId)
+  const mine = files.filter((f) => !sharedWith.has(ownedKey(f.relative_path)))
+  const shared = files.filter((f) => sharedWith.has(ownedKey(f.relative_path)))
+
   const { restored } = await dematerialise(
     game,
-    files.map((f) => f.relative_path),
-    files.filter((f) => f.backup_path).map((f) => ({ relativePath: f.relative_path, backupPath: f.backup_path! }))
+    mine.map((f) => f.relative_path),
+    mine.filter((f) => f.backup_path).map((f) => ({ relativePath: f.relative_path, backupPath: f.backup_path! }))
   )
 
   db.transaction(() => {
@@ -584,13 +594,31 @@ export async function uninstall(installId: number): Promise<UninstallResult> {
       installId,
       install.profile_id,
       'uninstall',
-      JSON.stringify({ restored, quarantined }),
+      JSON.stringify({ restored, quarantined, keptForOtherInstalls: shared.map((f) => f.relative_path) }),
       new Date().toISOString()
     )
   })()
 
   await syncProfileIni(install.profile_id)
-  return { restored, quarantined }
+  return { restored, quarantined, kept: shared.map((f) => f.relative_path) }
+}
+
+/**
+ * The game-relative paths another install in this profile also claims.
+ *
+ * Ownership is per file, not per mod: two mods can ship the same .asi, and the
+ * same mod installed twice shares all of them. Removing one must leave whatever
+ * the other still provides.
+ */
+function sharedPaths(profileId: number, exceptInstallId: number): Set<string> {
+  const rows = getDb()
+    .prepare(
+      `SELECT DISTINCT f.relative_path p FROM install_file f
+         JOIN install i ON i.id = f.install_id
+        WHERE i.profile_id = ? AND i.id != ?`
+    )
+    .all(profileId, exceptInstallId) as { p: string }[]
+  return new Set(rows.map((r) => ownedKey(r.p)))
 }
 
 /** What an uninstall would do, file by file, shown before the user commits. */

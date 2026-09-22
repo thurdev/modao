@@ -113,6 +113,25 @@ async function buildTree(root: string): Promise<Node> {
 }
 
 /**
+ * Files no mod may ever write over.
+ *
+ * The Essentials pack ships its own gta_sa.exe. Installed as a root file it
+ * replaced the user's executable, and because it was then recorded as one of
+ * the pack's files, disabling the pack deleted the game's executable outright -
+ * along with modloader.asi and CLEO.asi, which the same pack also ships.
+ *
+ * The rule the project started with says it plainly: never modify gta_sa.exe.
+ * That has to hold for "replace it with a different copy" too, however
+ * well-meant the copy is. The file is kept in the store, named in a warning,
+ * and left for the user to place deliberately if they really want it.
+ */
+const GAME_EXECUTABLES = /^(gta_sa|gta3|gta-vc|gta_vc|sanandreas|playgtasa|gta_sa_compact)\.exe$/i
+
+function isGameExecutable(name: string): boolean {
+  return GAME_EXECUTABLES.test(path.basename(name))
+}
+
+/**
  * An .asi that owns resources must ship WITH them.
  *
  * Mod Loader's std.asi loads a plugin from inside a mod folder and makes that
@@ -444,7 +463,20 @@ export async function classifyTree(
       const rel = node.rel ? `${node.rel}/${f.rel}` : f.rel
       if (isExcluded(rel)) continue
       if (/^(readme|leiame)/i.test(path.basename(f.rel)) && DOC_EXT.test(f.rel)) docs.push(rel)
-      files.push(makeFile(rel, `${targetPrefix}/${f.rel}`, destination, f.size))
+      const target = `${targetPrefix}/${f.rel}`
+      // An executable that would land on the game's own is refused wherever it
+      // came from in the archive, not only at the top level.
+      if (isGameExecutable(target) && !target.includes('modloader/')) {
+        docs.push(rel)
+        warnings.push({
+          severity: 'warn',
+          code: 'game-executable',
+          message: `${path.basename(target)} is the game's own executable, so it was left out of the install.`,
+          detail: 'Modão never replaces it.'
+        })
+        continue
+      }
+      files.push(makeFile(rel, target, destination, f.size))
     }
   }
 
@@ -463,6 +495,17 @@ export async function classifyTree(
         files.push(makeFile(node.rel, `cleo/${node.name}`, 'cleo-script', node.size))
       } else if (isDocumentation(node.rel)) {
         docs.push(node.rel)
+      } else if (isGameExecutable(node.name)) {
+        // Never over the game's own executable, whatever the archive intends.
+        docs.push(node.rel)
+        warnings.push({
+          severity: 'warn',
+          code: 'game-executable',
+          message: `${node.name} is the game's own executable, so it was left out of the install.`,
+          detail:
+            'Modão never replaces it. If you meant to swap your executable - for a downgrade, or a patched build - ' +
+            'copy it in yourself, with the game closed and a copy of the original kept.'
+        })
       } else if (ROOT_FILE_NAMES.has(lower) || /\.(dll|exe|ini)$/i.test(lower)) {
         files.push(makeFile(node.rel, node.name, 'root-file', node.size))
       } else if (ASSET_EXT.test(lower)) {

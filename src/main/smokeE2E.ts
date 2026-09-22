@@ -537,6 +537,82 @@ export async function runE2E(): Promise<number> {
       riskyFiles.every((rel) => fs.existsSync(path.join(game, ...rel.split('/'))))
   )
 
+  // --- two copies of one pack, and deleting the spare ------------------------
+  // What actually destroyed a user's install: the same pack was in the profile
+  // twice, one copy disabled. They installed it again, then deleted the
+  // disabled duplicate to tidy up - and the uninstall removed every file the
+  // copy that stayed was still providing, gta_sa.exe among them.
+  const packSource = path.join(tmp, 'pack-essentials')
+  await fsp.mkdir(path.join(packSource, 'modloader', 'Essentials'), { recursive: true })
+  await fsp.writeFile(path.join(packSource, 'modloader', 'Essentials', 'core.dat'), 'shared payload')
+  await fsp.writeFile(path.join(packSource, 'vorbisFile.dll'), 'asi loader')
+  // The real pack ships the game executable. It must never be installed.
+  await fsp.writeFile(path.join(packSource, 'gta_sa.exe'), 'the pack version of the exe')
+
+  const exeBefore = await sha256File(path.join(game, 'gta_sa.exe'))
+
+  const packPlanA = await createPlan({
+    archivePath: packSource,
+    profileId: risky.id,
+    modId: null,
+    modVersionId: null,
+    title: 'Essentials',
+    author: 'Junior_Djjr',
+    sourceUrl: null
+  })
+  check(
+    'pack: the game executable inside an archive is refused, not installed',
+    !packPlanA.files.some((f) => f.targetRelative.toLowerCase() === 'gta_sa.exe'),
+    packPlanA.files.map((f) => f.targetRelative)
+  )
+  check(
+    'pack: and the refusal is explained rather than silent',
+    packPlanA.warnings.some((w) => w.code === 'game-executable'),
+    packPlanA.warnings.map((w) => w.code)
+  )
+  const packA = await applyPlan(packPlanA.planId, risky.id)
+  check(
+    'pack: the game executable is untouched by the install',
+    (await sha256File(path.join(game, 'gta_sa.exe'))) === exeBefore
+  )
+
+  // The same pack again, as a second install in the same profile.
+  const packPlanB = await createPlan({
+    archivePath: packSource,
+    profileId: risky.id,
+    modId: null,
+    modVersionId: null,
+    title: 'Essentials',
+    author: 'Junior_Djjr',
+    sourceUrl: null
+  })
+  const packB = await applyPlan(packPlanB.planId, risky.id)
+  check('pack: the profile now holds two copies of it', packA.installId !== packB.installId)
+
+  const sharedFile = path.join(game, 'vorbisFile.dll')
+  const sharedBytes = await sha256File(sharedFile)
+
+  // Delete the spare, exactly as the user did.
+  const removal = await uninstall(packA.installId)
+  check(
+    'pack: deleting the duplicate leaves the files the other copy still provides',
+    fs.existsSync(sharedFile) && (await sha256File(sharedFile)) === sharedBytes,
+    removal
+  )
+  check(
+    'pack: and it says which files it kept and why',
+    removal.kept.some((f) => f.toLowerCase().includes('vorbisfile.dll')),
+    removal.kept
+  )
+  check(
+    'pack: the mod folder the other copy owns is still there',
+    fs.existsSync(path.join(game, 'modloader', 'Essentials', 'core.dat'))
+  )
+  check(
+    'pack: and the game executable survived all of it',
+    fs.existsSync(path.join(game, 'gta_sa.exe')) && (await sha256File(path.join(game, 'gta_sa.exe'))) === exeBefore
+  )
+
   getDb().prepare('DELETE FROM profile').run()
   await fsp.rm(tmp, { recursive: true, force: true }).catch(() => undefined)
 

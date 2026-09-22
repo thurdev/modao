@@ -166,10 +166,27 @@ export async function remateriliseInstall(installId: number): Promise<void> {
       }
     )
   } else {
+    // Disabling one mod must not take files another install still provides -
+    // and must not remove anything the store cannot put back.
+    const shared = new Set(
+      (
+        db
+          .prepare(
+            `SELECT DISTINCT f.relative_path p FROM install_file f
+               JOIN install i ON i.id = f.install_id
+              WHERE i.profile_id = ? AND i.id != ? AND i.enabled = 1`
+          )
+          .all(row.profile_id, installId) as { p: string }[]
+      ).map((r) => ownedKey(r.p))
+    )
+    const restorable = new Set(
+      files.filter((f) => f.sha256 || row.store_key).map((f) => ownedKey(f.relative_path))
+    )
     await dematerialise(
       game,
       files.map((f) => f.relative_path),
-      files.filter((f) => f.backup_path).map((f) => ({ relativePath: f.relative_path, backupPath: f.backup_path! }))
+      files.filter((f) => f.backup_path).map((f) => ({ relativePath: f.relative_path, backupPath: f.backup_path! })),
+      { mayRemoveFile: (rel) => !shared.has(ownedKey(rel)) && restorable.has(ownedKey(rel)) }
     )
   }
   await syncProfileIni(row.profile_id)
