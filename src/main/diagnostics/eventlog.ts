@@ -3,7 +3,8 @@ import { promisify } from 'node:util'
 import type { CrashIncident, CrashReport } from '@shared/types'
 import { getDb } from '../db'
 import { lookup } from './crashlist'
-import { describeAbsoluteAddress, groupIncidents, parseModuleName, resolveCrashAddress } from '@shared/crash'
+import { groupIncidents, parseModuleName } from '@shared/crash'
+import { addressingForStorage, addressingFromStoredRow } from '@shared/crashRecord'
 import { activeGame } from '../game/detect'
 
 const execFileAsync = promisify(execFile)
@@ -121,11 +122,14 @@ export async function scanCrashes(profileId: number | null): Promise<ScanResult>
 
     // Only a fault inside gta_sa.exe has an absolute address CrashList can
     // answer for; a DLL offset looked up against the exe index is a wrong answer
-    // stated confidently.
-    const addressing =
-      parsed.kind === 'exception'
-        ? resolveCrashAddress(parsed.module, parsed.faultOffset)
-        : { kind: 'none' as const, display: '', lookupAddress: null, note: null }
+    // stated confidently. The decision itself lives in @shared/crashRecord, where
+    // it can be tested without Electron.
+    const addressing = addressingForStorage({
+      from: 'eventlog',
+      kind: parsed.kind,
+      module: parsed.module,
+      faultOffset: parsed.faultOffset
+    })
     const match = addressing.lookupAddress ? await lookup(addressing.lookupAddress) : null
     const cause = match?.cause ?? (match?.nearest ? `${match.nearest.cause} (nearest known address ${match.nearest.address})` : null)
 
@@ -139,18 +143,18 @@ export async function scanCrashes(profileId: number | null): Promise<ScanResult>
       .run(
         profileId,
         parsed.occurredAt,
-        parsed.faultOffset,
+        addressing.faultOffset,
         parsed.module,
         parsed.exceptionCode,
-        addressing.display,
+        addressing.crashAddress,
         cause,
         match?.solution ?? null,
         parsed.kind,
         parsed.raw,
         parsed.processId,
-        parsed.moduleUnloaded ? 1 : 0,
-        addressing.kind,
-        addressing.note
+        addressing.moduleUnloaded ? 1 : 0,
+        addressing.addressKind,
+        addressing.addressNote
       )
     if (info.changes > 0) added++
   }
@@ -195,17 +199,17 @@ export function listCrashes(profileId: number | null): CrashReport[] {
     address_note: string | null
   }[]
   return rows.map((r) => {
-    // A row written by the module-aware scan already holds the finished
-    // address, computed once at the single site that adds the image base -
-    // reading it back must never re-derive it, or an absolute address from
-    // modloader.log gets the base added a second time on every read.
-    //
-    // Only rows written before address_kind existed are derived here, and for
-    // those the derivation is authoritative: a stale exe-era address stored
-    // against a DLL fault must not leak back out.
-    const legacy =
-      r.address_kind === null && r.kind !== 'hang' ? resolveCrashAddress(r.module, r.fault_offset) : null
-    const kind = (r.address_kind as CrashReport['addressKind'] | null) ?? legacy?.kind ?? 'none'
+    // Reading a row back must never recompute an address that was already
+    // computed on the way in - see addressingFromStoredRow in
+    // @shared/crashRecord, which is where that rule is stated and tested.
+    const read = addressingFromStoredRow({
+      kind: r.kind,
+      module: r.module,
+      faultOffset: r.fault_offset,
+      crashAddress: r.crash_address,
+      addressKind: r.address_kind,
+      addressNote: r.address_note
+    })
     return {
       id: r.id,
       profileId: r.profile_id,
@@ -216,11 +220,11 @@ export function listCrashes(profileId: number | null): CrashReport[] {
       moduleUnloaded: r.module_unloaded === null ? parseModuleName(r.module).unloaded : !!r.module_unloaded,
       processId: r.process_id ?? '',
       exceptionCode: r.exception_code,
-      crashAddress: legacy ? legacy.display : r.crash_address,
-      addressKind: kind,
-      addressNote: r.address_note ?? legacy?.note ?? null,
-      matchedCause: kind === 'exe' ? r.matched_cause : null,
-      matchedSolution: kind === 'exe' ? r.matched_solution : null,
+      crashAddress: read.crashAddress,
+      addressKind: read.addressKind,
+      addressNote: read.addressNote,
+      matchedCause: read.addressKind === 'exe' ? r.matched_cause : null,
+      matchedSolution: read.addressKind === 'exe' ? r.matched_solution : null,
       resolved: !!r.resolved,
       kind: r.kind === 'hang' ? 'hang' : 'exception',
       raw: r.raw
@@ -258,10 +262,12 @@ async function scanModLoaderCrash(profileId: number | null): Promise<{ added: nu
 
   const occurredAt = crash.occurredAt ?? new Date().toISOString()
   // modloader.log records the address the process faulted at - the image base
-  // is already in it (crash.addressIsAbsolute). Putting it through
-  // resolveCrashAddress would add 0x400000 to a number that has it, turning the
-  // real 0x005B8E55 into a meaningless 0x009B8E55.
-  const addressing = crash.module ? describeAbsoluteAddress(crash.module, crash.address ?? '') : null
+  // is already in it (crash.addressIsAbsolute). Treating it as a fault offset
+  // would add 0x400000 to a number that has it, turning the real 0x005B8E55
+  // into a meaningless 0x009B8E55, which is exactly what the field report saw.
+  // addressingForStorage is the one place that distinction is made, and it is
+  // tested directly.
+  const addressing = addressingForStorage({ from: 'modloader', module: crash.module, address: crash.address })
   const detail = [
     crash.reason,
     crash.lastStreamedFile ? `Last file opened for streaming: ${crash.lastStreamedFile}` : '',
@@ -275,25 +281,26 @@ async function scanModLoaderCrash(profileId: number | null): Promise<{ added: nu
       `INSERT OR IGNORE INTO crash_report
          (profile_id, occurred_at, fault_offset, module, exception_code, crash_address, matched_cause, matched_solution,
           kind, raw, resolved, process_id, module_unloaded, address_kind, address_note)
-       VALUES (?,?,?,?,?,?,?,?,?,?,0,?,0,?,?)`
+       VALUES (?,?,?,?,?,?,?,?,?,?,0,?,?,?,?)`
     )
     .run(
       profileId,
       occurredAt,
-      // fault_offset stays EMPTY: this source reports no offset, and storing
-      // the absolute address in that column is what made listCrashes re-derive
+      // Empty: this source reports no offset, and storing the absolute address
+      // in a column named for an offset is what made listCrashes re-derive
       // base + already-based-address on every read.
-      '',
+      addressing.faultOffset,
       crash.module ?? 'gta_sa.exe',
       '',
-      addressing?.display ?? crash.address ?? '',
+      addressing.crashAddress,
       null,
       null,
       'exception',
       detail,
       'modloader.log',
-      addressing?.kind ?? 'none',
-      addressing?.note ?? null
+      addressing.moduleUnloaded ? 1 : 0,
+      addressing.addressKind,
+      addressing.addressNote
     )
 
   return {

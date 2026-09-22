@@ -1265,6 +1265,170 @@ try {
 }
 check('running: assertGameNotRunning passes when the game is closed', !closedThrew)
 
+
+// --- what gets stored, and what comes back out ------------------------------
+// The item 06 fix lives in the write and read paths of eventlog.ts, which reach
+// PowerShell and better-sqlite3 and so cannot be loaded here. The DECISION those
+// paths make is extracted into @shared/crashRecord, and it is tested directly:
+// reverting any part of the fix makes one of these fail.
+import { addressingForStorage, addressingFromStoredRow } from '../src/shared/crashRecord'
+
+// Source 1: the Windows Event Log, which reports an offset relative to the module.
+const storedExe = addressingForStorage({
+  from: 'eventlog',
+  kind: 'exception',
+  module: 'gta_sa.exe',
+  faultOffset: '0x000c0c63'
+})
+check(
+  'stored: an Event Log offset inside the exe is stored as base + offset',
+  storedExe.crashAddress === '0x004C0C63' && storedExe.addressKind === 'exe',
+  storedExe
+)
+check(
+  'stored: an Event Log row keeps its offset, because it really has one',
+  storedExe.faultOffset === '0x000c0c63' && storedExe.lookupAddress === '0x004C0C63',
+  storedExe
+)
+
+const storedUnloadedDll = addressingForStorage({
+  from: 'eventlog',
+  kind: 'exception',
+  module: 'std.data.dll_unloaded',
+  faultOffset: '0x0001a2b0'
+})
+check(
+  'stored: an already-unloaded DLL offset is stored as module+offset, unbased',
+  storedUnloadedDll.crashAddress === 'std.data.dll+0x0001A2B0' && storedUnloadedDll.addressKind === 'module',
+  storedUnloadedDll
+)
+check(
+  'stored: the unloaded marker is recorded rather than assumed',
+  storedUnloadedDll.moduleUnloaded === true && storedUnloadedDll.lookupAddress === null,
+  storedUnloadedDll
+)
+
+const storedHang = addressingForStorage({ from: 'eventlog', kind: 'hang', module: 'gta_sa.exe', faultOffset: '' })
+check(
+  'stored: a hang stores no address at all, and is never looked up',
+  storedHang.crashAddress === '' && storedHang.addressKind === 'none' && storedHang.lookupAddress === null,
+  storedHang
+)
+
+// Source 2: modloader.log, which reports the address the process faulted at.
+// This is the regression the field report caught. If this call ever goes back
+// through resolveCrashAddress, crashAddress becomes 0x009B8E55 and this fails.
+const storedFromDump = addressingForStorage({ from: 'modloader', module: mlCrash?.module ?? '', address: mlCrash?.address ?? '' })
+check(
+  'stored: an absolute modloader.log address is stored exactly as recorded',
+  storedFromDump.crashAddress === '0x005B8E55' && storedFromDump.addressKind === 'exe',
+  storedFromDump
+)
+check(
+  'stored: the image base is not added to an address that already has it',
+  storedFromDump.crashAddress !== '0x009B8E55' &&
+    storedFromDump.crashAddress !== resolveCrashAddress('gta_sa.exe', mlCrash?.address ?? '').display,
+  storedFromDump.crashAddress
+)
+check(
+  'stored: an absolute source leaves fault_offset empty, so no read can re-derive it',
+  storedFromDump.faultOffset === '',
+  storedFromDump
+)
+check(
+  'stored: an absolute exe address is still the one thing CrashList may be asked',
+  storedFromDump.lookupAddress === '0x005B8E55',
+  storedFromDump
+)
+
+const storedDumpInDll = addressingForStorage({ from: 'modloader', module: 'std.data.dll_unloaded', address: '0x0F2B1000' })
+check(
+  'stored: an absolute address inside an unloaded DLL is flagged and never looked up',
+  storedDumpInDll.moduleUnloaded === true &&
+    storedDumpInDll.addressKind === 'module' &&
+    storedDumpInDll.lookupAddress === null,
+  storedDumpInDll
+)
+check(
+  'stored: a modloader.log fault outside the exe gets no image base either',
+  !/^0x00[4-9A-F]/.test(storedDumpInDll.crashAddress),
+  storedDumpInDll.crashAddress
+)
+
+// Reading back. A row written by the module-aware scan is returned as stored -
+// this is the half that used to re-derive base + already-based-address on every
+// single read, long after the write site was corrected.
+const readDumpRow = addressingFromStoredRow({
+  kind: 'exception',
+  module: 'gta_sa.exe',
+  faultOffset: storedFromDump.faultOffset,
+  crashAddress: storedFromDump.crashAddress,
+  addressKind: storedFromDump.addressKind,
+  addressNote: storedFromDump.addressNote
+})
+check(
+  'read: a stored absolute address survives the round trip unchanged',
+  readDumpRow.crashAddress === '0x005B8E55' && readDumpRow.derived === false,
+  readDumpRow
+)
+check(
+  'read: reading the same row a hundred times never moves the address',
+  Array.from({ length: 100 }).reduce<string>(
+    (addr) =>
+      addressingFromStoredRow({
+        kind: 'exception',
+        module: 'gta_sa.exe',
+        faultOffset: '',
+        crashAddress: addr,
+        addressKind: 'exe',
+        addressNote: null
+      }).crashAddress,
+    storedFromDump.crashAddress
+  ) === '0x005B8E55'
+)
+
+const readEventLogRow = addressingFromStoredRow({
+  kind: 'exception',
+  module: 'gta_sa.exe',
+  faultOffset: storedExe.faultOffset,
+  crashAddress: storedExe.crashAddress,
+  addressKind: storedExe.addressKind,
+  addressNote: storedExe.addressNote
+})
+check(
+  'read: a stored Event Log address is not based a second time on read',
+  readEventLogRow.crashAddress === '0x004C0C63' && readEventLogRow.derived === false,
+  readEventLogRow
+)
+
+// Legacy rows - written before address_kind existed - are the only ones still
+// worked out on read, and there the derivation wins: those rows hold the old
+// exe-only guess, so a DLL fault has an exe address sitting in crash_address.
+const readLegacyDll = addressingFromStoredRow({
+  kind: 'exception',
+  module: 'std.data.dll',
+  faultOffset: '0x0001a2b0',
+  crashAddress: '0x0041A2B0',
+  addressKind: null,
+  addressNote: null
+})
+check(
+  'read: a legacy exe-era address stored against a DLL fault is not shown',
+  readLegacyDll.crashAddress === 'std.data.dll+0x0001A2B0' && readLegacyDll.derived === true,
+  readLegacyDll
+)
+check(
+  'read: a legacy exe row is derived once, image base included',
+  addressingFromStoredRow({
+    kind: 'exception',
+    module: 'gta_sa.exe',
+    faultOffset: '0x000c0c63',
+    crashAddress: '',
+    addressKind: null,
+    addressNote: null
+  }).crashAddress === '0x004C0C63'
+)
+
 fs.rmSync(tmp, { recursive: true, force: true })
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`)
 process.exit(failures === 0 ? 0 : 1)
