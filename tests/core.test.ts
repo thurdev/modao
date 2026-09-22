@@ -585,6 +585,17 @@ check(
   shaders.probes
 )
 
+// --- asar offsets ------------------------------------------------------------
+// The archive verifier reads the built app the way Electron does. asar pads its
+// header to a 4-byte boundary, and forgetting that makes every file look
+// shifted - a CI build was rejected for a corruption that did not exist.
+function asarDataStart(headerSize: number): number {
+  return 16 + headerSize + ((4 - (headerSize % 4)) % 4)
+}
+check('asar: an aligned header needs no padding', asarDataStart(552384) === 16 + 552384)
+check('asar: an unaligned header is padded up to the next boundary', asarDataStart(553) === 16 + 553 + 3, asarDataStart(553))
+check('asar: padding is never four bytes', [0, 1, 2, 3].every((r) => asarDataStart(100 + r) - (16 + 100 + r) < 4))
+
 // --- download links ----------------------------------------------------------
 // Which links Modão can fetch on its own decides whether "Install" installs
 // or hands the user a chore, so the shapes are pinned down here.

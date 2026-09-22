@@ -23,7 +23,16 @@ if (!fs.existsSync(asarPath)) {
 const buf = fs.readFileSync(asarPath)
 const headerSize = buf.readUInt32LE(12)
 const header = JSON.parse(buf.subarray(16, 16 + headerSize).toString('utf8'))
-const base = 16 + headerSize
+/**
+ * asar pads the header to a 4-byte boundary before the file data starts, so
+ * the first file does not always begin at 16 + headerSize. Reading without the
+ * padding lands one to three bytes early and every entry after it looks
+ * shifted - which is exactly the corruption this script is meant to detect, so
+ * getting it wrong here cries wolf on a perfectly good archive. It did: a CI
+ * build failed with package.json "first bytes: 
+{" while the archive was fine.
+ */
+const base = 16 + headerSize + ((4 - (headerSize % 4)) % 4)
 
 /** Pulls one file out of the archive exactly as Electron's asar reader would. */
 function read(entry) {
