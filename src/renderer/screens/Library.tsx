@@ -421,7 +421,7 @@ function ReadmeModal(props: { mod: InstalledMod; onClose: () => void }): JSX.Ele
           {readme.data}
         </pre>
       ) : (
-        <p className="faint">This archive shipped no readme.</p>
+        <p className="faint">{t('library.noReadme')}</p>
       )}
     </Modal>
   )
@@ -541,7 +541,7 @@ function UninstallModal(props: { mod: InstalledMod; onClose: () => void; onDone:
           </p>
           <pre className="pre" style={{ maxHeight: 260 }}>
             {preview.loading
-              ? 'Reading the transaction log…'
+              ? t('library.readingLog')
               : (preview.data ?? []).map((p) => `${p.relativePath}  —  ${p.action}`).join('\n')}
           </pre>
         </>

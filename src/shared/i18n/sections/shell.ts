@@ -22,6 +22,8 @@ export const shell = {
     noProfile: 'Nenhum perfil ativo',
     tasks: 'Tarefas',
     gameTitle: 'Instalação do jogo',
+    screenFailed: 'Esta tela não conseguiu renderizar',
+    nothingTouched: 'Nada na sua pasta do jogo foi tocado.',
     dismiss: 'Dispensar'
   },
   en: {
@@ -40,6 +42,8 @@ export const shell = {
     noProfile: 'No active profile',
     tasks: 'Tasks',
     gameTitle: 'Game install',
+    screenFailed: 'This screen failed to render',
+    nothingTouched: 'Nothing in your game folder was touched.',
     dismiss: 'Dismiss'
   }
 } as const

@@ -750,7 +750,7 @@ export async function storageReport(): Promise<StorageReport> {
 export async function clearCache(kind: CacheKind): Promise<{ freed: number }> {
   const dir =
     kind === 'http' ? Paths.httpCache() : kind === 'archives' ? Paths.archives() : kind === 'quarantine' ? Paths.quarantine() : null
-  if (!dir) throw new Error(`Unknown cache: ${String(kind)}`)
+  if (!dir) throw new Error(t('messages.cache.unknownKind', { kind: String(kind) }))
 
   const freed = (await walk(dir)).reduce((a, f) => a + f.size, 0)
   for (const entry of await fsp.readdir(dir, { withFileTypes: true }).catch(() => [])) {
@@ -772,9 +772,7 @@ export function removeGame(id: number): void {
   if (!row) return
   const active = db.prepare('SELECT name FROM profile WHERE game_id = ? AND is_active = 1').get(id) as { name: string } | undefined
   if (active) {
-    throw new Error(
-      `The profile "${active.name}" is active on ${row.path}. Switch to a profile on another install before removing this one.`
-    )
+    throw new Error(t('messages.game.activeElsewhere', { profile: active.name, path: row.path }))
   }
   db.transaction(() => {
     db.prepare('UPDATE profile SET game_id = NULL WHERE game_id = ?').run(id)
@@ -804,7 +802,7 @@ export function removeGame(id: number): void {
  */
 async function resolveGithubRelease(url: string): Promise<string> {
   const repo = githubRepo(new URL(url))
-  if (!repo) throw new Error('That GitHub link does not name a release.')
+  if (!repo) throw new Error(t('messages.download.notGithubRelease'))
   const { request } = await import('undici')
   const { userAgent } = await import('./catalog/http')
   const api = repo.tag
@@ -816,14 +814,12 @@ async function resolveGithubRelease(url: string): Promise<string> {
     maxRedirections: 3
   })
   if (res.statusCode >= 400) {
-    throw new Error(`GitHub answered HTTP ${res.statusCode} for ${repo.owner}/${repo.repo}. Download it from the release page instead.`)
+    throw new Error(t('messages.download.githubHttpError', { status: res.statusCode, repo: `${repo.owner}/${repo.repo}` }))
   }
   const release = (await res.body.json()) as { assets?: { name: string; browser_download_url: string }[]; html_url?: string }
   const asset = (release.assets ?? []).find((a) => /\.(7z|zip|rar)$/i.test(a.name))
   if (!asset) {
-    throw new Error(
-      `The latest ${repo.owner}/${repo.repo} release has no .7z, .zip or .rar asset. Open the release page and pick the right file yourself.`
-    )
+    throw new Error(t('messages.download.noArchiveAsset', { repo: `${repo.owner}/${repo.repo}` }))
   }
   log('resolved a GitHub release to an asset', { repo: `${repo.owner}/${repo.repo}`, asset: asset.name })
   return asset.browser_download_url
@@ -869,7 +865,7 @@ async function downloadArchive(
   if (expectedSha && expectedSha !== actual) {
     await fsp.rm(dest, { force: true })
     throw new Error(
-      `Download of ${label} does not match the recorded hash (expected ${expectedSha.slice(0, 16)}…, got ${actual.slice(0, 16)}…). Nothing was installed.`
+      t('messages.download.hashMismatch', { label, expected: expectedSha.slice(0, 16), actual: actual.slice(0, 16) })
     )
   }
   if (!expectedSha) {
@@ -897,10 +893,10 @@ async function downloadFile(
     signal: ctx.signal
   })
   if (res.statusCode >= 400) {
-    throw new Error(`${hostOf(fileUrl)} answered HTTP ${res.statusCode} for ${ctx.label}. Nothing was installed.`)
+    throw new Error(t('messages.download.httpError', { host: hostOf(fileUrl), status: res.statusCode, label: ctx.label }))
   }
   if (/text\/html/i.test(String(res.headers['content-type'] ?? ''))) {
-    throw new Error(`${hostOf(fileUrl)} returned a web page rather than a file. Nothing was installed.`)
+    throw new Error(t('messages.download.gotWebPage', { host: hostOf(fileUrl) }))
   }
 
   const total = Number.parseInt(String(res.headers['content-length'] ?? '0'), 10)
@@ -926,7 +922,7 @@ async function downloadFile(
 
   if (!looksLikeArchive(head)) {
     await fsp.rm(dest, { force: true })
-    throw new Error(`What ${hostOf(fileUrl)} sent is not a .7z, .zip or .rar. Nothing was installed.`)
+    throw new Error(t('messages.download.notAnArchive', { host: hostOf(fileUrl) }))
   }
   return dest
 }
@@ -935,7 +931,7 @@ function hostOf(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, '')
   } catch {
-    return 'the file host'
+    return t('messages.download.fallbackHost')
   }
 }
 

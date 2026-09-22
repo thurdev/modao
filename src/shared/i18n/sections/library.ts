@@ -9,6 +9,8 @@ export const library = {
   pt: {
     intro:
       'Tudo que está instalado no perfil ativo. Ligar e desligar um mod, mudar a prioridade dele e desinstalar mexem só neste perfil e no bloco dele no modloader.ini.',
+    noReadme: 'Este arquivo não veio com leiame.',
+    readingLog: 'Lendo o log de transações…',
     updateBadge: 'nova versão',
     catalogHas: ' · o catálogo tem {version}',
     colOn: 'Lig',
@@ -63,6 +65,8 @@ export const library = {
   en: {
     intro:
       "Everything installed in the active profile. Enabling, disabling, changing a mod's priority and uninstalling touch this profile and its block in modloader.ini, nothing else.",
+    noReadme: 'This archive shipped no readme.',
+    readingLog: 'Reading the transaction log…',
     updateBadge: 'update',
     catalogHas: ' · catalogue has {version}',
     colOn: 'On',

@@ -429,9 +429,9 @@ function Bisect(props: { profileId: number; pushToast: ToastFn }): JSX.Element {
 
       {!active || active.status !== 'running' ? (
         <div className="card pad col">
-          <strong>No bisect running</strong>
+          <strong>{t('health.bisectNone')}</strong>
           <span className="muted">
-            Start one when the game fails and you do not know which mod is responsible. Each step takes one launch.
+            {t('health.bisectIntro')}
           </span>
           <div>
             <Button
@@ -440,7 +440,7 @@ function Bisect(props: { profileId: number; pushToast: ToastFn }): JSX.Element {
               onClick={() => void run(() => api.bisectStart(props.profileId))}
               icon={<Icon.bolt width={13} height={13} />}
             >
-              {busy ? 'Preparing…' : 'Start a bisect'}
+              {busy ? t('health.bisectPreparing') : t('health.bisectStart')}
             </Button>
           </div>
         </div>
@@ -448,7 +448,7 @@ function Bisect(props: { profileId: number; pushToast: ToastFn }): JSX.Element {
         <div className="card">
           <div className="card-head">
             <Badge tone="accent" dot>
-              Step {active.step}
+              {t('health.bisectStep', { step: active.step })}
             </Badge>
             <span className="muted">
               {active.testing.length} mod{active.testing.length === 1 ? '' : 's'} enabled for this run,{' '}
@@ -477,7 +477,7 @@ function Bisect(props: { profileId: number; pushToast: ToastFn }): JSX.Element {
               <motion.div className="step" data-done="false" variants={itemVariants}>
                 <span className="step-num num">{active.step}</span>
                 <div className="col" style={{ gap: 2 }}>
-                  <strong>Launch the game now, then tell Modão what happened.</strong>
+                  <strong>{t('health.bisectLaunchNow')}</strong>
                   <span className="faint">
                     {active.testing.length} mod{active.testing.length === 1 ? '' : 's'} are enabled for this run.
                   </span>
@@ -491,7 +491,7 @@ function Bisect(props: { profileId: number; pushToast: ToastFn }): JSX.Element {
                 onClick={() => void run(() => api.bisectResult(active.id, 'good'))}
                 icon={<Icon.check width={13} height={13} />}
               >
-                It ran fine
+                {t('health.bisectItRanFine')}
               </Button>
               <Button
                 variant="danger"
@@ -536,7 +536,7 @@ function Bisect(props: { profileId: number; pushToast: ToastFn }): JSX.Element {
           <span className="muted">
             {active.culprit
               ? `Install #${active.culprit} is the culprit.`
-              : 'No single mod explains the failure — it is likely a combination, or something outside the mod set.'}
+              : t('health.bisectNoSingleMod')}
           </span>
         </div>
       ) : null}
@@ -579,7 +579,7 @@ function Logs(props: { profileId: number }): JSX.Element {
           title={onlyProblems ? t('health.noWarnings') : t('health.noLogs')}
           hint={
             onlyProblems
-              ? 'Every collected line is informational. Turn the filter off to read the whole timeline.'
+              ? t('health.logsAllInfo')
               : 'Mod Loader writes modloader.log next to the game once it has run at least once.'
           }
           action={

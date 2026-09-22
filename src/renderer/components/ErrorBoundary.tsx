@@ -1,5 +1,6 @@
 import React from 'react'
 import { Button } from './ui'
+import { useT } from '../lib/i18n'
 
 interface Props {
   children: React.ReactNode
@@ -30,24 +31,33 @@ export class ErrorBoundary extends React.Component<Props, State> {
   render(): React.ReactNode {
     const { error } = this.state
     if (!error) return this.props.children
-    return (
-      <div className="notice" data-kind="error">
-        <span className="notice-mark" />
-        <div className="col" style={{ gap: 8 }}>
-          <strong>This screen failed to render</strong>
-          <span className="muted">
-            Nothing in your game folder was touched. {error.message}
-          </span>
-          <pre className="pre" style={{ maxHeight: 180 }}>
-            {error.stack ?? String(error)}
-          </pre>
-          <span>
-            <Button size="sm" onClick={() => this.setState({ error: null })}>
-              Try again
-            </Button>
-          </span>
-        </div>
-      </div>
-    )
+    return <ErrorFallback error={error} onRetry={() => this.setState({ error: null })} />
   }
+}
+
+/**
+ * The fallback lives in its own function component because the boundary itself
+ * has to be a class - and the translator is a hook.
+ */
+function ErrorFallback(props: { error: Error; onRetry: () => void }): JSX.Element {
+  const t = useT()
+  return (
+    <div className="notice" data-kind="error">
+      <span className="notice-mark" />
+      <div className="col" style={{ gap: 8 }}>
+        <strong>{t('shell.screenFailed')}</strong>
+        <span className="muted">
+          {t('shell.nothingTouched')} {props.error.message}
+        </span>
+        <pre className="pre" style={{ maxHeight: 180 }}>
+          {props.error.stack ?? String(props.error)}
+        </pre>
+        <span>
+          <Button size="sm" onClick={props.onRetry}>
+            {t('app.retry')}
+          </Button>
+        </span>
+      </div>
+    </div>
+  )
 }

@@ -303,7 +303,7 @@ export function ProfilesScreen(): JSX.Element {
                   The profile and its links are removed. Its save games and snapshots move to the quarantine folder
                   inside Modão&apos;s data directory — nothing is deleted.
                 </p>
-                <p className="faint">Mod payloads stay in the store; other profiles using them are unaffected.</p>
+                <p className="faint">{t('profiles.payloadsStay')}</p>
               </>
             }
           />
