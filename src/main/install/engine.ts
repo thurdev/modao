@@ -153,15 +153,30 @@ async function buildPlan(planId: string, meta: BuildMeta): Promise<InstallPlan> 
   // better evidence than a curated list that only covers catalogued mods. Both
   // are checked against what this profile actually has.
   const stated = await statedRequirements(extractRoot, readmes)
+  const missingRequirements: InstallPlan['missingRequirements'] = []
   for (const req of stated) {
     if (satisfiedInProfile(profileId, game, req.name)) continue
+    if (req.kind === 'conflicts') {
+      warnings.push({
+        severity: 'warn',
+        code: 'dependency-conflict-stated',
+        message: t('messages.installDeps.statedConflict', { title: req.name }),
+        detail: req.line
+      })
+      continue
+    }
+    missingRequirements.push({
+      name: req.name,
+      url: req.url,
+      evidence: req.line,
+      // One the app can find in the catalogue can be installed from the plan
+      // itself; one that is only a link opens the author's page.
+      catalogSlug: catalogSlugFor(req.name)
+    })
     warnings.push({
-      severity: req.kind === 'conflicts' ? 'warn' : 'error',
-      code: req.kind === 'conflicts' ? 'dependency-conflict-stated' : 'dependency-missing',
-      message:
-        req.kind === 'conflicts'
-          ? t('messages.installDeps.statedConflict', { title: req.name })
-          : t('messages.installDeps.missingRequirement', { title: req.name }),
+      severity: 'warn',
+      code: 'dependency-missing',
+      message: t('messages.installDeps.missingRequirement', { title: req.name }),
       detail: `${req.line}${req.url ? ` (${req.url})` : ''}`
     })
   }
@@ -169,13 +184,13 @@ async function buildPlan(planId: string, meta: BuildMeta): Promise<InstallPlan> 
     if (d.resolution === 'blocking') {
       warnings.push({ severity: 'error', code: 'dependency-conflict', message: d.note ?? `${d.title} must not be installed alongside this mod.` })
     } else if (d.resolution === 'missing') {
-      // Rule 4: a dependency satisfied in ANOTHER profile counts for nothing.
-      // Proper Shaders names SilentPatch and Open Limit Adjuster and probes for
-      // them at runtime; installed without either, in a profile that has
-      // neither, the game crashed on launch. So this blocks the install rather
-      // than being a line the user scrolls past.
+      // A dependency satisfied in ANOTHER profile counts for nothing - the game
+      // only loads what is materialised now. But a missing one is a warning
+      // with a way to fix it, not a locked door: the app can be wrong about
+      // what a requirement even is, and being unable to install because of
+      // that is worse than installing something that needs one more mod.
       warnings.push({
-        severity: 'error',
+        severity: 'warn',
         code: 'dependency-missing',
         message: t('messages.installDeps.missingRequirement', { title: d.title }),
         detail:
@@ -217,6 +232,7 @@ async function buildPlan(planId: string, meta: BuildMeta): Promise<InstallPlan> 
     variants: classified.variants,
     files,
     dependencies,
+    missingRequirements,
     warnings,
     totalSize: files.reduce((a, f) => a + f.size, 0),
     requiresVariantChoice: classified.variants.some((v) => !state.selections[v.id])
@@ -386,12 +402,11 @@ export async function applyPlan(
     plan.files,
     'inference'
   )
-  const blocking = plan.warnings.filter(
-    (w) =>
-      w.severity === 'error' &&
-      w.code !== 'empty' &&
-      !(w.code === 'dependency-missing' && opts.acceptMissingDependencies)
-  )
+  // Dependencies never block: they are reported on the plan and offered for
+  // install, and the user decides. Only a plan that cannot be carried out at
+  // all - nothing to install, a variant unchosen - stops here.
+  void opts
+  const blocking = plan.warnings.filter((w) => w.severity === 'error' && w.code !== 'empty')
   if (blocking.length) throw new Error(blocking.map((b) => b.message).join(' '))
   if (plan.files.length === 0) throw new Error('This plan installs no files.')
 
@@ -673,4 +688,17 @@ function satisfiedInProfile(profileId: number, game: GameInstall, name: string):
     if (loose.some((f) => /\.(asi|dll)$/i.test(f) && flat(f).includes(needle))) return true
   }
   return false
+}
+
+/** The catalogue entry for a requirement named in prose, if there is one. */
+function catalogSlugFor(name: string): string | null {
+  const flat = name.toLowerCase().replace(/[^a-z0-9+]/g, '')
+  if (!flat) return null
+  const rows = getDb().prepare('SELECT slug, title FROM mod').all() as { slug: string; title: string }[]
+  const match = rows.find((r) => {
+    const title = r.title.toLowerCase().replace(/[^a-z0-9+]/g, '')
+    const slug = r.slug.toLowerCase().replace(/[^a-z0-9+]/g, '')
+    return title.includes(flat) || slug.includes(flat)
+  })
+  return match?.slug ?? null
 }

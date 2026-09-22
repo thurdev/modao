@@ -289,6 +289,34 @@ const MIGRATIONS: Migration[] = [
       CREATE INDEX idx_knowledge_lookup ON knowledge_rule(kind, subject);
       `)
     }
+  },
+  {
+    version: 7,
+    name: 'forget-rules-learned-from-prose',
+    up: (d) => {
+      // The first version of the readme reader took "Extract the single folder
+      // to the ModLoader folder" literally and learned a mod called "single
+      // folder", then warned that every later plan disagreed with it. Those
+      // rules were never true, so they go - the app relearns from the fixed
+      // parser on the next install.
+      d.exec(`
+        DELETE FROM knowledge_rule
+         WHERE kind = 'install-layout'
+           AND (
+             lower(value_json) LIKE '%"modfolder":"single folder"%'
+             OR lower(value_json) LIKE '%"modfolder":"the mod"%'
+             OR lower(value_json) LIKE '%"modfolder":"pasta"%'
+             OR lower(value_json) LIKE '%"modfolder":"folder"%'
+           );
+        DELETE FROM knowledge_rule
+         WHERE kind = 'dependency'
+           AND (
+             lower(value_json) LIKE '%vers_o do modloader%'
+             OR lower(value_json) LIKE '%version of modloader%'
+             OR lower(value_json) LIKE '%"name":"vers%'
+           );
+      `)
+    }
   }
 ]
 

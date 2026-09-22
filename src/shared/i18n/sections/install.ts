@@ -8,6 +8,12 @@
  */
 export const install = {
   pt: {
+    planReqs: {
+      requirementsTitle: 'requisitos',
+      requirementsHint: 'O mod diz precisar destes. Dá para instalar mesmo assim — mas ele pode não funcionar.',
+      installRequirement: 'Instalar este também',
+      openRequirement: 'Abrir a página'
+    },
     setup: {
       title: 'Configurar o Modão',
       intro:
@@ -107,6 +113,12 @@ export const install = {
     }
   },
   en: {
+    planReqs: {
+      requirementsTitle: 'requirements',
+      requirementsHint: 'The mod says it needs these. You can install anyway - it may simply not work.',
+      installRequirement: 'Install this too',
+      openRequirement: 'Open the page'
+    },
     setup: {
       title: 'Set up Modão',
       intro:

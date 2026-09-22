@@ -20,7 +20,12 @@ import {
 } from '../src/main/game/modloaderIni'
 import { groupIncidents, parseModuleName, resolveCrashAddress } from '../src/shared/crash'
 import type { CrashReport } from '../src/shared/types'
-import { decodeReadme, parseDeclaredDependencies, parseReadmeText } from '../src/main/install/readme'
+import {
+  canonicalDependencyName,
+  decodeReadme,
+  parseDeclaredDependencies,
+  parseReadmeText
+} from '../src/main/install/readme'
 import { classifyTree } from '../src/main/install/classify'
 import { describeFsError, isProtectedLocation } from '../src/main/game/access'
 import { setMainLanguage } from '../src/main/util/i18n'
@@ -740,6 +745,40 @@ const sigBig = signatureForArchive(
 )
 check('signature: a differently shaped archive does not share it', sigA.shape !== sigBig.shape)
 check('signature: the shape says what it is made of, for showing the user', sigA.shapeParts.some((p) => p.startsWith('folders:')), sigA.shapeParts)
+
+// --- requirements named in prose, read as names -----------------------------
+// Real failure: Loadscreens 4K says "Download da última versão do Modloader"
+// and again in English. That became two requirements - "última versão do
+// Modloader" and "latest version of Modloader" - neither of which matched the
+// Mod Loader the user already had, and the install was blocked over it.
+check('dep names: the Portuguese phrasing resolves to the mod', canonicalDependencyName('última versão do Modloader') === 'Mod Loader', canonicalDependencyName('última versão do Modloader'))
+check('dep names: the English phrasing resolves to the same mod', canonicalDependencyName('latest version of Modloader') === 'Mod Loader', canonicalDependencyName('latest version of Modloader'))
+check('dep names: spelling variants collapse', canonicalDependencyName('Mod Loader') === 'Mod Loader' && canonicalDependencyName('SA-Modloader') === 'Mod Loader')
+check('dep names: CLEO with a version is still CLEO', canonicalDependencyName('CLEO 4.4') === 'CLEO', canonicalDependencyName('CLEO 4.4'))
+check('dep names: CLEO+ is not CLEO', canonicalDependencyName('CLEO+') === 'CLEO+')
+check('dep names: a word that names nothing is dropped', canonicalDependencyName('versão') === null && canonicalDependencyName('the mod') === null)
+
+const bilingual = parseDeclaredDependencies(
+  [
+    '-- Download da última versão do Modloader: MixMods.com.br/2015/01/SA-Modloader.html',
+    '-- Download the latest version of Modloader: MixMods.com.br/2015/01/SA-Modloader.html'
+  ].join(CRLF)
+)
+check('dep names: the same requirement stated twice is one edge', bilingual.length === 1, bilingual)
+check('dep names: and it is the canonical name', bilingual[0]?.name === 'Mod Loader', bilingual[0])
+
+// "Extract the single folder to the ModLoader folder" names no folder at all.
+const generic = parseReadmeText('Readme (or die).txt', 'Extract the single folder to the ModLoader folder.', 'ascii')
+check(
+  'readme: a phrase that describes a folder without naming one yields no folder',
+  generic.instructions[0]?.folder === null,
+  generic.instructions[0]
+)
+check(
+  'readme: the instruction is still understood as a modloader install',
+  generic.instructions[0]?.destination === 'modloader-folder',
+  generic.instructions[0]
+)
 
 // --- download links ----------------------------------------------------------
 // Which links Modão can fetch on its own decides whether "Install" installs

@@ -296,6 +296,17 @@ export interface InstallPlan {
   variants: VariantGroup[]
   files: PlannedFile[]
   dependencies: DependencyNode[]
+  /**
+   * Requirements the mod itself states that this profile does not have.
+   * Reported, never blocking: each one carries the author's own words and,
+   * where there is one, a way to get it.
+   */
+  missingRequirements: {
+    name: string
+    url: string | null
+    evidence: string
+    catalogSlug: string | null
+  }[]
   warnings: PlanWarning[]
   totalSize: number
   requiresVariantChoice: boolean

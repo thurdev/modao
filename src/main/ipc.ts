@@ -551,6 +551,26 @@ export function registerIpc(): void {
   })
 
   // --- install --------------------------------------------------------------
+  /**
+   * The newest version recorded for a slug. A requirement named in a readme is
+   * a name, not an id, so this is how "install this too" reaches the same code
+   * path the catalogue screen uses.
+   */
+  ipcMain.handle('install:planFromSlug', async (e, slug: string, profileId: number) => {
+    const row = getDb()
+      .prepare(
+        `SELECT mv.id FROM mod_version mv JOIN mod m ON m.id = mv.mod_id
+          WHERE m.slug = ? ORDER BY mv.id DESC LIMIT 1`
+      )
+      .get(slug) as { id: number } | undefined
+    if (!row) throw new Error(t('messages.installDeps.notInCatalog', { slug }))
+    const handler = ipcMain.listeners('install:planFromCatalog')[0] as (
+      ev: unknown,
+      versionId: number,
+      profile: number
+    ) => Promise<unknown>
+    return handler(e, row.id, requireProfile(profileId))
+  })
   ipcMain.handle('install:planFromCatalog', async (_e, modVersionId: number, profileId: number) => {
     const db = getDb()
     const row = db

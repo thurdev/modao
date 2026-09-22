@@ -135,6 +135,7 @@ export const api = {
   reseed: () => call<{ count: number }>('catalog:reseed'),
 
   planFromCatalog: (modVersionId: number, profileId: number) => call<InstallPlan>('install:planFromCatalog', modVersionId, profileId),
+  planFromSlug: (slug: string, profileId: number) => call<InstallPlan>('install:planFromSlug', slug, profileId),
   planFromFile: (profileId: number) => call<InstallPlan | null>('install:planFromFile', profileId),
   choose: (planId: string, groupId: string, optionId: string) => call<InstallPlan>('install:choose', planId, groupId, optionId),
   setDestination: (planId: string, sourcePath: string, destination: string) =>

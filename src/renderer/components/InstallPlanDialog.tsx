@@ -135,6 +135,51 @@ export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | 
       }
     >
       <motion.div variants={listVariants} initial="initial" animate="animate" className="col" style={{ gap: 12 }}>
+        {plan.missingRequirements.length > 0 ? (
+          <motion.section variants={itemVariants} className="panel">
+            <header>
+              <Badge tone="warn">{t('install.planReqs.requirementsTitle')}</Badge>
+              {t('install.planReqs.requirementsHint')}
+            </header>
+            <div className="panel-body col" style={{ gap: 8 }}>
+              {plan.missingRequirements.map((req) => (
+                <div key={req.name} className="row wrap" style={{ gap: 8, alignItems: 'flex-start' }}>
+                  <div className="col" style={{ gap: 2, flex: 1, minWidth: 220 }}>
+                    <strong>{req.name}</strong>
+                    <span className="faint">{req.evidence}</span>
+                  </div>
+                  {req.catalogSlug ? (
+                    <Button
+                      size="sm"
+                      variant="accent"
+                      icon={<Icon.download width={13} height={13} />}
+                      onClick={async () => {
+                        const profile = useApp.getState().profile
+                        if (!profile) return
+                        try {
+                          setPlan(await api.planFromSlug(req.catalogSlug as string, profile.id))
+                        } catch (err) {
+                          pushToast('error', (err as Error).message)
+                        }
+                      }}
+                    >
+                      {t('install.planReqs.installRequirement')}
+                    </Button>
+                  ) : req.url ? (
+                    <Button
+                      size="sm"
+                      icon={<Icon.external width={13} height={13} />}
+                      onClick={() => void api.openExternal(normaliseUrl(req.url as string))}
+                    >
+                      {t('install.planReqs.openRequirement')}
+                    </Button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </motion.section>
+        ) : null}
+
         {plan.warnings.length > 0 ? (
           <motion.div variants={itemVariants} className="col" style={{ gap: 8 }}>
             {plan.warnings.map((w, i) => (
@@ -351,4 +396,9 @@ function commonPrefix(files: PlannedFile[], gameRootLabel: string): string {
     }
   }
   return prefix ? `${prefix}/` : gameRootLabel
+}
+
+/** Readmes write links without a scheme: "MixMods.com.br/2015/01/...". */
+function normaliseUrl(url: string): string {
+  return /^https?:\/\//i.test(url) ? url : `https://${url.replace(/^\/+/, '')}`
 }

@@ -10,6 +10,7 @@
 export const messages = {
   pt: {
     installDeps: {
+      notInCatalog: 'O mod "{slug}" não está no catálogo indexado aqui.',
       streamingFixed: 'Memória de streaming ajustada de {from} para {to} MB. O stream.ini original foi guardado na quarentena.',
       missingRequirement: 'Falta um requisito: {title}',
       statedConflict: 'O autor diz para não usar junto com {title}, e ele está neste perfil.',
@@ -105,6 +106,7 @@ export const messages = {
   },
   en: {
     installDeps: {
+      notInCatalog: 'The mod "{slug}" is not in the catalogue indexed here.',
       streamingFixed: 'Streaming memory set from {from} to {to} MB. Your original stream.ini was kept in quarantine.',
       missingRequirement: 'Missing requirement: {title}',
       statedConflict: 'The author says not to use this alongside {title}, which is in this profile.',

@@ -126,6 +126,8 @@ export interface ModãoApi {
   }
   install: {
     planFromCatalog(modVersionId: number, profileId: number): Promise<InstallPlan>
+    /** Start the same install from a slug, for a requirement named in a readme. */
+    planFromSlug(slug: string, profileId: number): Promise<InstallPlan>
     planFromFile(profileId: number): Promise<InstallPlan | null>
     choose(planId: string, groupId: string, optionId: string): Promise<InstallPlan>
     setDestination(planId: string, sourcePath: string, destination: string): Promise<InstallPlan>
@@ -231,6 +233,7 @@ export const IPC_CHANNELS = [
   'catalog:seedInfo',
   'catalog:reseed',
   'install:planFromCatalog',
+  'install:planFromSlug',
   'install:planFromFile',
   'install:choose',
   'install:setDestination',

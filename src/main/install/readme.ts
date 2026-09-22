@@ -121,13 +121,26 @@ export function parseReadmeText(file: string, text: string, encoding: string): R
   }
 }
 
+/**
+ * Words that describe a folder without naming one.
+ *
+ * "Extract the single folder to the ModLoader folder" names nothing: taking
+ * "single folder" as the mod's name made the app believe it had installed a mod
+ * called that, and then warn that the real plan disagreed with itself.
+ */
+const GENERIC_FOLDER =
+  /^(do mod|the mod|mod|dele|dela|single|single folder|a [uú]nica|[uú]nica|the single|pasta|folder|essa|esta|this|that|extra[ií]da|extracted|resultante|acima|below|abaixo)$/i
+
 function cleanFolder(raw: string): string | null {
   const v = raw
     .replace(/^["'\s]+|["'\s.]+$/g, '')
     .replace(/\s+para$/i, '')
+    .replace(/^(a|o|as|os|the)\s+/i, '')
     .trim()
   if (!v || v.length > 120) return null
-  if (/^(do mod|the mod|mod|dele|dela)$/i.test(v)) return null
+  if (GENERIC_FOLDER.test(v)) return null
+  // A phrase, not a folder name: real ones do not read as sentences.
+  if (/\b(para|to|into|dentro|inside|e depois|and then)\b/i.test(v)) return null
   return v
 }
 
@@ -156,12 +169,12 @@ export function findVariantHint(readmes: ReadmeParse[], optionLabels: string[]):
 export function parseDeclaredDependencies(text: string): DeclaredDependency[] {
   const out: DeclaredDependency[] = []
   const push = (kind: DeclaredDependency['kind'], name: string, url: string | null, line: string): void => {
-    const clean = name
-      .replace(/^[\s:\-–—]+|[\s:.\-–—]+$/g, '')
-      .replace(/^(o|a|os|as|the)\s+/i, '')
-      .trim()
-    if (clean.length < 2 || clean.length > 60) return
-    if (out.some((d) => d.kind === kind && d.name.toLowerCase() === clean.toLowerCase())) return
+    const clean = canonicalDependencyName(name)
+    if (!clean) return
+    // The same requirement is usually stated twice, once per language. One edge
+    // is enough, and two read as two different missing mods.
+    const key = clean.toLowerCase()
+    if (out.some((d) => d.kind === kind && d.name.toLowerCase() === key)) return
     out.push({ kind, name: clean, url, line })
   }
 
@@ -196,3 +209,52 @@ export function parseDeclaredDependencies(text: string): DeclaredDependency[] {
   }
   return out
 }
+
+/**
+ * The mod a readme line is talking about, as a name the app can look for.
+ *
+ * Authors write "última versão do Modloader" and "the latest version of
+ * Modloader" for the same thing. Taken literally those became two requirements,
+ * neither of which matched the Mod Loader that was installed, and the install
+ * was blocked over a mod the user already had.
+ */
+export function canonicalDependencyName(raw: string): string | null {
+  let v = (raw ?? '')
+    .replace(/^[\s:\-–—*]+|[\s:.\-–—]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  // Strip the prose around the name.
+  v = v
+    .replace(/^(a|o|os|as|the)\s+/i, '')
+    .replace(/^(?:[uú]ltima|nova|mais recente|latest|newest|current)\s+vers[aã]o\s+(?:do|da|de|of)?\s*/i, '')
+    .replace(/^(?:latest|newest|current)\s+version\s+(?:of\s+)?/i, '')
+    .replace(/^vers[aã]o\s+(?:mais recente|atual)\s+(?:do|da|de)?\s*/i, '')
+    .replace(/^(?:ter|have|install|instalar|baixar|download)\s+(?:o|a|the)?\s*/i, '')
+    .replace(/\s+(?:instalado|installed|atualizado|updated)$/i, '')
+    .trim()
+
+  if (v.length < 2 || v.length > 60) return null
+  // What is left has to name something, not describe it.
+  if (/^(vers[aã]o|version|mod|mods|jogo|game|pasta|folder|arquivo|file)$/i.test(v)) return null
+
+  for (const [re, canonical] of DEPENDENCY_ALIASES) {
+    if (re.test(v)) return canonical
+  }
+  return v
+}
+
+/** Names the scene writes a dozen ways for the same thing. */
+const DEPENDENCY_ALIASES: [RegExp, string][] = [
+  [/^mod\s*loader$/i, 'Mod Loader'],
+  [/^modloader$/i, 'Mod Loader'],
+  [/^sa[\s-]*modloader$/i, 'Mod Loader'],
+  [/^cleo\s*\+$/i, 'CLEO+'],
+  [/^cleo(\s*4(\.\d)?)?$/i, 'CLEO'],
+  [/^silent\s*patch$/i, 'SilentPatch'],
+  [/^open\s*limit\s*adjuster$/i, 'Open Limit Adjuster'],
+  [/^limit\s*adjuster$/i, 'Open Limit Adjuster'],
+  [/^asi\s*loader$/i, 'ASI Loader'],
+  [/^ultimate\s*asi\s*loader$/i, 'ASI Loader'],
+  [/^widescreen\s*fix$/i, 'Widescreen Fix']
+]
