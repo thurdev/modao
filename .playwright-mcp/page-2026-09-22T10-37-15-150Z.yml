@@ -1,0 +1,1288 @@
+- generic [active] [ref=f57e1]:
+  - link "Pular para o conteúdo" [ref=f57e2] [cursor=pointer]:
+    - /url: "#content"
+  - generic [ref=f57e4]:
+    - complementary [ref=f57e5]:
+      - list [ref=f57e7]:
+        - listitem [ref=f57e8]:
+          - link " Sobre" [ref=f57e9] [cursor=pointer]:
+            - /url: https://www.mixmods.com.br/about/
+            - generic [ref=f57e10]: 
+            - text: Sobre
+        - listitem [ref=f57e11]:
+          - link " Solução de Crash" [ref=f57e12] [cursor=pointer]:
+            - /url: https://www.mixmods.com.br/2021/08/crashinfo/
+            - generic [ref=f57e13]: 
+            - text: Solução de Crash
+    - complementary
+    - complementary [ref=f57e14]:
+      - generic [ref=f57e16] [cursor=pointer]
+  - banner "Site" [ref=f57e17]:
+    - generic [ref=f57e18]:
+      - paragraph [ref=f57e19]:
+        - link "MixMods" [ref=f57e20] [cursor=pointer]:
+          - /url: https://www.mixmods.com.br/
+      - paragraph: .com.br
+      - complementary:
+        - list:
+          - listitem [ref=f57e21]:
+            - link "Canal oficial" [ref=f57e22] [cursor=pointer]:
+              - /url: https://www.youtube.com/JuniorDjjrMixMods
+          - listitem [ref=f57e23]:
+            - link "Receba novas postagens no Facebook" [ref=f57e24] [cursor=pointer]:
+              - /url: https://www.facebook.com/FamiliaMixMods
+          - listitem [ref=f57e25]:
+            - link "Participe do nosso Discord" [ref=f57e26] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/2021/01/discord-mixmods/
+          - listitem [ref=f57e27]:
+            - link "Participe do nosso fórum" [ref=f57e28] [cursor=pointer]:
+              - /url: https://forum.mixmods.com.br
+          - listitem [ref=f57e29]:
+            - link "Doe para os mods" [ref=f57e30] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/donate/
+  - navigation "Primary" [ref=f57e31]:
+    - list [ref=f57e34]:
+      - listitem [ref=f57e35]:
+        - link [ref=f57e36] [cursor=pointer]:
+          - /url: "#"
+        - list:
+          - listitem:
+            - link "Nossas criações":
+              - /url: https://www.mixmods.com.br/nossas-criacoes/
+          - listitem:
+            - link "Artigos":
+              - /url: https://www.mixmods.com.br/outros/artigos/
+          - listitem:
+            - link "Projetos":
+              - /url: "#"
+            - list:
+              - listitem:
+                - link "IMPUNES":
+                  - /url: https://www.mixmods.com.br/2nibble-impunes/
+              - listitem:
+                - link "GTA Brasil":
+                  - /url: https://www.mixmods.com.br/projetos/gta-brasil/
+              - listitem:
+                - link "Tuning Mod":
+                  - /url: https://www.mixmods.com.br/2018/12/Tuning-Mod-v3.html
+          - listitem:
+            - 'link "Facebook: MixMods"':
+              - /url: https://www.facebook.com/FamiliaMixMods/
+          - listitem:
+            - link "Fórum MixMods":
+              - /url: https://forum.mixmods.com.br
+          - listitem:
+            - link "Discord":
+              - /url: https://www.mixmods.com.br/2021/01/discord-mixmods/
+          - listitem:
+            - 'link "Youtube: Junior_Djjr"':
+              - /url: https://www.youtube.com/c/JuniorDjjrMixMods
+          - listitem:
+            - link "2nibble":
+              - /url: https://www.facebook.com/2nibble/
+      - listitem [ref=f57e40]:
+        - link [ref=f57e41] [cursor=pointer]:
+          - /url: "#"
+        - list:
+          - listitem:
+            - link "GTA SA":
+              - /url: "#"
+            - list:
+              - listitem:
+                - link "SA Essentials Pack":
+                  - /url: https://www.mixmods.com.br/2019/08/Essentials.html
+                - list:
+                  - listitem:
+                    - link "Silent’s ASI Loader":
+                      - /url: https://www.mixmods.com.br/2013/02/silent-asi-loader.html
+                  - listitem:
+                    - link "CLEO":
+                      - /url: https://www.mixmods.com.br/2014/02/Livraria-CLEO.html
+                  - listitem:
+                    - link "ModLoader":
+                      - /url: https://www.mixmods.com.br/2015/01/SA-Modloader.html
+                  - listitem:
+                    - link "SilentPatch":
+                      - /url: https://www.mixmods.com.br/2015/03/SilentPatch.html
+                  - listitem:
+                    - link "Widescreen Fix":
+                      - /url: https://www.mixmods.com.br/2016/06/widescreen-fix-para-gta-sa-corrigir.html
+                  - listitem:
+                    - link "Framerate Vigilante":
+                      - /url: https://www.mixmods.com.br/2019/06/framerate-vigilante.html
+              - listitem:
+                - link "Open Limit Adjuster":
+                  - /url: https://www.mixmods.com.br/2014/09/iiivcsa-open-limit-adjuster.html
+              - listitem:
+                - link "MixSets":
+                  - /url: https://www.mixmods.com.br/2019/08/mod-mixsets.html
+              - listitem:
+                - link "Improved Fastloader":
+                  - /url: https://www.mixmods.com.br/2014/02/improved-fastloader-by-link2012.html
+              - listitem:
+                - link "SkyGfx":
+                  - /url: https://www.mixmods.com.br/2021/06/sa-skygfx/
+              - listitem:
+                - link "Proper Fixes":
+                  - /url: https://www.mixmods.com.br/2022/03/sa-proper-fixes/
+              - listitem:
+                - link "Enhanced Classic Graphics":
+                  - /url: https://www.mixmods.com.br/2019/10/ecg-enhanced-classic-graphics/
+              - listitem:
+                - link "Tradução PT-BR":
+                  - /url: https://www.mixmods.com.br/2016/09/traducao-pt-br-2016-nova-para-gta-sa.html
+          - listitem:
+            - link "GTA VC":
+              - /url: "#"
+            - list:
+              - listitem:
+                - link "VC Essentials Pack":
+                  - /url: https://www.mixmods.com.br/2020/08/vc-essentials-pack/
+          - listitem:
+            - link "GTA III":
+              - /url: "#"
+            - list:
+              - listitem:
+                - link "III Essentials Pack":
+                  - /url: https://www.mixmods.com.br/2020/12/iii-essentials-pack/
+      - listitem [ref=f57e45]:
+        - link [ref=f57e46] [cursor=pointer]:
+          - /url: "#"
+        - list:
+          - listitem:
+            - link "GTA clássico":
+              - /url: "#"
+            - list:
+              - listitem:
+                - link "Primeiros passos":
+                  - /url: https://www.mixmods.com.br/2021/09/primeiros-passos-para-montar-um-gta-modificado/
+              - listitem:
+                - link "Como usar ModLoader":
+                  - /url: https://www.mixmods.com.br/2015/07/tutorial-dicas-tudo-sobre-mod-loader.html
+              - listitem:
+                - link "Como corrigir o lag":
+                  - /url: https://www.mixmods.com.br/2017/01/como-tirar-o-lag-do-gta-aumentar-fps.html
+              - listitem:
+                - link "Como cuidar do seu GTA":
+                  - /url: https://www.mixmods.com.br/2018/08/dicas-de-como-cuidar-do-seu-gta.html
+              - listitem:
+                - link "Como criar mods":
+                  - /url: https://www.mixmods.com.br/2020/03/como-criar-mods-para-gta-san-andreas.html
+          - listitem:
+            - link "GTA Trilogy":
+              - /url: "#"
+            - list:
+              - listitem:
+                - link "Como instalar mods":
+                  - /url: https://www.mixmods.com.br/2021/11/gta-trilogy-como-instalar-mods-no-the-definitive-edition/
+  - generic [ref=f57e51]:
+    - main [ref=f57e53]:
+      - link " " [ref=f57e55] [cursor=pointer]:
+        - /url: https://www.mixmods.com.br/?redirect_to=random&pk_campaign=random
+        - generic [ref=f57e56]:
+          - generic [ref=f57e57]: 
+          - generic [ref=f57e58]: 
+      - link [ref=f57e60] [cursor=pointer]:
+        - /url: https://store.steampowered.com/app/3820550/IMPUNES/
+      - generic [ref=f57e62]:
+        - generic "Conteúdo" [ref=f57e63]:
+          - heading "Não encontrado." [level=1] [ref=f57e64]
+        - generic [ref=f57e65]:
+          - paragraph
+          - paragraph [ref=f57e66]:
+            - strong [ref=f57e68]: Página não encontrada.
+          - paragraph [ref=f57e69]: Tente usar a caixa de pesquisa no canto superior direito.
+          - paragraph [ref=f57e70]: Se você acha que isso é um erro, entre em contato.
+          - paragraph
+          - generic [ref=f57e71]:
+            - generic [ref=f57e72]:
+              - generic [ref=f57e73]: "Pesquisar por:"
+              - searchbox "Pesquisar por:" [ref=f57e74]
+            - button "Pesquisar" [ref=f57e75] [cursor=pointer]
+    - generic [ref=f57e80]:
+      - complementary [ref=f57e81]:
+        - insertion [ref=f57e84]
+      - complementary [ref=f57e86]:
+        - heading "GTA San Andreas" [level=2] [ref=f57e87]:
+          - checkbox [ref=f57e88]
+          - text: GTA San Andreas
+        - list [ref=f57e90]:
+          - listitem [ref=f57e91]:
+            - generic [ref=f57e92]: "94"
+            - checkbox [ref=f57e93]
+            - link "Animações" [ref=f57e95] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/animacoes/
+          - listitem [ref=f57e96]:
+            - generic [ref=f57e97]: "131"
+            - checkbox [ref=f57e98]
+            - link "Armas" [ref=f57e100] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/armas/
+          - listitem [ref=f57e101]:
+            - generic [ref=f57e102]: "24"
+            - checkbox [ref=f57e103]
+            - link "Aviões e Helicópteros" [ref=f57e105] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/avioes-e-helicopteros/
+          - listitem [ref=f57e106]:
+            - generic [ref=f57e107]: "8"
+            - checkbox [ref=f57e108]
+            - link "Barcos" [ref=f57e110] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/barcos/
+          - listitem [ref=f57e111]:
+            - generic [ref=f57e112]: "5"
+            - checkbox [ref=f57e113]
+            - link "Bicicletas" [ref=f57e115] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/bicicletas/
+          - listitem [ref=f57e116]:
+            - generic [ref=f57e117]: "48"
+            - checkbox [ref=f57e118]
+            - link "Caça ao Tesouro" [ref=f57e120] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/caca-ao-tesouro/
+          - listitem [ref=f57e121]:
+            - generic [ref=f57e122]: "12"
+            - checkbox [ref=f57e123]
+            - link "Caminhões" [ref=f57e125] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/caminhoes/
+          - listitem [ref=f57e126]:
+            - generic [ref=f57e127]: "204"
+            - checkbox [ref=f57e128]
+            - link "Carros" [ref=f57e130] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/carros/
+          - listitem [ref=f57e131]:
+            - generic [ref=f57e132]: "32"
+            - checkbox [ref=f57e133]
+            - link "Carros Brasileiros (stock)" [ref=f57e135] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/carros-brasileiros-stock/
+          - listitem [ref=f57e136]:
+            - generic [ref=f57e137]: "89"
+            - checkbox [ref=f57e138]
+            - link "Carros Leves" [ref=f57e140] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/carros-leves/
+          - listitem [ref=f57e141]:
+            - generic [ref=f57e142]: "68"
+            - checkbox [ref=f57e143]
+            - link "Carros Lowpoly" [ref=f57e145] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/carros-lowpoly/
+          - listitem [ref=f57e146]:
+            - generic [ref=f57e147]: "1"
+            - checkbox [ref=f57e148]
+            - link "Cheats atualizados" [ref=f57e150] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/cheats-atualizados/
+          - listitem [ref=f57e151]:
+            - generic [ref=f57e152]: "42"
+            - checkbox [ref=f57e153]
+            - link "Conversão Total" [ref=f57e155] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/conversao-total/
+          - listitem [ref=f57e156]:
+            - generic [ref=f57e157]: "288"
+            - checkbox [ref=f57e158]
+            - link "Correções e Melhorias" [ref=f57e160] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/correcoes-e-melhorias/
+          - listitem [ref=f57e161]:
+            - generic [ref=f57e162]: "83"
+            - checkbox [ref=f57e163]
+            - link "Curiosidades" [ref=f57e165] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/curiosidades/
+          - listitem [ref=f57e166]:
+            - generic [ref=f57e167]: "619"
+            - checkbox [ref=f57e168]
+            - link "DESTAQUES" [ref=f57e170] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/destaques/
+          - listitem [ref=f57e171]:
+            - generic [ref=f57e172]: "80"
+            - checkbox [ref=f57e173]
+            - link "Ferramentas" [ref=f57e175] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/ferramentas/
+          - listitem [ref=f57e176]:
+            - generic [ref=f57e177]: "21"
+            - checkbox [ref=f57e178]
+            - link "Gangues" [ref=f57e180] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/gangues/
+          - listitem [ref=f57e181]:
+            - generic [ref=f57e182]: "137"
+            - checkbox [ref=f57e183]
+            - link "Gráficos" [ref=f57e185] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/graficos/
+          - listitem [ref=f57e186]:
+            - generic [ref=f57e187]: "20"
+            - checkbox [ref=f57e188]
+            - link "GTA SA Mobile" [ref=f57e190] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/gta-sa-mobile/
+          - listitem [ref=f57e191]:
+            - generic [ref=f57e192]: "75"
+            - checkbox [ref=f57e193]
+            - link "GTA V to SA" [ref=f57e195] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/v-to-sa/
+          - listitem [ref=f57e196]:
+            - generic [ref=f57e197]: "106"
+            - checkbox [ref=f57e198]
+            - link "Interface (Hud e Radar)" [ref=f57e200] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/interface/
+          - listitem [ref=f57e201]:
+            - generic [ref=f57e202]: "28"
+            - checkbox [ref=f57e203]
+            - link "IV to SA" [ref=f57e205] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/iv-to-sa/
+          - listitem [ref=f57e206]:
+            - generic [ref=f57e207]: "327"
+            - checkbox [ref=f57e208]
+            - link "Mapas e Objetos" [ref=f57e210] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/mapas-e-objetos/
+          - listitem [ref=f57e211]:
+            - generic [ref=f57e212]: "49"
+            - checkbox [ref=f57e213]
+            - link "Missões" [ref=f57e215] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/missoes/
+          - listitem [ref=f57e216]:
+            - generic [ref=f57e217]: "25"
+            - checkbox [ref=f57e218]
+            - link "Mitos e Lendas" [ref=f57e220] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/mitos-e-lendas/
+          - listitem [ref=f57e221]:
+            - generic [ref=f57e222]: "54"
+            - checkbox [ref=f57e223]
+            - link "Mods Brasileiros" [ref=f57e225] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/mods-brasileiros/
+          - listitem [ref=f57e226]:
+            - generic [ref=f57e227]: "9"
+            - checkbox [ref=f57e228]
+            - link "Mods Femininos" [ref=f57e230] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/mods-femininos/
+          - listitem [ref=f57e231]:
+            - generic [ref=f57e232]: "13"
+            - checkbox [ref=f57e233]
+            - link "Mods Rápidos" [ref=f57e235] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/mods-rapidos/
+          - listitem [ref=f57e236]:
+            - generic [ref=f57e237]: "1241"
+            - checkbox [ref=f57e238]
+            - link "Mods Scripts etc" [ref=f57e240] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/mods-scripts-etc/
+          - listitem [ref=f57e241]:
+            - generic [ref=f57e242]: "17"
+            - checkbox [ref=f57e243]
+            - link "Motos" [ref=f57e245] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/motos/
+          - listitem [ref=f57e246]:
+            - generic [ref=f57e247]: "2"
+            - checkbox [ref=f57e248]
+            - link "MTA" [ref=f57e250] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/mta/
+          - listitem [ref=f57e251]:
+            - generic [ref=f57e252]: "8"
+            - checkbox [ref=f57e253]
+            - link "Multiplayer Local" [ref=f57e255] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/multiplayer-local/
+          - listitem [ref=f57e256]:
+            - generic [ref=f57e257]: "6"
+            - checkbox [ref=f57e258]
+            - link "Ônibus" [ref=f57e260] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/onibus/
+          - listitem [ref=f57e261]:
+            - generic [ref=f57e262]: "17"
+            - checkbox [ref=f57e263]
+            - link "Peças Tuning" [ref=f57e265] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/pecas-tuning/
+          - listitem [ref=f57e266]:
+            - generic [ref=f57e267]: "66"
+            - checkbox [ref=f57e268]
+            - link "Player e Roupas" [ref=f57e270] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/player-e-roupas/
+          - listitem [ref=f57e271]:
+            - generic [ref=f57e272]: "21"
+            - checkbox [ref=f57e273]
+            - link "PS2" [ref=f57e275] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/ps2/
+          - listitem [ref=f57e276]:
+            - generic [ref=f57e277]: "33"
+            - checkbox [ref=f57e278]
+            - link "Remaster HD" [ref=f57e280] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/remaster-hd/
+          - listitem [ref=f57e281]:
+            - generic [ref=f57e282]: "16"
+            - checkbox [ref=f57e283]
+            - link "SA-MP" [ref=f57e285] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/sa-mp/
+          - listitem [ref=f57e286]:
+            - generic [ref=f57e287]: "8"
+            - checkbox [ref=f57e288]
+            - link "SA:DE to SA" [ref=f57e290] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/sade-to-sa/
+          - listitem [ref=f57e291]:
+            - generic [ref=f57e292]: "4"
+            - checkbox [ref=f57e293]
+            - link "Saves" [ref=f57e295] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/saves/
+          - listitem [ref=f57e296]:
+            - generic [ref=f57e297]: "128"
+            - checkbox [ref=f57e298]
+            - link "Skins e Pedestres" [ref=f57e300] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/skins-e-pedestres/
+          - listitem [ref=f57e301]:
+            - generic [ref=f57e302]: "58"
+            - checkbox [ref=f57e303]
+            - link "Sons" [ref=f57e305] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/sons/
+          - listitem [ref=f57e306]:
+            - generic [ref=f57e307]: "11"
+            - checkbox [ref=f57e308]
+            - link "Super-poderes" [ref=f57e310] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/super-poderes/
+          - listitem [ref=f57e311]:
+            - generic [ref=f57e312]: "4"
+            - checkbox [ref=f57e313]
+            - link "Tatuagens" [ref=f57e315] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/tatuagens/
+          - listitem [ref=f57e316]:
+            - generic [ref=f57e317]: "175"
+            - checkbox [ref=f57e318]
+            - link "Texturas" [ref=f57e320] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/texturas/
+          - listitem [ref=f57e321]:
+            - generic [ref=f57e322]: "2"
+            - checkbox [ref=f57e323]
+            - link "Tradução" [ref=f57e325] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/traducao/
+          - listitem [ref=f57e326]:
+            - generic [ref=f57e327]: "7"
+            - checkbox [ref=f57e328]
+            - link "Trailers e Reboques" [ref=f57e330] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/trailers-e-reboques/
+          - listitem [ref=f57e331]:
+            - generic [ref=f57e332]: "4"
+            - checkbox [ref=f57e333]
+            - link "Tratores" [ref=f57e335] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/tratores/
+          - listitem [ref=f57e336]:
+            - generic [ref=f57e337]: "17"
+            - checkbox [ref=f57e338]
+            - link "Trens e Vagões" [ref=f57e340] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/trens-e-vagoes/
+          - listitem [ref=f57e341]:
+            - generic [ref=f57e342]: "32"
+            - checkbox [ref=f57e343]
+            - link "Tutoriais" [ref=f57e345] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/tutoriais/
+          - listitem [ref=f57e346]:
+            - generic [ref=f57e347]: "6"
+            - checkbox [ref=f57e348]
+            - link "VC to SA" [ref=f57e350] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/vc-to-sa/
+          - listitem [ref=f57e351]:
+            - generic [ref=f57e352]: "20"
+            - checkbox [ref=f57e353]
+            - link "Vegetação" [ref=f57e355] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/vegetacao/
+          - listitem [ref=f57e356]:
+            - generic [ref=f57e357]: "11"
+            - checkbox [ref=f57e358]
+            - link "Velocímetros" [ref=f57e360] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/velocimetros/
+          - listitem [ref=f57e361]:
+            - generic [ref=f57e362]: "28"
+            - checkbox [ref=f57e363]
+            - link "Vídeos" [ref=f57e365] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa/videos/
+      - complementary [ref=f57e366]:
+        - generic [ref=f57e367]:
+          - paragraph [ref=f57e368]
+          - insertion [ref=f57e370]
+          - paragraph
+      - complementary [ref=f57e372]:
+        - heading "GTA Vice City" [level=2] [ref=f57e373]:
+          - checkbox [ref=f57e374]
+          - text: GTA Vice City
+        - list [ref=f57e376]:
+          - listitem [ref=f57e377]:
+            - generic [ref=f57e378]: "2"
+            - checkbox [ref=f57e379]
+            - link "GTA V to VC" [ref=f57e381] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/v-to-vc/
+          - listitem [ref=f57e382]:
+            - generic [ref=f57e383]: "1"
+            - checkbox [ref=f57e384]
+            - link "IV to VC" [ref=f57e386] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/iv-to-vc/
+          - listitem [ref=f57e387]:
+            - generic [ref=f57e388]: "2"
+            - checkbox [ref=f57e389]
+            - link "VC - Animações" [ref=f57e391] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-animacoes/
+          - listitem [ref=f57e392]:
+            - generic [ref=f57e393]: "6"
+            - checkbox [ref=f57e394]
+            - link "VC - Armas" [ref=f57e396] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-armas/
+          - listitem [ref=f57e397]:
+            - generic [ref=f57e398]: "1"
+            - checkbox [ref=f57e399]
+            - link "VC - Beta" [ref=f57e401] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-beta/
+          - listitem [ref=f57e402]:
+            - generic [ref=f57e403]: "1"
+            - checkbox [ref=f57e404]
+            - link "VC - Bicicletas" [ref=f57e406] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-bicicletas/
+          - listitem [ref=f57e407]:
+            - generic [ref=f57e408]: "4"
+            - checkbox [ref=f57e409]
+            - link "VC - Carros" [ref=f57e411] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-carros/
+          - listitem [ref=f57e412]:
+            - generic [ref=f57e413]: "3"
+            - checkbox [ref=f57e414]
+            - link "VC - Conversões Totais" [ref=f57e416] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-conversoes-totais/
+          - listitem [ref=f57e417]:
+            - generic [ref=f57e418]: "34"
+            - checkbox [ref=f57e419]
+            - link "VC - Correções e Melhorias" [ref=f57e421] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-correcoes-e-melhorias/
+          - listitem [ref=f57e422]:
+            - generic [ref=f57e423]: "37"
+            - checkbox [ref=f57e424]
+            - link "VC - DESTAQUES" [ref=f57e426] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-destaques/
+          - listitem [ref=f57e427]:
+            - generic [ref=f57e428]: "15"
+            - checkbox [ref=f57e429]
+            - link "VC - Ferramentas" [ref=f57e431] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-ferramentas/
+          - listitem [ref=f57e432]:
+            - generic [ref=f57e433]: "21"
+            - checkbox [ref=f57e434]
+            - link "VC - Gráficos" [ref=f57e436] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-graficos/
+          - listitem [ref=f57e437]:
+            - generic [ref=f57e438]: "1"
+            - checkbox [ref=f57e439]
+            - link "VC - Helicópteros" [ref=f57e441] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-helicopteros/
+          - listitem [ref=f57e442]:
+            - generic [ref=f57e443]: "13"
+            - checkbox [ref=f57e444]
+            - link "VC - Interface (Hud e Radar)" [ref=f57e446] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-interface/
+          - listitem [ref=f57e447]:
+            - generic [ref=f57e448]: "3"
+            - checkbox [ref=f57e449]
+            - link "VC - Mapa e Objetos" [ref=f57e451] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-mapa-e-objetos/
+          - listitem [ref=f57e452]:
+            - generic [ref=f57e453]: "1"
+            - checkbox [ref=f57e454]
+            - link "VC - Mobile" [ref=f57e456] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-mobile/
+          - listitem [ref=f57e457]:
+            - generic [ref=f57e458]: "1"
+            - checkbox [ref=f57e459]
+            - link "VC - Mods femininos" [ref=f57e461] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-mods-femininos/
+          - listitem [ref=f57e462]:
+            - generic [ref=f57e463]: "75"
+            - checkbox [ref=f57e464]
+            - link "VC - Mods Scripts etc" [ref=f57e466] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-mods-scripts-etc/
+          - listitem [ref=f57e467]:
+            - generic [ref=f57e468]: "2"
+            - checkbox [ref=f57e469]
+            - link "VC - Motos" [ref=f57e471] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-motos/
+          - listitem [ref=f57e472]:
+            - generic [ref=f57e473]: "2"
+            - checkbox [ref=f57e474]
+            - link "VC - Multiplayer local" [ref=f57e476] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-multiplayer-local/
+          - listitem [ref=f57e477]:
+            - generic [ref=f57e478]: "3"
+            - checkbox [ref=f57e479]
+            - link "VC - Player e Roupas" [ref=f57e481] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-player-e-roupas/
+          - listitem [ref=f57e482]:
+            - generic [ref=f57e483]: "1"
+            - checkbox [ref=f57e484]
+            - link "VC - PS2" [ref=f57e486] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-ps2/
+          - listitem [ref=f57e487]:
+            - generic [ref=f57e488]: "1"
+            - checkbox [ref=f57e489]
+            - link "VC - Rodas" [ref=f57e491] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-rodas/
+          - listitem [ref=f57e492]:
+            - generic [ref=f57e493]: "2"
+            - checkbox [ref=f57e494]
+            - link "VC - Skins e Pedestres" [ref=f57e496] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-skins-e-pedestres/
+          - listitem [ref=f57e497]:
+            - generic [ref=f57e498]: "3"
+            - checkbox [ref=f57e499]
+            - link "VC - Sons" [ref=f57e501] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-sons/
+          - listitem [ref=f57e502]:
+            - generic [ref=f57e503]: "10"
+            - checkbox [ref=f57e504]
+            - link "VC - Texturas" [ref=f57e506] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-texturas/
+          - listitem [ref=f57e507]:
+            - generic [ref=f57e508]: "1"
+            - checkbox [ref=f57e509]
+            - link "VC - Tradução" [ref=f57e511] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-traducao/
+          - listitem [ref=f57e512]:
+            - generic [ref=f57e513]: "2"
+            - checkbox [ref=f57e514]
+            - link "VC - Tutoriais" [ref=f57e516] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-tutoriais/
+          - listitem [ref=f57e517]:
+            - generic [ref=f57e518]: "1"
+            - checkbox [ref=f57e519]
+            - link "VC - VCS to VC" [ref=f57e521] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-vcs-to-vc/
+          - listitem [ref=f57e522]:
+            - generic [ref=f57e523]: "1"
+            - checkbox [ref=f57e524]
+            - link "VC - Vegetação" [ref=f57e526] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc/vc-vegetacao/
+      - complementary [ref=f57e527]:
+        - heading "GTA III" [level=2] [ref=f57e528]:
+          - checkbox [ref=f57e529]
+          - text: GTA III
+        - list [ref=f57e531]:
+          - listitem [ref=f57e532]:
+            - generic [ref=f57e533]: "2"
+            - checkbox [ref=f57e534]
+            - link "III - Aviões" [ref=f57e536] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii/iii-avioes/
+          - listitem [ref=f57e537]:
+            - generic [ref=f57e538]: "1"
+            - checkbox [ref=f57e539]
+            - link "III - Caminhões" [ref=f57e541] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii/iii-caminhoes/
+          - listitem [ref=f57e542]:
+            - generic [ref=f57e543]: "2"
+            - checkbox [ref=f57e544]
+            - link "III - Carros" [ref=f57e546] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii/iii-carros/
+          - listitem [ref=f57e547]:
+            - generic [ref=f57e548]: "5"
+            - checkbox [ref=f57e549]
+            - link "III - Conversões totais" [ref=f57e551] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii/iii-conversoes-totais/
+          - listitem [ref=f57e552]:
+            - generic [ref=f57e553]: "26"
+            - checkbox [ref=f57e554]
+            - link "III - Correções e Melhorias" [ref=f57e556] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii/iii-correcoes-e-melhorias/
+          - listitem [ref=f57e557]:
+            - generic [ref=f57e558]: "2"
+            - checkbox [ref=f57e559]
+            - link "III - Curiosidades" [ref=f57e561] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii/iii-curiosidades/
+          - listitem [ref=f57e562]:
+            - generic [ref=f57e563]: "25"
+            - checkbox [ref=f57e564]
+            - link "III - DESTAQUES" [ref=f57e566] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii/iii-destaques/
+          - listitem [ref=f57e567]:
+            - generic [ref=f57e568]: "13"
+            - checkbox [ref=f57e569]
+            - link "III - Ferramentas" [ref=f57e571] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii/iii-ferramentas/
+          - listitem [ref=f57e572]:
+            - generic [ref=f57e573]: "13"
+            - checkbox [ref=f57e574]
+            - link "III - Gráficos" [ref=f57e576] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii/iii-graficos/
+          - listitem [ref=f57e577]:
+            - generic [ref=f57e578]: "2"
+            - checkbox [ref=f57e579]
+            - link "III - Helicópteros" [ref=f57e581] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii/iii-helicopteros/
+          - listitem [ref=f57e582]:
+            - generic [ref=f57e583]: "9"
+            - checkbox [ref=f57e584]
+            - link "III - Interface (Hud e Radar)" [ref=f57e586] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii/iii-interface/
+          - listitem [ref=f57e587]:
+            - generic [ref=f57e588]: "1"
+            - checkbox [ref=f57e589]
+            - link "III - Mapas e Objetos" [ref=f57e591] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii/iii-mapas-e-objetos/
+          - listitem [ref=f57e592]:
+            - generic [ref=f57e593]: "1"
+            - checkbox [ref=f57e594]
+            - link "III - Mobile" [ref=f57e596] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii/iii-mobile/
+          - listitem [ref=f57e597]:
+            - generic [ref=f57e598]: "1"
+            - checkbox [ref=f57e599]
+            - link "III - Mods Femininos" [ref=f57e601] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii/iii-mods-femininos/
+          - listitem [ref=f57e602]:
+            - generic [ref=f57e603]: "56"
+            - checkbox [ref=f57e604]
+            - link "III - Mods Scripts etc" [ref=f57e606] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii/iii-mods-scripts-etc/
+          - listitem [ref=f57e607]:
+            - generic [ref=f57e608]: "2"
+            - checkbox [ref=f57e609]
+            - link "III - Players" [ref=f57e611] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii/iii-players/
+          - listitem [ref=f57e612]:
+            - generic [ref=f57e613]: "1"
+            - checkbox [ref=f57e614]
+            - link "III - PS2" [ref=f57e616] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii/iii-ps2/
+          - listitem [ref=f57e617]:
+            - generic [ref=f57e618]: "3"
+            - checkbox [ref=f57e619]
+            - link "III - Skins e Pedestres" [ref=f57e621] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii/iii-skins-e-pedestres/
+          - listitem [ref=f57e622]:
+            - generic [ref=f57e623]: "3"
+            - checkbox [ref=f57e624]
+            - link "III - Sons" [ref=f57e626] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii/iii-sons/
+          - listitem [ref=f57e627]:
+            - generic [ref=f57e628]: "4"
+            - checkbox [ref=f57e629]
+            - link "III - Texturas" [ref=f57e631] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii/iii-texturas/
+          - listitem [ref=f57e632]:
+            - generic [ref=f57e633]: "1"
+            - checkbox [ref=f57e634]
+            - link "III - Tradução" [ref=f57e636] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii/iii-traducao/
+          - listitem [ref=f57e637]:
+            - generic [ref=f57e638]: "1"
+            - checkbox [ref=f57e639]
+            - link "III - Tutoriais" [ref=f57e641] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii/iii-tutoriais/
+          - listitem [ref=f57e642]:
+            - generic [ref=f57e643]: "2"
+            - checkbox [ref=f57e644]
+            - link "III - Xbox to PC" [ref=f57e646] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii/iii-xbox-to-pc/
+      - complementary [ref=f57e647]:
+        - heading "GTA SA The Definitive Edition" [level=2] [ref=f57e648]:
+          - checkbox [ref=f57e649]
+          - text: GTA SA The Definitive Edition
+        - list [ref=f57e651]:
+          - listitem [ref=f57e652]:
+            - generic [ref=f57e653]: "3"
+            - checkbox [ref=f57e654]
+            - link "SA:DE - Animações" [ref=f57e656] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa-de/sade-animacoes/
+          - listitem [ref=f57e657]:
+            - generic [ref=f57e658]: "5"
+            - checkbox [ref=f57e659]
+            - link "SA:DE - Armas" [ref=f57e661] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa-de/sade-armas/
+          - listitem [ref=f57e662]:
+            - generic [ref=f57e663]: "2"
+            - checkbox [ref=f57e664]
+            - link "SA:DE - Carros" [ref=f57e666] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa-de/sade-carros/
+          - listitem [ref=f57e667]:
+            - generic [ref=f57e668]: "1"
+            - checkbox [ref=f57e669]
+            - link "SA:DE - Conversões totais" [ref=f57e671] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa-de/sade-conversoes-totais/
+          - listitem [ref=f57e672]:
+            - generic [ref=f57e673]: "41"
+            - checkbox [ref=f57e674]
+            - link "SA:DE - Correções e Melhorias" [ref=f57e676] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa-de/sade-correcoes-e-melhorias/
+          - listitem [ref=f57e677]:
+            - generic [ref=f57e678]: "3"
+            - checkbox [ref=f57e679]
+            - link "SA:DE - Ferramentas" [ref=f57e681] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa-de/sade-ferramentas/
+          - listitem [ref=f57e682]:
+            - generic [ref=f57e683]: "13"
+            - checkbox [ref=f57e684]
+            - link "SA:DE - Gráficos" [ref=f57e686] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa-de/sade-graficos/
+          - listitem [ref=f57e687]:
+            - generic [ref=f57e688]: "18"
+            - checkbox [ref=f57e689]
+            - link "SA:DE - Interface" [ref=f57e691] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa-de/sade-interface/
+          - listitem [ref=f57e692]:
+            - generic [ref=f57e693]: "9"
+            - checkbox [ref=f57e694]
+            - link "SA:DE - Mapas e Objetos" [ref=f57e696] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa-de/sade-mapas-e-objetos/
+          - listitem [ref=f57e697]:
+            - generic [ref=f57e698]: "2"
+            - checkbox [ref=f57e699]
+            - link "SA:DE - Missões" [ref=f57e701] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa-de/sade-missoes/
+          - listitem [ref=f57e702]:
+            - generic [ref=f57e703]: "19"
+            - checkbox [ref=f57e704]
+            - link "SA:DE - Mods Scripts etc" [ref=f57e706] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa-de/sade-mods-scripts-etc/
+          - listitem [ref=f57e707]:
+            - generic [ref=f57e708]: "4"
+            - checkbox [ref=f57e709]
+            - link "SA:DE - Player e Roupas" [ref=f57e711] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa-de/sade-player-e-roupas/
+          - listitem [ref=f57e712]:
+            - generic [ref=f57e713]: "8"
+            - checkbox [ref=f57e714]
+            - link "SA:DE - Skins e Pedestres" [ref=f57e716] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa-de/sade-skins-e-pedestres/
+          - listitem [ref=f57e717]:
+            - generic [ref=f57e718]: "2"
+            - checkbox [ref=f57e719]
+            - link "SA:DE - Sons" [ref=f57e721] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa-de/sade-sons/
+          - listitem [ref=f57e722]:
+            - generic [ref=f57e723]: "11"
+            - checkbox [ref=f57e724]
+            - link "SA:DE - Texturas" [ref=f57e726] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa-de/sade-texturas/
+          - listitem [ref=f57e727]:
+            - generic [ref=f57e728]: "2"
+            - checkbox [ref=f57e729]
+            - link "SA:DE - Veículos" [ref=f57e731] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-sa-de/sade-veiculos/
+      - complementary [ref=f57e732]:
+        - heading "GTA VC The Definitive Edition" [level=2] [ref=f57e733]:
+          - checkbox [ref=f57e734]
+          - text: GTA VC The Definitive Edition
+        - list [ref=f57e736]:
+          - listitem [ref=f57e737]:
+            - generic [ref=f57e738]: "1"
+            - checkbox [ref=f57e739]
+            - link "VC:DE - Armas" [ref=f57e741] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc-de/vcde-armas/
+          - listitem [ref=f57e742]:
+            - generic [ref=f57e743]: "1"
+            - checkbox [ref=f57e744]
+            - link "VC:DE - Conversões totais" [ref=f57e746] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc-de/vcde-conversoes-totais/
+          - listitem [ref=f57e747]:
+            - generic [ref=f57e748]: "23"
+            - checkbox [ref=f57e749]
+            - link "VC:DE - Correções e Melhorias" [ref=f57e751] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc-de/vcde-correcoes-e-melhorias/
+          - listitem [ref=f57e752]:
+            - generic [ref=f57e753]: "1"
+            - checkbox [ref=f57e754]
+            - link "VC:DE - Ferramentas" [ref=f57e756] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc-de/vcde-ferramentas/
+          - listitem [ref=f57e757]:
+            - generic [ref=f57e758]: "7"
+            - checkbox [ref=f57e759]
+            - link "VC:DE - Gráficos" [ref=f57e761] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc-de/vcde-graficos/
+          - listitem [ref=f57e762]:
+            - generic [ref=f57e763]: "14"
+            - checkbox [ref=f57e764]
+            - link "VC:DE - Interface" [ref=f57e766] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc-de/vcde-interface/
+          - listitem [ref=f57e767]:
+            - generic [ref=f57e768]: "4"
+            - checkbox [ref=f57e769]
+            - link "VC:DE - Mapas e Objetos" [ref=f57e771] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc-de/vcde-mapas-e-objetos/
+          - listitem [ref=f57e772]:
+            - generic [ref=f57e773]: "1"
+            - checkbox [ref=f57e774]
+            - link "VC:DE - Mods Scripts etc" [ref=f57e776] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc-de/vcde-mods-scripts-etc/
+          - listitem [ref=f57e777]:
+            - generic [ref=f57e778]: "1"
+            - checkbox [ref=f57e779]
+            - link "VC:DE - Player e Roupas" [ref=f57e781] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc-de/vcde-player-e-roupas/
+          - listitem [ref=f57e782]:
+            - generic [ref=f57e783]: "3"
+            - checkbox [ref=f57e784]
+            - link "VC:DE - Skins e Pedestres" [ref=f57e786] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc-de/vcde-skins-e-pedestres/
+          - listitem [ref=f57e787]:
+            - generic [ref=f57e788]: "2"
+            - checkbox [ref=f57e789]
+            - link "VC:DE - Sons" [ref=f57e791] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc-de/vcde-sons/
+          - listitem [ref=f57e792]:
+            - generic [ref=f57e793]: "4"
+            - checkbox [ref=f57e794]
+            - link "VC:DE - Texturas" [ref=f57e796] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-vc-de/vcde-texturas/
+      - complementary [ref=f57e797]:
+        - heading "GTA III The Definitive Edition" [level=2] [ref=f57e798]:
+          - checkbox [ref=f57e799]
+          - text: GTA III The Definitive Edition
+        - list [ref=f57e801]:
+          - listitem [ref=f57e802]:
+            - generic [ref=f57e803]: "1"
+            - checkbox [ref=f57e804]
+            - link "III:DE - Conversões totais" [ref=f57e806] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii-de/iiide-conversoes-totais/
+          - listitem [ref=f57e807]:
+            - generic [ref=f57e808]: "22"
+            - checkbox [ref=f57e809]
+            - link "III:DE - Correções e Melhorias" [ref=f57e811] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii-de/iiide-correcoes-e-melhorias/
+          - listitem [ref=f57e812]:
+            - generic [ref=f57e813]: "1"
+            - checkbox [ref=f57e814]
+            - link "III:DE - Ferramentas" [ref=f57e816] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii-de/iiide-ferramentas/
+          - listitem [ref=f57e817]:
+            - generic [ref=f57e818]: "7"
+            - checkbox [ref=f57e819]
+            - link "III:DE - Gráficos" [ref=f57e821] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii-de/iiide-graficos/
+          - listitem [ref=f57e822]:
+            - generic [ref=f57e823]: "12"
+            - checkbox [ref=f57e824]
+            - link "III:DE - Interface" [ref=f57e826] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii-de/iiide-interface/
+          - listitem [ref=f57e827]:
+            - generic [ref=f57e828]: "5"
+            - checkbox [ref=f57e829]
+            - link "III:DE - Mapas e Objetos" [ref=f57e831] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii-de/iiide-mapas-e-objetos/
+          - listitem [ref=f57e832]:
+            - generic [ref=f57e833]: "1"
+            - checkbox [ref=f57e834]
+            - link "III:DE - Player e Roupas" [ref=f57e836] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii-de/iiide-player-e-roupas/
+          - listitem [ref=f57e837]:
+            - generic [ref=f57e838]: "2"
+            - checkbox [ref=f57e839]
+            - link "III:DE - Skins e Pedestres" [ref=f57e841] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii-de/iiide-skins-e-pedestres/
+          - listitem [ref=f57e842]:
+            - generic [ref=f57e843]: "1"
+            - checkbox [ref=f57e844]
+            - link "III:DE - Sons" [ref=f57e846] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii-de/iiide-sons/
+          - listitem [ref=f57e847]:
+            - generic [ref=f57e848]: "4"
+            - checkbox [ref=f57e849]
+            - link "III:DE - Texturas" [ref=f57e851] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/gta-iii-de/iiide-texturas/
+      - complementary [ref=f57e852]:
+        - generic [ref=f57e853]:
+          - paragraph [ref=f57e854]
+          - insertion [ref=f57e856]
+          - paragraph
+      - complementary [ref=f57e858]:
+        - heading "NFS Underground 1" [level=2] [ref=f57e859]:
+          - checkbox [ref=f57e860]
+          - text: NFS Underground 1
+        - list [ref=f57e862]:
+          - listitem [ref=f57e863]:
+            - generic [ref=f57e864]: "1"
+            - checkbox [ref=f57e865]
+            - link "NFSU - Correções" [ref=f57e867] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-underground-1/nfsu-correcoes/
+          - listitem [ref=f57e868]:
+            - generic [ref=f57e869]: "2"
+            - checkbox [ref=f57e870]
+            - link "NFSU - Mods Scripts etc" [ref=f57e872] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-underground-1/nfsu-mods-scripts-etc/
+          - listitem [ref=f57e873]:
+            - generic [ref=f57e874]: "1"
+            - checkbox [ref=f57e875]
+            - link "NFSU - Programas" [ref=f57e877] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-underground-1/nfsu-programas/
+      - complementary [ref=f57e878]:
+        - heading "NFS Underground 2" [level=2] [ref=f57e879]:
+          - checkbox [ref=f57e880]
+          - text: NFS Underground 2
+        - list [ref=f57e882]:
+          - listitem [ref=f57e883]:
+            - generic [ref=f57e884]: "22"
+            - checkbox [ref=f57e885]
+            - link "NFSU2 - Carros" [ref=f57e887] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-underground-2/nfsu2-carros/
+          - listitem [ref=f57e888]:
+            - generic [ref=f57e889]: "7"
+            - checkbox [ref=f57e890]
+            - link "NFSU2 - Carros Brasileiros" [ref=f57e892] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-underground-2/nfsu2-carros-brasileiros/
+          - listitem [ref=f57e893]:
+            - generic [ref=f57e894]: "8"
+            - checkbox [ref=f57e895]
+            - link "NFSU2 - Correções e Melhorias" [ref=f57e897] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-underground-2/nfsu2-correcoes-e-melhorias/
+          - listitem [ref=f57e898]:
+            - generic [ref=f57e899]: "2"
+            - checkbox [ref=f57e900]
+            - link "NFSU2 - Curiosidades" [ref=f57e902] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-underground-2/nfsu2-curiosidades/
+          - listitem [ref=f57e903]:
+            - generic [ref=f57e904]: "3"
+            - checkbox [ref=f57e905]
+            - link "NFSU2 - Ferramentas" [ref=f57e907] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-underground-2/nfsu2-ferramentas/
+          - listitem [ref=f57e908]:
+            - generic [ref=f57e909]: "2"
+            - checkbox [ref=f57e910]
+            - link "NFSU2 - Gráficos" [ref=f57e912] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-underground-2/nfsu2-graficos/
+          - listitem [ref=f57e913]:
+            - generic [ref=f57e914]: "3"
+            - checkbox [ref=f57e915]
+            - link "NFSU2 - Interface" [ref=f57e917] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-underground-2/nfsu2-interface/
+          - listitem [ref=f57e918]:
+            - generic [ref=f57e919]: "7"
+            - checkbox [ref=f57e920]
+            - link "NFSU2 - Mods" [ref=f57e922] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-underground-2/nfsu2-mods/
+          - listitem [ref=f57e923]:
+            - generic [ref=f57e924]: "12"
+            - checkbox [ref=f57e925]
+            - link "NFSU2 - Mods Scripts etc" [ref=f57e927] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-underground-2/nfsu2-mods-scripts-etc/
+          - listitem [ref=f57e928]:
+            - generic [ref=f57e929]: "1"
+            - checkbox [ref=f57e930]
+            - link "NFSU2 - Peças em geral" [ref=f57e932] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-underground-2/nfsu2-pecas-em-geral/
+          - listitem [ref=f57e933]:
+            - generic [ref=f57e934]: "2"
+            - checkbox [ref=f57e935]
+            - link "NFSU2 - Porta-Malas" [ref=f57e937] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-underground-2/nfsu2-porta-malas/
+          - listitem [ref=f57e938]:
+            - generic [ref=f57e939]: "2"
+            - checkbox [ref=f57e940]
+            - link "NFSU2 - Saves" [ref=f57e942] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-underground-2/nfsu2-saves/
+          - listitem [ref=f57e943]:
+            - generic [ref=f57e944]: "1"
+            - checkbox [ref=f57e945]
+            - link "NFSU2 - Showrooms" [ref=f57e947] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-underground-2/nfsu2-showrooms/
+          - listitem [ref=f57e948]:
+            - generic [ref=f57e949]: "5"
+            - checkbox [ref=f57e950]
+            - link "NFSU2 - Texturas" [ref=f57e952] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-underground-2/nfsu2-texturas/
+          - listitem [ref=f57e953]:
+            - generic [ref=f57e954]: "1"
+            - checkbox [ref=f57e955]
+            - link "NFSU2 - Traducão" [ref=f57e957] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-underground-2/nfsu2-traducao/
+          - listitem [ref=f57e958]:
+            - generic [ref=f57e959]: "3"
+            - checkbox [ref=f57e960]
+            - link "NFSU2 - Tutoriais" [ref=f57e962] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-underground-2/nfsu2-tutoriais/
+      - complementary [ref=f57e963]:
+        - heading "NFS Most Wanted" [level=2] [ref=f57e964]:
+          - checkbox [ref=f57e965]
+          - text: NFS Most Wanted
+        - list [ref=f57e967]:
+          - listitem [ref=f57e968]:
+            - generic [ref=f57e969]: "5"
+            - checkbox [ref=f57e970]
+            - link "NFSMW - Carros" [ref=f57e972] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-most-wanted/nfsmw-carros/
+          - listitem [ref=f57e973]:
+            - generic [ref=f57e974]: "1"
+            - checkbox [ref=f57e975]
+            - link "NFSMW - Correções" [ref=f57e977] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-most-wanted/nfsmw-correcoes/
+          - listitem [ref=f57e978]:
+            - generic [ref=f57e979]: "1"
+            - checkbox [ref=f57e980]
+            - link "NFSMW - Curiosidades" [ref=f57e982] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-most-wanted/nfsmw-curiosidades/
+          - listitem [ref=f57e983]:
+            - generic [ref=f57e984]: "2"
+            - checkbox [ref=f57e985]
+            - link "NFSMW - Gráficos" [ref=f57e987] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-most-wanted/nfsmw-graficos/
+          - listitem [ref=f57e988]:
+            - generic [ref=f57e989]: "1"
+            - checkbox [ref=f57e990]
+            - link "NFSMW - Interface" [ref=f57e992] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-most-wanted/nfsmw-interface/
+          - listitem [ref=f57e993]:
+            - generic [ref=f57e994]: "3"
+            - checkbox [ref=f57e995]
+            - link "NFSMW - Mods Scripts etc" [ref=f57e997] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-most-wanted/nfsmw-mods-scripts-etc/
+          - listitem [ref=f57e998]:
+            - generic [ref=f57e999]: "2"
+            - checkbox [ref=f57e1000]
+            - link "NFSMW - Saves" [ref=f57e1002] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-most-wanted/nfsmw-saves/
+          - listitem [ref=f57e1003]:
+            - generic [ref=f57e1004]: "1"
+            - checkbox [ref=f57e1005]
+            - link "NFSMW - Texturas" [ref=f57e1007] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-most-wanted/nfsmw-texturas/
+          - listitem [ref=f57e1008]:
+            - generic [ref=f57e1009]: "1"
+            - checkbox [ref=f57e1010]
+            - link "NFSMW - Tradução" [ref=f57e1012] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-most-wanted/nfsmw-traducao/
+          - listitem [ref=f57e1013]:
+            - generic [ref=f57e1014]: "1"
+            - checkbox [ref=f57e1015]
+            - link "NFSMW - Tutoriais" [ref=f57e1017] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-most-wanted/nfsmw-tutoriais/
+      - complementary [ref=f57e1018]:
+        - heading "NFS Carbon" [level=2] [ref=f57e1019]:
+          - checkbox [ref=f57e1020]
+          - text: NFS Carbon
+        - list [ref=f57e1022]:
+          - listitem [ref=f57e1023]:
+            - generic [ref=f57e1024]: "2"
+            - checkbox [ref=f57e1025]
+            - link "NFSC - Correções" [ref=f57e1027] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-carbon/nfsc-correcoes/
+          - listitem [ref=f57e1028]:
+            - generic [ref=f57e1029]: "1"
+            - checkbox [ref=f57e1030]
+            - link "NFSC - Ferramentas" [ref=f57e1032] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-carbon/nfsc-ferramentas/
+          - listitem [ref=f57e1033]:
+            - generic [ref=f57e1034]: "3"
+            - checkbox [ref=f57e1035]
+            - link "NFSC - Mods Scripts etc" [ref=f57e1037] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nfs-carbon/nfsc-mods-scripts-etc/
+      - complementary [ref=f57e1038]:
+        - heading "Projetos" [level=2] [ref=f57e1039]:
+          - checkbox [ref=f57e1040]
+          - text: Projetos
+        - list [ref=f57e1042]:
+          - listitem [ref=f57e1043]:
+            - generic [ref=f57e1044]: "11"
+            - checkbox [ref=f57e1045]
+            - link "GTA Brasil" [ref=f57e1047] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/projetos/gta-brasil/
+          - listitem [ref=f57e1048]:
+            - generic [ref=f57e1049]: "2"
+            - checkbox [ref=f57e1050]
+            - link "GTA New Nation" [ref=f57e1052] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/projetos/gta-new-nation/
+          - listitem [ref=f57e1053]:
+            - generic [ref=f57e1054]: "1"
+            - checkbox [ref=f57e1055]
+            - link "GTA Re:Liberty City Stories (PC)" [ref=f57e1057] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/projetos/gta-reliberty-city-stories-pc/
+          - listitem [ref=f57e1058]:
+            - generic [ref=f57e1059]: "1"
+            - checkbox [ref=f57e1060]
+            - 'link "GTA Vice City Stories: PC Edition" [ref=f57e1062] [cursor=pointer]':
+              - /url: https://www.mixmods.com.br/projetos/gta-vice-city-stories-pc-edition/
+          - listitem [ref=f57e1063]:
+            - generic [ref=f57e1064]: "12"
+            - checkbox [ref=f57e1065]
+            - link "Insanity" [ref=f57e1067] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/projetos/insanity/
+          - listitem [ref=f57e1068]:
+            - generic [ref=f57e1069]: "6"
+            - checkbox [ref=f57e1070]
+            - link "K-Retexture" [ref=f57e1072] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/projetos/k-retexture/
+          - listitem [ref=f57e1073]:
+            - generic [ref=f57e1074]: "1"
+            - checkbox [ref=f57e1075]
+            - link "Loja 3D Print" [ref=f57e1077] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/projetos/loja-3d-print/
+      - complementary [ref=f57e1078]:
+        - heading "Nossos jogos" [level=2] [ref=f57e1079]:
+          - checkbox [ref=f57e1080]
+          - text: Nossos jogos
+        - list [ref=f57e1082]:
+          - listitem [ref=f57e1083]:
+            - generic [ref=f57e1084]: "1"
+            - checkbox [ref=f57e1085]
+            - link "2nibble - Beetles Underground" [ref=f57e1087] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nossos-jogos/2nibble-beetles-underground/
+          - listitem [ref=f57e1088]:
+            - generic [ref=f57e1089]: "4"
+            - checkbox [ref=f57e1090]
+            - link "2nibble - Pizza Delivery" [ref=f57e1092] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nossos-jogos/2nibble-pizza-delivery/
+          - listitem [ref=f57e1093]:
+            - generic [ref=f57e1094]: "5"
+            - checkbox [ref=f57e1095]
+            - link "2nibble - Warpunk" [ref=f57e1097] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nossos-jogos/2nibble-warpunk/
+          - listitem [ref=f57e1098]:
+            - generic [ref=f57e1099]: "2"
+            - checkbox [ref=f57e1100]
+            - link "Beetles Underground" [ref=f57e1102] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nossos-jogos/beetles-underground/
+          - listitem [ref=f57e1103]:
+            - generic [ref=f57e1104]: "3"
+            - checkbox [ref=f57e1105]
+            - link "Nibble Pizza Delivery" [ref=f57e1107] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nossos-jogos/nibble-pizza-delivery/
+          - listitem [ref=f57e1108]:
+            - generic [ref=f57e1109]: "1"
+            - checkbox [ref=f57e1110]
+            - link "Sokobox++" [ref=f57e1112] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/nossos-jogos/sokobox/
+      - complementary [ref=f57e1113]:
+        - heading "Outros" [level=2] [ref=f57e1114]:
+          - checkbox [ref=f57e1115]
+          - text: Outros
+        - list [ref=f57e1117]:
+          - listitem [ref=f57e1118]:
+            - generic [ref=f57e1119]: "82"
+            - checkbox [ref=f57e1120]
+            - link "Artigos" [ref=f57e1122] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/outros/artigos/
+          - listitem [ref=f57e1123]:
+            - generic [ref=f57e1124]: "11"
+            - checkbox [ref=f57e1125]
+            - link "Download de jogos" [ref=f57e1127] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/outros/download-de-jogos/
+          - listitem [ref=f57e1128]:
+            - generic [ref=f57e1129]: "8"
+            - checkbox [ref=f57e1130]
+            - link "GTA V vs Modders" [ref=f57e1132] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/outros/v-vs-modders/
+          - listitem [ref=f57e1133]:
+            - generic [ref=f57e1134]: "14"
+            - checkbox [ref=f57e1135]
+            - link "GTA VI - Informações" [ref=f57e1137] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/outros/gta-vi-informacoes/
+          - listitem [ref=f57e1138]:
+            - generic [ref=f57e1139]: "21"
+            - checkbox [ref=f57e1140]
+            - link "Humor" [ref=f57e1142] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/outros/humor/
+          - listitem [ref=f57e1143]:
+            - generic [ref=f57e1144]: "3"
+            - checkbox [ref=f57e1145]
+            - link "Outros Programas" [ref=f57e1147] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/outros/outros-programas/
+          - listitem [ref=f57e1148]:
+            - generic [ref=f57e1149]: "56"
+            - checkbox [ref=f57e1150]
+            - 'link "Série: G&B" [ref=f57e1152] [cursor=pointer]':
+              - /url: https://www.mixmods.com.br/outros/serie-gb/
+          - listitem [ref=f57e1153]:
+            - generic [ref=f57e1154]: "2"
+            - checkbox [ref=f57e1155]
+            - link "Wallpapers" [ref=f57e1157] [cursor=pointer]:
+              - /url: https://www.mixmods.com.br/outros/wallpapers/
+      - complementary [ref=f57e1158]:
+        - generic [ref=f57e1159]:
+          - paragraph [ref=f57e1160]
+          - insertion [ref=f57e1162]
+          - paragraph [ref=f57e1164]
+      - complementary:
+        - generic:
+          - link:
+            - /url: /filter
+  - contentinfo "Site" [ref=f57e1168]:
+    - generic [ref=f57e1170]:
+      - text: © 2026 MixMods - Mods para GTA SA e outros • Built with
+      - link "GeneratePress" [ref=f57e1171] [cursor=pointer]:
+        - /url: https://generatepress.com

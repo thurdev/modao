@@ -4,6 +4,7 @@ import type { CrashIncident, CrashReport } from '@shared/types'
 import { getDb } from '../db'
 import { lookup } from './crashlist'
 import { groupIncidents, parseModuleName, resolveCrashAddress } from '@shared/crash'
+import { activeGame } from '../game/detect'
 
 const execFileAsync = promisify(execFile)
 
@@ -103,6 +104,11 @@ export interface ScanResult {
 }
 
 export async function scanCrashes(profileId: number | null): Promise<ScanResult> {
+  // Mod Loader writes its own crash handler's output - registers, stack, a
+  // backtrace and the last file the streamer opened - straight into
+  // modloader.log. That is a better account of the crash than the single
+  // address the Windows Event Log records, so it is read first.
+  const fromModLoader = await scanModLoaderCrash(profileId)
   const events = await readCrashEvents()
   const db = getDb()
   let added = 0
@@ -149,12 +155,18 @@ export async function scanCrashes(profileId: number | null): Promise<ScanResult>
     if (info.changes > 0) added++
   }
 
+  added += fromModLoader.added
   const message =
-    events.length === 0
+    events.length === 0 && fromModLoader.added === 0
       ? 'No "Application Error" record for gta_sa.exe in the Windows Event Log. If the game stopped responding rather than closing, that is expected: a hang leaves no exception record, and the absence of one rules out a crash address entirely.'
       : `${events.length} event(s) found, ${added} new.${hangs ? ` ${hangs} were hangs (no fault address available).` : ''}`
 
-  return { found: events.length, added, hangSuspected: events.length === 0 || hangs > 0, message }
+  return {
+    found: events.length + fromModLoader.added,
+    added,
+    hangSuspected: events.length === 0 && fromModLoader.added === 0,
+    message: fromModLoader.note ? `${message} ${fromModLoader.note}` : message
+  }
 }
 
 export function listCrashes(profileId: number | null): CrashReport[] {
@@ -220,4 +232,64 @@ export function listIncidents(profileId: number | null): CrashIncident[] {
 
 export function setCrashResolved(id: number, resolved: boolean): void {
   getDb().prepare('UPDATE crash_report SET resolved = ? WHERE id = ?').run(resolved ? 1 : 0, id)
+}
+
+/**
+ * Records the crash Mod Loader itself caught, if the log holds one.
+ *
+ * It is stored beside the Event Log records so the history is one list, and it
+ * is kept distinct by its own timestamp: a Mod Loader dump and the Windows
+ * record of the same crash are two accounts of one event, and the Mod Loader
+ * one carries the backtrace.
+ */
+async function scanModLoaderCrash(profileId: number | null): Promise<{ added: number; note: string | null }> {
+  const game = activeGame()
+  if (!game?.supportsModLoader) return { added: 0, note: null }
+
+  const { readModLoaderLog, parseCrashDump } = await import('./modloaderLog')
+  const text = await readModLoaderLog(game.path).catch(() => null)
+  if (!text) return { added: 0, note: null }
+  const crash = parseCrashDump(text)
+  if (!crash) return { added: 0, note: null }
+
+  const occurredAt = crash.occurredAt ?? new Date().toISOString()
+  const addressing = crash.module ? resolveCrashAddress(crash.module, crash.address ?? '') : null
+  const detail = [
+    crash.reason,
+    crash.lastStreamedFile ? `Last file opened for streaming: ${crash.lastStreamedFile}` : '',
+    crash.backtrace.length ? `Backtrace:\n${crash.backtrace.join('\n')}` : ''
+  ]
+    .filter(Boolean)
+    .join('\n')
+
+  const info = getDb()
+    .prepare(
+      `INSERT OR IGNORE INTO crash_report
+         (profile_id, occurred_at, fault_offset, module, exception_code, crash_address, matched_cause, matched_solution,
+          kind, raw, resolved, process_id, module_unloaded, address_kind, address_note)
+       VALUES (?,?,?,?,?,?,?,?,?,?,0,?,0,?,?)`
+    )
+    .run(
+      profileId,
+      occurredAt,
+      crash.address ?? '',
+      crash.module ?? 'gta_sa.exe',
+      '',
+      addressing?.display ?? crash.address ?? '',
+      null,
+      null,
+      'exception',
+      detail,
+      'modloader.log',
+      addressing?.kind ?? 'none',
+      addressing?.note ?? null
+    )
+
+  return {
+    added: info.changes > 0 ? 1 : 0,
+    note:
+      info.changes > 0
+        ? 'Mod Loader had recorded this crash itself, with a backtrace - that record was read too.'
+        : null
+  }
 }

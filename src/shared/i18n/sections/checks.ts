@@ -57,6 +57,23 @@ export const checks = {
     texturesOk: '{scanned} arquivo(s) .txd lidos, todas as dimensões são potência de dois',
     texturesDetail:
       'Textura fora de potência de dois é causa documentada de crash (0x00749B7B) e de textura que não aparece.',
+    streamTitle: 'Memória de streaming (stream.ini)',
+    streamMissing: 'Nenhum stream.ini — o jogo usa o padrão dele',
+    streamOk: '{value} MB, dentro do que o jogo aguenta',
+    streamOkAdjuster: '{value} MB, com limit adjuster no perfil para sustentar',
+    streamRisky: '{value} MB pedidos sem nenhum limit adjuster neste perfil',
+    streamRiskyDetail:
+      'O GTA SA é um processo de 32 bits: sem LARGE_ADDRESS_AWARE ele endereça 2 GB no total, e o buffer de streaming é reservado logo de cara. Pedir {value} MB derruba o jogo assim que o streamer abre o GTA3.IMG, e a falha aparece dentro do CStreaming — parece mod quebrado, mas não é. Este arquivo veio antes do Modão (normalmente de um repack), então ele não é reescrito sozinho: use o botão para gravar {safe} MB, com backup do original.',
+    modsTitle: 'O que o Mod Loader instalou de verdade',
+    modsNoLog: 'Sem modloader.log ainda — abra o jogo uma vez',
+    modsAllActive: 'Os {count} mod(s) do perfil foram carregados',
+    modsProblems: '{bad} de {count} mod(s) não carregaram nada',
+    modsDetail:
+      'O modloader.log é a resposta honesta para "meu mod instalou?": o Modão pode colocar os arquivos no lugar e ainda assim estar errado sobre o que o Mod Loader faz com eles.',
+    verdictActive: 'carregado',
+    verdictInert: 'inerte',
+    verdictMisInstalled: 'instalado errado',
+    verdictUnknown: 'não mencionado no log',
     sizeTitle: 'Tamanho dos mods',
     sizeSummary: '{size} GB de mods ligados',
     sizeDetail:
@@ -114,6 +131,23 @@ export const checks = {
     texturesOk: '{scanned} .txd file(s) scanned, all dimensions are powers of two',
     texturesDetail:
       'Non-power-of-two textures are a documented cause of crashes (0x00749B7B) and of textures failing to render.',
+    streamTitle: 'Streaming memory (stream.ini)',
+    streamMissing: 'No stream.ini - the game uses its own default',
+    streamOk: '{value} MB, within what the game can take',
+    streamOkAdjuster: '{value} MB, with a limit adjuster in this profile to back it',
+    streamRisky: '{value} MB requested with no limit adjuster in this profile',
+    streamRiskyDetail:
+      'GTA SA is a 32-bit process: without LARGE_ADDRESS_AWARE it addresses 2 GB in total, and the streaming buffer is claimed up front. Asking for {value} MB kills the game the moment the streamer opens GTA3.IMG, and the fault lands inside CStreaming - which reads like a broken mod and is not one. This file predates Modão (usually from a repack), so it is never rewritten silently: use the button to write {safe} MB, keeping a backup of the original.',
+    modsTitle: 'What Mod Loader actually installed',
+    modsNoLog: 'No modloader.log yet - launch the game once',
+    modsAllActive: 'All {count} mod(s) in the profile were loaded',
+    modsProblems: '{bad} of {count} mod(s) loaded nothing',
+    modsDetail:
+      'modloader.log is the only honest answer to "did my mod install?": the app can place files correctly and still be wrong about what Mod Loader will do with them.',
+    verdictActive: 'loaded',
+    verdictInert: 'inert',
+    verdictMisInstalled: 'mis-installed',
+    verdictUnknown: 'not mentioned in the log',
     sizeTitle: 'Asset size',
     sizeSummary: '{size} GB of enabled mods',
     sizeDetail:

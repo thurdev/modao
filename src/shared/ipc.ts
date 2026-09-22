@@ -10,6 +10,7 @@ import type {
   FileConflict,
   GameInstall,
   HealthReport,
+  ModLoaderLogReport,
   SwitchJournal,
   SwitchPlan,
   SwitchVerification,
@@ -150,6 +151,10 @@ export interface ModãoApi {
     resolveCrash(id: number, resolved: boolean): Promise<void>
     lookupAddress(address: string): Promise<{ address: string; cause: string | null; solution: string | null }>
     logs(): Promise<LogEntry[]>
+    /** What Mod Loader itself says it did with this profile's mods. */
+    modLoaderReport(profileId: number): Promise<ModLoaderLogReport | null>
+    /** Writes a streaming-memory value the game can survive, keeping a backup. */
+    fixStreamingMemory(memoryMb?: number): Promise<{ file: string; backup: string; from: number | null; to: number }>
     bisectStart(profileId: number): Promise<BisectSession>
     bisectResult(sessionId: string, result: 'good' | 'bad'): Promise<BisectSession>
     bisectAbort(sessionId: string): Promise<void>
@@ -238,6 +243,8 @@ export const IPC_CHANNELS = [
   'health:resolveCrash',
   'health:lookupAddress',
   'health:logs',
+  'health:modLoaderReport',
+  'health:fixStreamingMemory',
   'health:bisectStart',
   'health:bisectResult',
   'health:bisectAbort',

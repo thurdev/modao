@@ -24,6 +24,8 @@ import { describeFsError, isProtectedLocation } from '../src/main/game/access'
 import { setMainLanguage } from '../src/main/util/i18n'
 import { translate } from '../src/shared/i18n'
 import { classifyDownload, looksLikeArchive, normalizeForFetch } from '../src/shared/download'
+import { parseCrashDump, parseModLoaderLog } from '../src/main/diagnostics/modloaderLog'
+import { limitAdjusterNames, parseStreamIni, SAFE_STREAMING_MEMORY_MB } from '../src/main/game/streamIni'
 
 let failures = 0
 function check(name: string, cond: boolean, extra?: unknown): void {
@@ -347,6 +349,200 @@ check(
 )
 setMainLanguage('pt-BR')
 check('access: a folder outside Program Files is not flagged', !isProtectedLocation(String.raw`D:\Games\GTA San Andreas`))
+
+// --- mod layout, from the three installs that came out inert -----------------
+// Every case here is a real archive that Modão previously laid out wrongly, and
+// the failure was always the same shape: Mod Loader loaded nothing and said so
+// in modloader.log while the app reported success.
+
+const layout = path.join(tmp, 'layout')
+function lay(rel: string, content = 'x'): void {
+  const p = path.join(layout, rel)
+  fs.mkdirSync(path.dirname(p), { recursive: true })
+  fs.writeFileSync(p, content)
+}
+
+// 1. GTA V HUD: the plugin and its resources shipped side by side. Lifting
+//    VHud.asi into scripts\ left ~250 files with "No handler or callme".
+lay('VHud.asi', 'plugin')
+lay('VHud/blips/radar_ammu.png')
+lay('VHud/map/map.txd')
+lay('VHud/data/hud.dat')
+lay('VHud/fonts/font.txd')
+// 2. Proper Shaders: nine quality presets, each holding the same file.
+for (const preset of ['(0a- lowest)', '(1 - low)', '(3 - high DEFAULT)', '(5 - very high)']) {
+  lay(`Proper Shaders/${preset}/ProperShaders.ini`, preset)
+}
+// 3. An add-on that only means something merged into the mod it belongs to.
+lay('Extra/GTA UG/VHud/data/hud.dat', 'override')
+// 4. A bare loader, which genuinely does belong in the ASI directory.
+lay('SilentPatchSA.asi', 'loader')
+
+const layoutCtx = { asiRelative: 'scripts', readmes: [], fallbackName: 'GTA V HUD' }
+const laidOut = await classifyTree(layout, layoutCtx, {})
+const target = (needle: string): string | undefined =>
+  laidOut.files.find((f) => f.sourcePath.toLowerCase().endsWith(needle.toLowerCase()))?.targetRelative
+
+check(
+  'layout: an .asi that owns resources goes into the mod folder, not scripts\\',
+  target('VHud.asi') === 'modloader/VHud/VHud.asi',
+  target('VHud.asi')
+)
+check(
+  'layout: its resources land beside it, under the same mod folder',
+  target('VHud/blips/radar_ammu.png') === 'modloader/VHud/blips/radar_ammu.png' &&
+    target('VHud/data/hud.dat') === 'modloader/VHud/data/hud.dat',
+  laidOut.files.map((f) => f.targetRelative)
+)
+check(
+  'layout: the install says why the plugin was kept with its files',
+  laidOut.warnings.some((w) => w.code === 'asi-bundle'),
+  laidOut.warnings.map((w) => w.code)
+)
+check(
+  'layout: a bare loader still goes to the ASI directory',
+  target('SilentPatchSA.asi') === 'scripts/SilentPatchSA.asi',
+  target('SilentPatchSA.asi')
+)
+
+const presetGroup = laidOut.variants.find((v) => v.options.some((o) => o.label.includes('very high')))
+check('layout: quality presets are detected as one exclusive group', !!presetGroup, laidOut.variants.map((v) => v.id))
+check(
+  'layout: every preset is an option in it',
+  presetGroup?.options.length === 4,
+  presetGroup?.options.map((o) => o.label)
+)
+check(
+  'layout: the preset the author marked DEFAULT is preselected',
+  presetGroup?.options.find((o) => o.label.includes('DEFAULT'))?.recommended === true,
+  presetGroup?.options.map((o) => `${o.label}:${o.recommended}`)
+)
+check(
+  'layout: with no preset chosen, not one of them is installed',
+  !laidOut.files.some((f) => f.targetRelative.toLowerCase().includes('propershaders.ini')),
+  laidOut.files.filter((f) => f.targetRelative.includes('roper')).map((f) => f.targetRelative)
+)
+const onePreset = await classifyTree(layout, layoutCtx, { [presetGroup!.id]: presetGroup!.options[3].id })
+check(
+  'layout: choosing one installs exactly one copy of the shared file',
+  onePreset.files.filter((f) => f.targetRelative.toLowerCase().endsWith('propershaders.ini')).length === 1,
+  onePreset.files.filter((f) => f.targetRelative.toLowerCase().endsWith('propershaders.ini')).map((f) => f.targetRelative)
+)
+
+check(
+  'layout: an Extra/ folder is not installed as a mod of its own',
+  !laidOut.files.some((f) => f.targetRelative.toLowerCase().startsWith('modloader/extra')),
+  laidOut.files.map((f) => f.targetRelative).filter((t) => t.toLowerCase().includes('extra'))
+)
+check(
+  'layout: and the user is told what happened to it',
+  laidOut.warnings.some((w) => w.code === 'addon-folder'),
+  laidOut.warnings.map((w) => w.code)
+)
+
+// The archive that ships the game's own layout must not defeat rule 1 either.
+const split = path.join(tmp, 'split')
+function spl(rel: string): void {
+  const p = path.join(split, rel)
+  fs.mkdirSync(path.dirname(p), { recursive: true })
+  fs.writeFileSync(p, 'x')
+}
+spl('scripts/VHud.asi')
+spl('modloader/VHud/data/hud.dat')
+const splitOut = await classifyTree(split, { asiRelative: 'scripts', readmes: [], fallbackName: 'VHud' }, {})
+check(
+  'layout: an archive shipping scripts\\ and modloader\\ separately still gets a working install',
+  splitOut.files.some((f) => f.targetRelative === 'modloader/VHud/VHud.asi') ||
+    splitOut.warnings.some((w) => w.code === 'asi-split'),
+  splitOut.files.map((f) => f.targetRelative)
+)
+
+// --- modloader.log is the only honest answer to "did it install?" -----------
+// These lines are the shapes Mod Loader really writes, including the one that
+// gave away the broken GTA V HUD install: a folder full of files it refused,
+// and "No files in" for the same folder.
+const mlLog = [
+  '========================== Mod Loader 0.3.7 ==========================',
+  'Installing file "modloader\\VehFuncs\\vehfuncs.dat"',
+  'Installing file "modloader\\VehFuncs\\models\\infernus.dff"',
+  'No files in "modloader\\VHud\\"',
+  'No handler or callme for file "modloader\\VHud\\blips\\radar_ammu.png"',
+  'No handler or callme for file "modloader\\VHud\\data\\hud.dat"',
+  'No handler or callme for file "modloader\\Proper Shaders\\ProperShaders.ini"',
+  'No handler or callme for file "stream.ini"',
+  ''
+].join('\r\n')
+
+const mlReport = parseModLoaderLog(mlLog, ['VehFuncs', 'VHud', 'Proper Shaders', 'Never Mentioned'])
+const verdictOf = (folder: string): string | undefined => mlReport.mods.find((m) => m.folder === folder)?.verdict
+
+check('modloader.log: the Mod Loader version is read', mlReport.version === '0.3.7', mlReport.version)
+check('modloader.log: a mod whose files were installed is active', verdictOf('VehFuncs') === 'active', verdictOf('VehFuncs'))
+check(
+  'modloader.log: a mod with no installed files and refused files is mis-installed',
+  verdictOf('VHud') === 'mis-installed',
+  verdictOf('VHud')
+)
+check(
+  'modloader.log: the explanation names the likely cause instead of quoting the log',
+  (mlReport.mods.find((m) => m.folder === 'VHud')?.explanation ?? '').includes('separated from its own data'),
+  mlReport.mods.find((m) => m.folder === 'VHud')?.explanation
+)
+check(
+  'modloader.log: a mod whose only files Mod Loader does not manage is inert, not broken',
+  verdictOf('Proper Shaders') === 'inert',
+  verdictOf('Proper Shaders')
+)
+check(
+  'modloader.log: a folder the log never mentions is reported, not dropped',
+  verdictOf('Never Mentioned') === 'unknown',
+  verdictOf('Never Mentioned')
+)
+check('modloader.log: a refused file outside any mod folder is kept separately', mlReport.looseUnhandled.includes('stream.ini'), mlReport.looseUnhandled)
+check('modloader.log: a clean log reports no crash', mlReport.crash === null)
+
+const crashLog = [
+  'Opening file for streaming "MODELS\\GTA3.IMG"',
+  'Unhandled exception at 0x005B8E55 in module "gta_sa.exe"',
+  'EXCEPTION_ACCESS_VIOLATION writing to 0x00000024',
+  'Backtrace:',
+  '  0x005B8E55 gta_sa.exe CStreaming::RequestModelStream',
+  '  0x004C0C63 gta_sa.exe CStreaming::LoadAllRequestedModels',
+  '',
+  '--------------------------------'
+].join('\r\n')
+const mlCrash = parseCrashDump(crashLog)
+check('modloader.log: a crash dump is recognised', !!mlCrash, mlCrash)
+check('modloader.log: the faulting address is read from the dump', mlCrash?.address === '0x005B8E55', mlCrash?.address)
+check('modloader.log: the faulting module is read', mlCrash?.module === 'gta_sa.exe', mlCrash?.module)
+check('modloader.log: the backtrace is kept, innermost frame first', mlCrash?.backtrace.length === 2, mlCrash?.backtrace)
+check(
+  'modloader.log: the last streamed file is kept, since it is usually the culprit',
+  mlCrash?.lastStreamedFile === 'MODELS\\GTA3.IMG',
+  mlCrash?.lastStreamedFile
+)
+
+// --- stream.ini: the crash that looks like a broken mod ---------------------
+// A DODI repack shipped Streaming Memory=13500. GTA SA is a 32-bit process, so
+// the streamer dies on the first .IMG read and the fault lands in CStreaming -
+// nothing about the mods is wrong, and no other check would ever find it.
+check(
+  'stream.ini: the memory value is read whatever the adjuster calls the key',
+  parseStreamIni('[Streaming]\r\nStreaming Memory=13500\r\n').memoryMb === 13500 &&
+    parseStreamIni('StreamMemory = 2048\r\n').memoryMb === 2048 &&
+    parseStreamIni('Memory=512').memoryMb === 512,
+  parseStreamIni('[Streaming]\r\nStreaming Memory=13500\r\n')
+)
+check('stream.ini: the key name is kept so a rewrite does not rename it', parseStreamIni('StreamMemory = 2048').key === 'StreamMemory')
+check('stream.ini: comments and section headers are not mistaken for values', parseStreamIni('; Memory=99\r\n[Memory]\r\n').memoryMb === null)
+check('stream.ini: a file with no memory line reads as unset', parseStreamIni('Something=1\r\n').memoryMb === null)
+check('stream.ini: the safe value is below the 32-bit ceiling', SAFE_STREAMING_MEMORY_MB <= 2048)
+check(
+  'stream.ini: a limit adjuster is recognised by any of its usual names',
+  ['OpenLimitAdjuster.asi', 'III.VC.SA.LimitAdjuster.asi', 'fastman92limitAdjuster.asi'].every((n) =>
+    limitAdjusterNames().test(n)
+  )
+)
 
 // --- download links ----------------------------------------------------------
 // Which links Modão can fetch on its own decides whether "Install" installs

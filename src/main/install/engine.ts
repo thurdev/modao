@@ -17,6 +17,7 @@ import { findReadmes, parseReadme } from './readme'
 import { classifyTree, type OverlayMatch } from './classify'
 import { providesKey } from '../conflicts'
 import { resolveDependencies } from '../deps/resolver'
+import { t } from '../util/i18n'
 import { dematerialise, ingest, materialise, ownedKey, quarantineEdited, storeKey } from '../store/contentStore'
 import { requireActiveGame } from '../game/detect'
 import { syncProfileIni } from '../profiles/materialize'
@@ -142,7 +143,19 @@ async function buildPlan(planId: string, meta: BuildMeta): Promise<InstallPlan> 
     if (d.resolution === 'blocking') {
       warnings.push({ severity: 'error', code: 'dependency-conflict', message: d.note ?? `${d.title} must not be installed alongside this mod.` })
     } else if (d.resolution === 'missing') {
-      warnings.push({ severity: 'warn', code: 'dependency-missing', message: `Missing requirement: ${d.title}`, detail: d.note ?? undefined })
+      // Rule 4: a dependency satisfied in ANOTHER profile counts for nothing.
+      // Proper Shaders names SilentPatch and Open Limit Adjuster and probes for
+      // them at runtime; installed without either, in a profile that has
+      // neither, the game crashed on launch. So this blocks the install rather
+      // than being a line the user scrolls past.
+      warnings.push({
+        severity: 'error',
+        code: 'dependency-missing',
+        message: t('messages.installDeps.missingRequirement', { title: d.title }),
+        detail:
+          (d.note ? `${d.note} ` : '') +
+          t('messages.installDeps.missingRequirementDetail', { profile: profileName(profileId) })
+      })
     }
   }
   if (readmes.length === 0) {
@@ -312,7 +325,8 @@ export interface ApplyResult {
 export async function applyPlan(
   planId: string,
   profileId: number,
-  onProgress?: (phase: string, current: number, total: number) => void
+  onProgress?: (phase: string, current: number, total: number) => void,
+  opts: { acceptMissingDependencies?: boolean } = {}
 ): Promise<ApplyResult> {
   const state = PLANS.get(planId)
   if (!state) throw new Error('This install plan has expired. Start the install again.')
@@ -320,7 +334,12 @@ export async function applyPlan(
   const game = state.game
 
   if (plan.requiresVariantChoice) throw new Error('Choose a variant before installing.')
-  const blocking = plan.warnings.filter((w) => w.severity === 'error' && w.code !== 'empty')
+  const blocking = plan.warnings.filter(
+    (w) =>
+      w.severity === 'error' &&
+      w.code !== 'empty' &&
+      !(w.code === 'dependency-missing' && opts.acceptMissingDependencies)
+  )
   if (blocking.length) throw new Error(blocking.map((b) => b.message).join(' '))
   if (plan.files.length === 0) throw new Error('This plan installs no files.')
 
@@ -520,4 +539,10 @@ export function rollbackPreview(installId: number): { relativePath: string; acti
 
 function sanitizeFolderName(title: string): string {
   return title.replace(/[<>:"/\\|?*]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Mod'
+}
+
+/** The profile's name, for messages that have to say which one is missing something. */
+function profileName(profileId: number): string {
+  const row = getDb().prepare('SELECT name FROM profile WHERE id = ?').get(profileId) as { name: string } | undefined
+  return row?.name ?? `#${profileId}`
 }

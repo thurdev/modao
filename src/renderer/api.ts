@@ -13,6 +13,7 @@ import type {
   FileConflict,
   GameInstall,
   HealthReport,
+  ModLoaderLogReport,
   ImgAnalysis,
   IfpAnalysis,
   InstallPlan,
@@ -165,6 +166,9 @@ export const api = {
   resolveCrash: (id: number, resolved: boolean) => call<void>('health:resolveCrash', id, resolved),
   lookupAddress: (address: string) =>
     call<{ address: string; cause: string | null; solution: string | null }>('health:lookupAddress', address),
+  fixStreamingMemory: (memoryMb?: number) =>
+    call<{ file: string; backup: string; from: number | null; to: number }>('health:fixStreamingMemory', memoryMb),
+  modLoaderReport: (profileId: number) => call<ModLoaderLogReport | null>('health:modLoaderReport', profileId),
   logs: (profileId: number) => call<LogEntry[]>('health:logs', profileId),
   bisectStart: (profileId: number) => call<BisectSession>('health:bisectStart', profileId),
   bisectResult: (sessionId: string, result: 'good' | 'bad') => call<BisectSession>('health:bisectResult', sessionId, result),

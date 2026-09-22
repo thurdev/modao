@@ -1,7 +1,10 @@
 import path from 'node:path'
-import type { HealthCheck, HealthReport, TxdAnalysis } from '@shared/types'
+import fsp from 'node:fs/promises'
+import type { GameInstall, HealthCheck, HealthReport, TxdAnalysis } from '@shared/types'
 import { getDb } from '../db'
 import { t } from '../util/i18n'
+import { limitAdjusterNames, readStreamIni, RISKY_STREAMING_MEMORY_MB, SAFE_STREAMING_MEMORY_MB } from '../game/streamIni'
+import { reportFromGame } from './modloaderLog'
 import { gameDefinition } from '@shared/games'
 import { exists, walk } from '../util/fsx'
 import { requireActiveGame } from '../game/detect'
@@ -172,7 +175,13 @@ export async function runHealthCheck(profileId: number): Promise<HealthReport> {
     items: textureProblems.npot.slice(0, 12)
   })
 
-  // 7. Oversized assets
+  // 7. Streaming memory: the crash that looks like a mod and is not one
+  checks.push(await streamingMemoryCheck(profileId, game))
+
+  // 8. What Mod Loader itself says happened
+  checks.push(await modLoaderVerdictCheck(profileId, game))
+
+  // 9. Oversized assets
   checks.push(await oversizedCheck(profileId))
 
   const blocking = checks.filter((c) => c.status === 'fail').length
@@ -246,5 +255,101 @@ async function oversizedCheck(profileId: number): Promise<HealthCheck> {
     summary: t('checks.sizeSummary', { size: (total / 1024 ** 3).toFixed(2) }),
     detail: big.length ? t('checks.sizeDetail') : undefined,
     items: big
+  }
+}
+
+/**
+ * A repack's stream.ini asks for more memory than a 32-bit process has, and the
+ * game dies inside the streamer on the first .IMG read. Nothing about the mods
+ * is wrong, so nothing else in this panel would ever find it.
+ */
+async function streamingMemoryCheck(profileId: number, game: GameInstall): Promise<HealthCheck> {
+  const reading = await readStreamIni(game.path)
+  if (!reading.exists || reading.memoryMb === null) {
+    return { id: 'stream-ini', title: t('checks.streamTitle'), status: 'skip', summary: t('checks.streamMissing') }
+  }
+
+  const adjuster = limitAdjusterNames()
+  const rows = getDb()
+    .prepare(
+      `SELECT f.relative_path p FROM install_file f JOIN install i ON i.id = f.install_id
+        WHERE i.profile_id = ? AND i.enabled = 1`
+    )
+    .all(profileId) as { p: string }[]
+  const hasAdjuster = rows.some((r) => adjuster.test(r.p)) || (game.asiDirectory ? await asiDirHasAdjuster(game) : false)
+
+  if (reading.memoryMb <= RISKY_STREAMING_MEMORY_MB) {
+    return {
+      id: 'stream-ini',
+      title: t('checks.streamTitle'),
+      status: 'pass',
+      summary: t('checks.streamOk', { value: reading.memoryMb }),
+      items: [reading.path]
+    }
+  }
+  if (hasAdjuster) {
+    return {
+      id: 'stream-ini',
+      title: t('checks.streamTitle'),
+      status: 'warn',
+      summary: t('checks.streamOkAdjuster', { value: reading.memoryMb }),
+      items: [reading.path]
+    }
+  }
+  return {
+    id: 'stream-ini',
+    title: t('checks.streamTitle'),
+    status: 'fail',
+    summary: t('checks.streamRisky', { value: reading.memoryMb }),
+    detail: t('checks.streamRiskyDetail', { value: reading.memoryMb, safe: SAFE_STREAMING_MEMORY_MB }),
+    items: [reading.path]
+  }
+}
+
+/** An adjuster can also sit loose in the ASI directory, outside any profile. */
+async function asiDirHasAdjuster(game: GameInstall): Promise<boolean> {
+  const dir = game.asiDirectory ?? game.path
+  if (!exists(dir)) return false
+  const entries: string[] = await fsp.readdir(dir).catch(() => [])
+  return entries.some((name) => limitAdjusterNames().test(name))
+}
+
+/**
+ * Asks Mod Loader what it did with this profile's mods, instead of trusting the
+ * install that put them there.
+ */
+async function modLoaderVerdictCheck(profileId: number, game: GameInstall): Promise<HealthCheck> {
+  if (!game.supportsModLoader) {
+    return { id: 'modloader-log', title: t('checks.modsTitle'), status: 'skip', summary: t('checks.modloaderNotApplicable') }
+  }
+  const expected = (
+    getDb()
+      .prepare('SELECT folder_name FROM install WHERE profile_id = ? AND enabled = 1 AND folder_name IS NOT NULL')
+      .all(profileId) as { folder_name: string }[]
+  ).map((r) => r.folder_name)
+
+  const report = await reportFromGame(game.path, expected)
+  if (!report) {
+    return { id: 'modloader-log', title: t('checks.modsTitle'), status: 'skip', summary: t('checks.modsNoLog') }
+  }
+
+  const tracked = report.mods.filter((m) => expected.includes(m.folder))
+  const bad = tracked.filter((m) => m.verdict !== 'active')
+  const label: Record<string, string> = {
+    active: t('checks.verdictActive'),
+    inert: t('checks.verdictInert'),
+    'mis-installed': t('checks.verdictMisInstalled'),
+    unknown: t('checks.verdictUnknown')
+  }
+
+  return {
+    id: 'modloader-log',
+    title: t('checks.modsTitle'),
+    status: bad.some((m) => m.verdict === 'mis-installed') ? 'fail' : bad.length ? 'warn' : 'pass',
+    summary: bad.length
+      ? t('checks.modsProblems', { bad: bad.length, count: tracked.length })
+      : t('checks.modsAllActive', { count: tracked.length }),
+    detail: t('checks.modsDetail'),
+    items: bad.map((m) => `${m.folder} — ${label[m.verdict]}${m.explanation ? `: ${m.explanation}` : ''}`)
   }
 }

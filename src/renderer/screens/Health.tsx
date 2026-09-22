@@ -51,7 +51,7 @@ export function HealthScreen(): JSX.Element {
           exit={{ opacity: 0, y: -4 }}
           transition={smooth}
         >
-          {tab === 'check' ? <PreLaunch profileId={profile.id} /> : null}
+          {tab === 'check' ? <PreLaunch profileId={profile.id} pushToast={pushToast} /> : null}
           {tab === 'crashes' ? <Crashes profileId={profile.id} pushToast={pushToast} /> : null}
           {tab === 'bisect' ? <Bisect profileId={profile.id} pushToast={pushToast} /> : null}
           {tab === 'logs' ? <Logs profileId={profile.id} /> : null}
@@ -63,8 +63,9 @@ export function HealthScreen(): JSX.Element {
 
 // ───────────────────────────── pre-launch ─────────────────────────────
 
-function PreLaunch(props: { profileId: number }): JSX.Element {
+function PreLaunch(props: { profileId: number; pushToast: ToastFn }): JSX.Element {
   const t = useT()
+  const [fixingStream, setFixingStream] = useState(false)
   const report = useAsync(() => api.health(props.profileId), [props.profileId])
 
   if (report.error) return <ErrorNote message={report.error} onRetry={report.reload} />
@@ -131,6 +132,28 @@ function PreLaunch(props: { profileId: number }): JSX.Element {
                     </li>
                   ))}
                 </ul>
+              ) : null}
+              {c.id === 'stream-ini' && c.status === 'fail' ? (
+                <span className="row">
+                  <Button
+                    size="sm"
+                    variant="accent"
+                    disabled={fixingStream}
+                    onClick={async () => {
+                      setFixingStream(true)
+                      try {
+                        await api.fixStreamingMemory()
+                        report.reload()
+                      } catch (e) {
+                        props.pushToast('error', (e as Error).message)
+                      } finally {
+                        setFixingStream(false)
+                      }
+                    }}
+                  >
+                    {fixingStream ? t('health.fixing') : t('health.fixStreaming')}
+                  </Button>
+                </span>
               ) : null}
             </div>
           </motion.div>

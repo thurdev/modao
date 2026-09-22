@@ -590,3 +590,33 @@ export interface SwitchJournal {
   error: string | null
   restoredAt: string | null
 }
+
+// --- what Mod Loader says it did ---------------------------------------------
+
+export type ModVerdict = 'active' | 'inert' | 'mis-installed' | 'unknown'
+
+export interface ModLoaderModReport {
+  folder: string
+  verdict: ModVerdict
+  installedFiles: number
+  unhandledFiles: string[]
+  explanation: string | null
+}
+
+export interface ModLoaderCrash {
+  occurredAt: string | null
+  reason: string
+  address: string | null
+  module: string | null
+  backtrace: string[]
+  lastStreamedFile: string | null
+}
+
+export interface ModLoaderLogReport {
+  path: string
+  readAt: string
+  version: string | null
+  mods: ModLoaderModReport[]
+  looseUnhandled: string[]
+  crash: ModLoaderCrash | null
+}

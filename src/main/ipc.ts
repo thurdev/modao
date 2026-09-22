@@ -685,6 +685,28 @@ export function registerIpc(): void {
   })
   // The renderer still passes a profile id; the logs are not per-profile, and an
   // extra argument to a handler that ignores it is harmless.
+  ipcMain.handle('health:modLoaderReport', async (_e, profileId: number) => {
+    const game = requireActiveGame()
+    const expected = (
+      getDb()
+        .prepare('SELECT folder_name FROM install WHERE profile_id = ? AND enabled = 1 AND folder_name IS NOT NULL')
+        .all(requireProfile(profileId)) as { folder_name: string }[]
+    ).map((r) => r.folder_name)
+    const { reportFromGame } = await import('./diagnostics/modloaderLog')
+    return reportFromGame(game.path, expected)
+  })
+  ipcMain.handle('health:fixStreamingMemory', async (_e, memoryMb?: number) => {
+    requireWritableGame()
+    const game = requireActiveGame()
+    const { setStreamingMemory, SAFE_STREAMING_MEMORY_MB } = await import('./game/streamIni')
+    const result = await setStreamingMemory(
+      game.path,
+      memoryMb ?? SAFE_STREAMING_MEMORY_MB,
+      path.join(Paths.quarantine(), 'stream-ini')
+    )
+    toast('success', t('messages.installDeps.streamingFixed', { from: String(result.from ?? '?'), to: result.to }))
+    return result
+  })
   ipcMain.handle('health:logs', () => collectLogs())
   ipcMain.handle('health:bisectStart', async (_e, profileId: number) => {
     const session = startBisect(requireProfile(profileId))

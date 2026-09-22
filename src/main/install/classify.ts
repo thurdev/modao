@@ -51,7 +51,20 @@ const MOD_SUBFOLDERS = new Set([
 ])
 
 const ASSET_EXT = /\.(dff|txd|ifp|col|ide|ipl|dat|img|fxp|cfg|wav|mp3|bik|rrr|ifs)$/i
-const DOC_EXT = /\.(txt|nfo|pdf|url|html|htm|jpg|jpeg|png|gif|webp|bmp|md|doc|docx)$/i
+/** Always documentation, wherever it sits. */
+const DOC_EXT = /\.(txt|nfo|pdf|url|html|htm|md|doc|docx)$/i
+/**
+ * Documentation only at the top of an archive. Nested, an image is a mod's own
+ * file: VHud's blips are .png, and filtering them out as "documentation" left
+ * the plugin installed without the icons it draws.
+ */
+const IMAGE_EXT = /\.(jpg|jpeg|png|gif|webp|bmp|tga)$/i
+
+function isDocumentation(rel: string): boolean {
+  if (DOC_EXT.test(rel)) return true
+  const top = !rel.includes('/')
+  return top && IMAGE_EXT.test(rel)
+}
 const ROOT_FILE_NAMES = new Set([
   'modloader.asi',
   'cleo.asi',
@@ -99,6 +112,91 @@ async function buildTree(root: string): Promise<Node> {
   return rec(root, '', path.basename(root))
 }
 
+/**
+ * An .asi that owns resources must ship WITH them.
+ *
+ * Mod Loader's std.asi loads a plugin from inside a mod folder and makes that
+ * folder the plugin's working directory. A plugin resolves its own files
+ * relative to where it sits, so lifting VHud.asi out to scripts\ while blips\,
+ * map\, data\ and fonts\ stay in modloader\VHud\ leaves the mod inert - Mod
+ * Loader logged "No handler or callme" for every one of its ~250 files and the
+ * HUD never appeared.
+ *
+ * These are the loaders that genuinely belong in the ASI directory: they have
+ * no resources of their own, and several of them must load before Mod Loader
+ * itself does.
+ */
+const BARE_ASI_LOADERS = [
+  /^modloader\.asi$/i,
+  /^cleo\.asi$/i,
+  /^silentpatch/i,
+  /^.*limitadjuster.*$/i,
+  /^iii\.vc\.sa\./i,
+  /^ultimateasiloader/i,
+  /^widescreenfix/i,
+  /^gtasa?\.?fusionfix/i
+]
+
+/** Files that say nothing about whether an .asi owns the folder it sits in. */
+function isIncidental(node: Node): boolean {
+  return !node.isDir && (DOC_EXT.test(node.name) || IMAGE_EXT.test(node.name) || /^(thumbs\.db|desktop\.ini)$/i.test(node.name))
+}
+
+/**
+ * The resources an .asi at this level would own: anything beside it that is not
+ * documentation, another loader, or a folder that is a mod in its own right.
+ */
+const GAME_LAYOUT_FOLDERS = new Set(['modloader', 'cleo', 'scripts', 'game', 'gta sa', 'gta san andreas'])
+
+function asiSiblings(parent: Node, asi: Node): Node[] {
+  const stem = asi.name.replace(/\.asi$/i, '').toLowerCase()
+  return parent.children.filter((c) => {
+    if (c === asi || isIncidental(c)) return false
+    // modloader\, cleo\ and scripts\ describe where things go in the game, not
+    // what belongs to this plugin: an archive shipping both is laying out the
+    // install, and swallowing them would bury a whole mod pack inside one mod.
+    if (c.isDir && GAME_LAYOUT_FOLDERS.has(c.name.toLowerCase())) return false
+    if (!c.isDir && /\.asi$/i.test(c.name)) return false
+    // A folder named after the plugin is unambiguously its own.
+    if (c.isDir && c.name.toLowerCase() === stem) return true
+    if (c.isDir) return true
+    return ASSET_EXT.test(c.name) || /\.(ini|json|dat|cfg|fxc|fx|txt)$/i.test(c.name)
+  })
+}
+
+/** True when this .asi brings its own files and must not be separated from them. */
+function asiOwnsResources(parent: Node, asi: Node): boolean {
+  if (BARE_ASI_LOADERS.some((re) => re.test(asi.name))) return false
+  const siblings = asiSiblings(parent, asi)
+  if (siblings.length === 0) return false
+  // An .asi plus a single .ini is a configured plugin, not a resource bundle,
+  // but keeping the pair together still costs nothing and keeps the profile
+  // owning both.
+  return true
+}
+
+/** The mod folder name an .asi bundle should take. */
+function asiBundleName(parent: Node, asi: Node, fallback: string): string {
+  const stem = asi.name.replace(/\.asi$/i, '')
+  const namedFolder = parent.children.find((c) => c.isDir && c.name.toLowerCase() === stem.toLowerCase())
+  if (namedFolder) return stem
+  if (parent.rel) return parent.name
+  return stem || fallback
+}
+
+/**
+ * Folders that are add-ons to a mod rather than mods of their own.
+ *
+ * "Extra\GTA UG\VHud\data" is an optional override for VHud's own data. Mod
+ * Loader has no idea what to do with it on its own and ignores it, so
+ * installing it as a separate mod folder produces a mod that does nothing.
+ */
+const ADDON_FOLDER = /^\(?(extras?|bonus|optional|opcionais?|opcional|translations?|tradu[cç][aã]o|tradu[cç][oõ]es|alt|alternativ[eo]s?)\)?$/i
+
+function isAddonFolder(name: string): boolean {
+  return ADDON_FOLDER.test(name.trim())
+}
+
 // ---------------------------------------------------------------------------
 // Variants: mutually exclusive sibling folders the user must choose between
 // ---------------------------------------------------------------------------
@@ -139,18 +237,63 @@ const VARIANT_RULES: VariantRule[] = [
     kind: 'generic',
     test: (n) => /(definitive|version|vers[aã]o|escolha|choose|option)/i.test(n),
     question: 'Pick the version to install:'
+  },
+  {
+    // Proper Shaders ships "(0a- lowest)" … "(5 - very high)": a quality ladder
+    // where each folder holds the same ProperShaders.ini with different values.
+    kind: 'style',
+    test: (n) => /^\(?\s*\d+[a-z]?\s*[-–—]/i.test(n.trim()) || /(lowest|very low|low|medium|high|very high|ultra|max)/i.test(n),
+    question: 'This mod ships quality presets - pick one:'
   }
 ]
+
+/** The set of file names directly inside a folder, lowercased. */
+function fileNameSet(node: Node): string {
+  return node.children
+    .filter((c) => !c.isDir)
+    .map((c) => c.name.toLowerCase())
+    .sort()
+    .join('|')
+}
+
+/**
+ * Sibling folders holding the SAME file names are alternatives, whatever they
+ * are called. Proper Shaders' nine quality folders each hold one
+ * ProperShaders.ini; installing all nine put nine copies of the same file into
+ * the game and Mod Loader logged "No handler or callme for file
+ * ProperShaders.ini" nine times over.
+ */
+function sameContentGroup(dirs: Node[]): Node[] | null {
+  const bySet = new Map<string, Node[]>()
+  for (const d of dirs) {
+    const key = fileNameSet(d)
+    if (!key) continue
+    const list = bySet.get(key)
+    if (list) list.push(d)
+    else bySet.set(key, [d])
+  }
+  for (const [, list] of bySet) {
+    if (list.length >= 2 && list.length === dirs.filter((d) => fileNameSet(d)).length) return list
+  }
+  return null
+}
 
 function detectVariantGroups(root: Node, readmes: ReadmeParse[]): VariantGroup[] {
   const groups: VariantGroup[] = []
 
   function consider(parent: Node): void {
-    const dirs = parent.children.filter((c) => c.isDir && !MOD_SUBFOLDERS.has(c.name.toLowerCase()))
+    const dirs = parent.children.filter(
+      (c) => c.isDir && !MOD_SUBFOLDERS.has(c.name.toLowerCase()) && !isAddonFolder(c.name)
+    )
     if (dirs.length >= 2) {
-      const rule = VARIANT_RULES.find((r) => dirs.filter((d) => r.test(d.name)).length >= 2)
+      const identical = sameContentGroup(dirs)
+      const rule =
+        VARIANT_RULES.find((r) => dirs.filter((d) => r.test(d.name)).length >= 2) ??
+        (identical
+          ? { kind: 'style' as const, test: () => true, question: 'These are alternatives - pick the one to install:' }
+          : undefined)
       if (rule) {
-        const matching = dirs.filter((d) => rule.test(d.name))
+        const matching = identical ?? dirs.filter((d) => rule.test(d.name))
         const chosen = matching.length === dirs.length ? dirs : matching.length >= 2 ? matching : dirs
         const options: VariantOption[] = chosen.map((d) => ({
           id: d.rel,
@@ -171,6 +314,13 @@ function detectVariantGroups(root: Node, readmes: ReadmeParse[]): VariantGroup[]
               o.recommended = /recomend|recommend|ideal|melhor|best/i.test(hint)
               o.note = hint
             }
+          }
+        }
+        // Mod authors mark their own pick in the folder name.
+        for (const o of options) {
+          if (/\b(default|padr[aã]o|recomendad[oa])\b/i.test(o.label)) {
+            o.recommended = true
+            o.note = o.note ?? 'The mod author marked this one as the default.'
           }
         }
         groups.push({
@@ -272,12 +422,14 @@ export async function classifyTree(
 
     if (!node.isDir) {
       if (/\.asi$/i.test(lower)) {
+        // Rule 1: a plugin that owns resources is handled with them, by the
+        // folder walk below - reaching here means it is a bare loader.
         files.push(makeFile(node.rel, joinTarget(asiPrefix, node.name), 'asi-plugin', node.size))
       } else if (/\.cleo\d?$/i.test(lower)) {
         files.push(makeFile(node.rel, `cleo/${node.name}`, 'cleo-plugin', node.size))
       } else if (/\.(cs|cm|cs4|cs5)$/i.test(lower)) {
         files.push(makeFile(node.rel, `cleo/${node.name}`, 'cleo-script', node.size))
-      } else if (DOC_EXT.test(lower)) {
+      } else if (isDocumentation(node.rel)) {
         docs.push(node.rel)
       } else if (ROOT_FILE_NAMES.has(lower) || /\.(dll|exe|ini)$/i.test(lower)) {
         files.push(makeFile(node.rel, node.name, 'root-file', node.size))
@@ -292,6 +444,21 @@ export async function classifyTree(
           detail: 'Pick its destination manually before installing.'
         })
       }
+      return
+    }
+
+    // Rule 3: an extras/translations/optional folder is an add-on to the mod
+    // beside it, not a mod. Installed on its own, Mod Loader ignores it.
+    if (isAddonFolder(node.name)) {
+      warnings.push({
+        severity: 'info',
+        code: 'addon-folder',
+        message: `"${node.name}" holds optional extras for this mod, not a mod of its own.`,
+        detail:
+          'Modão leaves it out of the install. Its files replace files inside the mod they belong to, ' +
+          'so installing it as a separate folder would make Mod Loader ignore it.'
+      })
+      for (const f of await walk(node.abs)) docs.push(node.rel ? `${node.rel}/${f.rel}` : f.rel)
       return
     }
 
@@ -334,6 +501,9 @@ export async function classifyTree(
     }
 
     if (lower === 'scripts' && node.rel === lower) {
+      // An archive that ships scripts\<Plugin>.asi alongside modloader\<Plugin>\
+      // is describing the game's layout, not the plugin's needs: Mod Loader
+      // still wants the two together. Those are rejoined by emitAsiBundles.
       for (const f of await walk(node.abs)) {
         const rel = `${node.rel}/${f.rel}`
         if (isExcluded(rel)) continue
@@ -347,8 +517,13 @@ export async function classifyTree(
 
     const readmeDest = readmeFolders.get(lower)
     if (readmeDest && readmeDest !== 'modloader-folder') {
-      await emitDir(node, readmeDest, destinationPrefix(readmeDest, asiPrefix))
-      return
+      // The readme says this folder goes somewhere other than modloader\ - but
+      // never at the cost of separating a plugin from its own files.
+      const ownsResources = node.children.some((c) => !c.isDir && /\.asi$/i.test(c.name) && asiOwnsResources(node, c))
+      if (!ownsResources) {
+        await emitDir(node, readmeDest, destinationPrefix(readmeDest, asiPrefix))
+        return
+      }
     }
     await emitDir(node, 'modloader-folder', `modloader/${node.name}`)
   }
@@ -362,13 +537,90 @@ export async function classifyTree(
     (c) => c.isDir && ['modloader', 'cleo', 'scripts'].includes(c.name.toLowerCase())
   )
 
+  /**
+   * Rule 1, applied to a whole directory level: if an .asi here owns resources,
+   * it and they become one mod folder. Returns the paths that were consumed so
+   * the ordinary walk skips them.
+   */
+  async function emitAsiBundles(parent: Node, fallback: string): Promise<Set<string>> {
+    const consumed = new Set<string>()
+    const asis = parent.children.filter((c) => !c.isDir && /\.asi$/i.test(c.name))
+    for (const asi of asis) {
+      if (isExcluded(asi.rel) || !asiOwnsResources(parent, asi)) continue
+      const name = asiBundleName(parent, asi, fallback)
+      const siblings = asiSiblings(parent, asi)
+      const namedFolder = siblings.find((c) => c.isDir && c.name.toLowerCase() === name.toLowerCase())
+
+      files.push(makeFile(asi.rel, `modloader/${name}/${asi.name}`, 'modloader-folder', asi.size))
+      consumed.add(asi.rel)
+
+      if (namedFolder) {
+        // <Name>.asi beside <Name>\: the folder IS the plugin's working directory.
+        await emitDir(namedFolder, 'modloader-folder', `modloader/${name}`)
+        consumed.add(namedFolder.rel)
+      } else {
+        for (const sib of siblings) {
+          if (isExcluded(sib.rel) || isAddonFolder(sib.name)) continue
+          if (sib.isDir) await emitDir(sib, 'modloader-folder', `modloader/${name}/${sib.name}`)
+          else files.push(makeFile(sib.rel, `modloader/${name}/${sib.name}`, 'modloader-folder', sib.size))
+          consumed.add(sib.rel)
+        }
+      }
+      warnings.push({
+        severity: 'info',
+        code: 'asi-bundle',
+        message: `${asi.name} was kept with its own files in modloader\\${name}.`,
+        detail:
+          'Mod Loader runs a plugin from inside its mod folder, and the plugin looks for its files there. ' +
+          'Separating them is what makes a mod install without doing anything.'
+      })
+    }
+    return consumed
+  }
+
+  /**
+   * Rule 1 across folders: an archive that ships the game's own layout -
+   * scripts\<Plugin>.asi next to modloader\<Plugin>\ - is describing where
+   * files go in a hand install, not what the plugin needs. Mod Loader still
+   * wants the two together, so the .asi is moved into the mod folder that
+   * carries its name.
+   */
+  function rejoinSplitAsi(): void {
+    const asiFiles = files.filter((f) => f.destination === 'asi-plugin')
+    for (const asi of asiFiles) {
+      const stem = path.basename(asi.targetRelative).replace(/\.asi$/i, '').toLowerCase()
+      const home = files.find(
+        (f) =>
+          f.destination === 'modloader-folder' &&
+          f.targetRelative.toLowerCase().startsWith(`modloader/${stem}/`)
+      )
+      if (!home) continue
+      const folder = home.targetRelative.split('/').slice(0, 2).join('/')
+      asi.targetRelative = `${folder}/${path.basename(asi.targetRelative)}`
+      asi.destination = 'modloader-folder'
+      warnings.push({
+        severity: 'info',
+        code: 'asi-split',
+        message: `${path.basename(asi.targetRelative)} was moved in beside its own files.`,
+        detail:
+          `The archive ships it separately from ${folder}\\, but Mod Loader runs a plugin from inside its mod ` +
+          'folder and the plugin looks for its files there. Apart, the mod installs and does nothing.'
+      })
+    }
+  }
+
   if (rootLooksLikeMod && !rootHasStructure) {
     await emitDir(tree, 'modloader-folder', `modloader/${ctx.fallbackName}`)
     for (const f of files) {
       if (/^(readme|leiame)/i.test(path.basename(f.sourcePath))) docs.push(f.sourcePath)
     }
   } else {
-    for (const child of tree.children) await handleNode(child, ctx.fallbackName)
+    const consumed = await emitAsiBundles(tree, ctx.fallbackName)
+    for (const child of tree.children) {
+      if (consumed.has(child.rel)) continue
+      await handleNode(child, ctx.fallbackName)
+    }
+    rejoinSplitAsi()
   }
 
   if (readmeSaysAsi && !files.some((f) => f.destination === 'asi-plugin')) {
@@ -387,7 +639,12 @@ export async function classifyTree(
     })
   }
 
-  return { files: files.filter((f) => !DOC_EXT.test(f.sourcePath) || f.destination === 'root-file'), variants, warnings, docs }
+  return {
+    files: files.filter((f) => !isDocumentation(f.sourcePath) || f.destination === 'root-file'),
+    variants,
+    warnings,
+    docs
+  }
 }
 
 /** True when a folder is itself a Mod Loader mod rather than a container of mods. */
