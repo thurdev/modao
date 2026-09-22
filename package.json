@@ -1,0 +1,64 @@
+{
+  "name": "modao",
+  "version": "1.0.0",
+  "description": "Modão — gerenciador de mods nativo do Mod Loader para GTA (San Andreas, III, Vice City e SA:DE)",
+  "main": "out/main/index.js",
+  "author": "thurdev",
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "start": "electron-vite preview",
+    "dist": "electron-vite build && electron-builder --win --config electron-builder.yml && node scripts/verify-package.mjs",
+    "rebuild": "electron-builder install-app-deps",
+    "test": "npm run test:units && npm run test:e2e",
+    "test:units": "esbuild tests/core.test.ts --bundle --platform=node --format=esm --outfile=out/tests/core.test.mjs --external:electron --external:iconv-lite --log-level=error && node out/tests/core.test.mjs",
+    "test:e2e": "node scripts/e2e.mjs",
+    "ui": "vite --config vite.renderer.config.ts",
+    "icons": "node scripts/make-icons.mjs",
+    "seed": "esbuild scripts/build-seed.ts --bundle --platform=node --format=esm --packages=external --log-level=error --outfile=out/scripts/build-seed.mjs && node out/scripts/build-seed.mjs",
+    "verify:package": "node scripts/verify-package.mjs",
+    "try:fetch": "esbuild scripts/try-fetch.ts --bundle --platform=node --format=cjs --packages=external --alias:@shared=./src/shared --log-level=error --outfile=out/scripts/try-fetch.cjs && electron out/scripts/try-fetch.cjs",
+    "try:hosts": "esbuild scripts/try-hosts.ts --bundle --platform=node --format=cjs --packages=external --alias:@shared=./src/shared --log-level=error --outfile=out/scripts/try-hosts.cjs && electron out/scripts/try-hosts.cjs",
+    "index:export": "esbuild scripts/export-index.ts --bundle --platform=node --format=cjs --packages=external --alias:@shared=./src/shared --log-level=error --outfile=out/scripts/export-index.cjs && electron out/scripts/export-index.cjs"
+  },
+  "dependencies": {
+    "@electron-toolkit/preload": "^3.0.1",
+    "@electron-toolkit/utils": "^3.0.0",
+    "7zip-bin": "^5.2.0",
+    "better-sqlite3": "^12.2.0",
+    "cheerio": "^1.0.0",
+    "iconv-lite": "^0.6.3",
+    "motion": "^11.18.2",
+    "undici": "^6.21.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^22.9.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "png-to-ico": "^3.0.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "sharp": "^0.35.4",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "zustand": "^5.0.1"
+  },
+  "allowScripts": {
+    "better-sqlite3@12.11.1": true,
+    "electron@33.4.11": true,
+    "esbuild@0.21.5": true,
+    "sharp@0.35.4": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thurdev/modao.git"
+  },
+  "homepage": "https://github.com/thurdev/modao"
+}

@@ -1,0 +1,29 @@
+appId: dev.modao.app
+productName: Modão
+directories:
+  buildResources: build
+  output: dist
+files:
+  # Only the three bundles the app actually runs. out/ also holds build
+  # artefacts - the test bundle, the catalogue seed builder - which have no
+  # business inside the installer.
+  - out/main/**
+  - out/preload/**
+  - out/renderer/**
+  - package.json
+extraResources:
+  - from: resources/seed
+    to: seed
+asarUnpack:
+  - "**/*.node"
+  - "**/7zip-bin/**"
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: Modao-Setup-${version}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true

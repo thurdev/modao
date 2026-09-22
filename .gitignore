@@ -1,0 +1,85 @@
+# --- dependencies -----------------------------------------------------------
+node_modules/
+.pnp
+.pnp.js
+
+# --- build output -----------------------------------------------------------
+# electron-vite writes out/ (main, preload, renderer, plus the test and seed
+# bundles); electron-builder writes dist/ (installer + win-unpacked).
+out/
+dist/
+release/
+build/Release/
+*.tsbuildinfo
+
+# --- packaged artefacts -----------------------------------------------------
+*.exe
+*.blockmap
+*.nsis.7z
+*.AppImage
+*.dmg
+*.deb
+*.rpm
+*.snap
+builder-debug.yml
+builder-effective-config.yaml
+
+# --- local scratch ----------------------------------------------------------
+# The try:fetch / try:hosts / e2e harnesses drop reports and probe targets in
+# out/, but keep these patterns in case anyone runs them from the root.
+fetch-report.txt
+fetch-target.json
+host-report.txt
+host-tests.json
+probe-target.json
+ping*.txt
+win-test*.txt
+seed-run.log
+scratch/
+tmp/
+.tmp/
+
+# --- logs -------------------------------------------------------------------
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+logs/
+
+# --- databases and local state ---------------------------------------------
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+
+# --- secrets ----------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+*.cer
+.npmrc
+
+# --- editors and OS ---------------------------------------------------------
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# --- crash dumps ------------------------------------------------------------
+*.dmp
+*.mdmp
+crashes/

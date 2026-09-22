@@ -1,0 +1,51 @@
+# Normalise line endings: everything Git detects as text is stored with LF in
+# the repository and checked out with LF, so a Windows and a Linux clone of
+# this repo produce byte-identical files.
+* text=auto eol=lf
+
+# Source and config - always text, always LF.
+*.ts     text eol=lf
+*.tsx    text eol=lf
+*.js     text eol=lf
+*.jsx    text eol=lf
+*.mjs    text eol=lf
+*.cjs    text eol=lf
+*.json   text eol=lf
+*.css    text eol=lf
+*.html   text eol=lf
+*.md     text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+*.txt    text eol=lf
+.gitignore      text eol=lf
+.gitattributes  text eol=lf
+
+# Windows-only files that genuinely want CRLF.
+*.bat    text eol=crlf
+*.cmd    text eol=crlf
+*.ps1    text eol=crlf
+
+# Binary - never touch, never diff.
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.webp   binary
+*.ico    binary
+*.icns   binary
+*.7z     binary
+*.zip    binary
+*.rar    binary
+*.gz     binary
+*.exe    binary
+*.dll    binary
+*.node   binary
+*.asar   binary
+*.ttf    binary
+*.woff   binary
+*.woff2  binary
+
+# Generated - collapse in diffs and exclude from language stats.
+package-lock.json         linguist-generated=true -diff
+resources/seed/catalog.json       linguist-generated=true -diff
+src/renderer/devCatalog.json      linguist-generated=true -diff
