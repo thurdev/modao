@@ -103,8 +103,8 @@ export async function materialise(
       backupDir: opts.backupDir,
       quarantineDir: opts.quarantineDir
     })
-    if (r.backedUp) backedUp.push(r.backedUp)
-    if (r.quarantined) quarantined.push(r.quarantined)
+    backedUp.push(...r.backedUp)
+    quarantined.push(...r.quarantined)
   }
   const folderTargets = new Set<string>()
   for (const t of targets) {

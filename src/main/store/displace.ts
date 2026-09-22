@@ -1,6 +1,6 @@
 import path from 'node:path'
 import fsp from 'node:fs/promises'
-import { copyRecursive, exists, isDirectory, isLink, mirrorRecursive, removeLinkOrDir } from '../util/fsx'
+import { copyRecursive, exists, isDirectory, isLink, mirrorRecursive, removeLinkOrDir, walk } from '../util/fsx'
 
 /**
  * Whose file is the one already sitting at a target path, and what happens to
@@ -71,8 +71,8 @@ export interface DisplaceOptions {
 }
 
 export interface DisplaceResult {
-  backedUp: DisplacedFile | null
-  quarantined: QuarantinedFile | null
+  backedUp: DisplacedFile[]
+  quarantined: QuarantinedFile[]
 }
 
 /**
@@ -80,41 +80,93 @@ export interface DisplaceResult {
  * never overwritten in place.
  *
  * Order matters and is the whole point: the copies are taken FIRST and the
- * removal only happens after both of them exist. An exception anywhere above
- * the removal leaves the user's file exactly where it was.
+ * removal only happens after every one of them exists. An exception anywhere
+ * above the removal leaves the user's files exactly where they were.
  *
  * A link is not user content: it points at the store (or at whatever another
  * tool linked), so there is nothing to copy and nothing to restore later, and
  * recording one would promise a restore that could not happen.
+ *
+ * Ownership of a DIRECTORY is decided per file, not for the folder as a whole.
+ * `isOwned` answers "yes" for a folder as soon as one tracked file lives inside
+ * it, which is the right answer to "may Modão have this path" and the wrong
+ * answer to "is everything in here Modão's". `scripts\` held managed plugins
+ * and files nobody tracked side by side, and that is how both went. So a real
+ * directory the profile only partly owns is walked, and every file in it that
+ * no other install claims is copied out first.
  */
 export async function displaceForeign(opts: DisplaceOptions): Promise<DisplaceResult> {
-  const nothing: DisplaceResult = { backedUp: null, quarantined: null }
+  const nothing: DisplaceResult = { backedUp: [], quarantined: [] }
   const linked = isLink(opts.target)
   if (!exists(opts.target) && !linked) return nothing
-  if (linked || isOwned(opts.ownedPaths, opts.relativePath)) {
+  if (linked) {
     await removeLinkOrDir(opts.target)
     return nothing
   }
 
-  const backupPath = path.join(opts.backupDir, opts.relativePath)
+  if (isOwned(opts.ownedPaths, opts.relativePath)) {
+    // A file the profile owns is Modão's own content: the store holds those
+    // bytes. No walk, no copy - the cheap answer, and the common one.
+    if (!isDirectory(opts.target)) {
+      await removeLinkOrDir(opts.target)
+      return nothing
+    }
+    // A real folder is only cheap when it turns out to hold nothing unclaimed.
+    // Junctions never reach here, so no ordinary switch pays for this walk.
+    const out: DisplaceResult = { backedUp: [], quarantined: [] }
+    for (const stray of await unclaimedInside(opts.target, opts.relativePath, opts.ownedPaths)) {
+      const copied = await copyOut(stray.abs, stray.relativePath, opts)
+      out.backedUp.push(copied.backedUp)
+      if (copied.quarantined) out.quarantined.push(copied.quarantined)
+    }
+    await removeLinkOrDir(opts.target)
+    return out
+  }
+
+  const copied = await copyOut(opts.target, opts.relativePath, opts)
+  await removeLinkOrDir(opts.target)
+  return { backedUp: [copied.backedUp], quarantined: copied.quarantined ? [copied.quarantined] : [] }
+}
+
+/** Every file under `dir` that no install of the profile claims. */
+async function unclaimedInside(
+  dir: string,
+  relativePath: string,
+  ownedPaths: Set<string>
+): Promise<{ abs: string; relativePath: string }[]> {
+  const base = relativePath.replace(/\\/g, '/').replace(/\/+$/, '')
+  const out: { abs: string; relativePath: string }[] = []
+  for (const f of await walk(dir)) {
+    const rel = `${base}/${path.relative(dir, f.abs).replace(/\\/g, '/')}`
+    if (ownedPaths.has(ownedKey(rel))) continue
+    out.push({ abs: f.abs, relativePath: rel })
+  }
+  return out
+}
+
+/** Takes both copies of one path. Removes nothing; the caller does that after. */
+async function copyOut(
+  target: string,
+  relativePath: string,
+  opts: DisplaceOptions
+): Promise<{ backedUp: DisplacedFile; quarantined: QuarantinedFile | null }> {
+  const backupPath = path.join(opts.backupDir, relativePath)
   await fsp.mkdir(path.dirname(backupPath), { recursive: true })
   // A backup path repeats across switches, and an older copy of it may be
   // hardlinked into quarantine. Writing over it in place would rewrite that
   // quarantine entry too, so the old bytes are released first and this copy
   // gets an inode of its own.
   await fsp.rm(backupPath, { recursive: true, force: true })
-  if (isDirectory(opts.target)) await copyRecursive(opts.target, backupPath)
-  else await fsp.copyFile(opts.target, backupPath)
+  if (isDirectory(target)) await copyRecursive(target, backupPath)
+  else await fsp.copyFile(target, backupPath)
 
   let quarantined: QuarantinedFile | null = null
   if (opts.quarantineDir) {
-    const quarantinePath = path.join(opts.quarantineDir, opts.relativePath)
+    const quarantinePath = path.join(opts.quarantineDir, relativePath)
     // Mirrored from the backup, not from the game folder: one set of bytes on
     // disk, reachable from both places, and the game file is read only once.
     await mirrorRecursive(backupPath, quarantinePath)
-    quarantined = { relativePath: opts.relativePath, quarantinePath }
+    quarantined = { relativePath, quarantinePath }
   }
-
-  await removeLinkOrDir(opts.target)
-  return { backedUp: { relativePath: opts.relativePath, backupPath }, quarantined }
+  return { backedUp: { relativePath, backupPath }, quarantined }
 }

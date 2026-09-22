@@ -306,7 +306,6 @@ async function unmanagedFiles(gamePath: string, known: Set<string>): Promise<str
 async function unmanagedFolderFiles(gamePath: string, known: Set<string>, fromStore: Set<string>): Promise<string[]> {
   const root = path.join(gamePath, 'modloader')
   if (!exists(root)) return []
-  const knownKeys = [...known]
   const incomingKeys = [...fromStore]
   const out: string[] = []
   for (const e of await fsp.readdir(root, { withFileTypes: true })) {
@@ -314,9 +313,15 @@ async function unmanagedFolderFiles(gamePath: string, known: Set<string>, fromSt
     // A junction is Modão's own and reports as a link, not a directory, on Windows.
     if (!e.isDirectory() || isLink(abs)) continue
     const prefix = `modloader/${e.name.toLowerCase()}/`
-    if (knownKeys.some((k) => k.startsWith(prefix))) continue
     if (!incomingKeys.some((k) => k.startsWith(prefix))) continue
-    for (const f of await walk(abs)) out.push(path.relative(gamePath, f.abs).replace(/\\/g, '/'))
+    // Per file, not per folder: a folder holding one tracked file and one file
+    // nobody tracks is not a folder Modão owns, and the untracked one is
+    // exactly what the junction used to take with it.
+    for (const f of await walk(abs)) {
+      const rel = path.relative(gamePath, f.abs).replace(/\\/g, '/')
+      if (known.has(rel.toLowerCase())) continue
+      out.push(rel)
+    }
   }
   return out.sort()
 }
@@ -535,6 +540,10 @@ async function countFiles(dir: string, match: RegExp): Promise<number> {
  * game folder actually holds what the profile says it holds - every mod
  * materialised, the plugin counts as expected, and a modloader.ini that parses
  * and names exactly this profile's mods.
+ *
+ * Anything that says otherwise lands in `blockingProblems`, and `activateProfile`
+ * refuses the switch on it: a mod that did not arrive used to be reported in a
+ * log the user never read, while the profile was already recorded active.
  */
 export async function verifySwitch(profileId: number): Promise<SwitchVerification> {
   const db = getDb()
@@ -597,17 +606,32 @@ export async function verifySwitch(profileId: number): Promise<SwitchVerificatio
 
   const unresolvedDependencies = await unresolvedDeps(profileId)
 
-  const problems: string[] = []
+  // Blocking: the game folder does not hold what the profile says it holds.
+  // Every one of these is a mod the user would have gone looking for in-game.
+  const blockingProblems: string[] = []
   if (missingMods.length) {
-    problems.push(`${missingMods.length} mod(s) in this profile did not reach the game folder.`)
+    blockingProblems.push(
+      `${missingMods.length} mod(s) in this profile did not reach the game folder: ` +
+        missingMods
+          .slice(0, 5)
+          .map((m) => `${m.label} (${m.reason})`)
+          .join('; ')
+    )
   }
-  if (!iniParsed) problems.push('modloader.ini could not be read back after the switch.')
+  if (!iniParsed) blockingProblems.push('modloader.ini could not be read back after the switch.')
   if (iniMissingKeys.length && iniParsed) {
-    problems.push(`modloader.ini is missing a priority line for: ${iniMissingKeys.slice(0, 5).join(', ')}`)
+    blockingProblems.push(`modloader.ini is missing a priority line for: ${iniMissingKeys.slice(0, 5).join(', ')}`)
   }
   if (iniStaleKeys.length) {
-    problems.push(`modloader.ini still names mod(s) this profile does not have: ${iniStaleKeys.slice(0, 5).join(', ')}`)
+    blockingProblems.push(
+      `modloader.ini still names mod(s) this profile does not have: ${iniStaleKeys.slice(0, 5).join(', ')}`
+    )
   }
+
+  // Advisory: these are about mods that ARE in place, so they are reported and
+  // never block. A missing dependency is the user's to resolve, not a failed
+  // materialisation.
+  const problems = [...blockingProblems]
   if (unresolvedDependencies.length) {
     problems.push(`${unresolvedDependencies.length} unresolved dependency/dependencies.`)
   }
@@ -628,6 +652,7 @@ export async function verifySwitch(profileId: number): Promise<SwitchVerificatio
     iniStaleKeys,
     unresolvedDependencies,
     problems,
+    blockingProblems,
     checkedAt: new Date().toISOString()
   }
 }

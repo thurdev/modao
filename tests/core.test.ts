@@ -1082,21 +1082,21 @@ const displaced = await displaceForeign({
 })
 check(
   'ownedPaths: a foreign file is copied out before its path is taken',
-  !!displaced.backedUp && fs.existsSync(displaced.backedUp.backupPath),
+  displaced.backedUp.length === 1 && fs.existsSync(displaced.backedUp[0].backupPath),
   displaced
 )
 check(
   'ownedPaths: the backup holds exactly the bytes the user wrote',
-  !!displaced.backedUp && fs.readFileSync(displaced.backedUp.backupPath, 'utf8') === userBytes
+  displaced.backedUp.length === 1 && fs.readFileSync(displaced.backedUp[0].backupPath, 'utf8') === userBytes
 )
 check(
   'ownedPaths: the user can find the displaced file in quarantine',
-  !!displaced.quarantined && fs.existsSync(displaced.quarantined.quarantinePath),
+  displaced.quarantined.length === 1 && fs.existsSync(displaced.quarantined[0].quarantinePath),
   displaced.quarantined
 )
 check(
   'ownedPaths: the quarantine copy holds the bytes too',
-  !!displaced.quarantined && fs.readFileSync(displaced.quarantined.quarantinePath, 'utf8') === userBytes
+  displaced.quarantined.length === 1 && fs.readFileSync(displaced.quarantined[0].quarantinePath, 'utf8') === userBytes
 )
 check('ownedPaths: the target is free once both copies exist', !fs.existsSync(mixSets))
 
@@ -1114,10 +1114,75 @@ const ours = await displaceForeign({
 })
 check(
   'ownedPaths: a path the profile already owns is not backed up',
-  ours.backedUp === null && ours.quarantined === null && !fs.existsSync(ourOwn),
+  ours.backedUp.length === 0 && ours.quarantined.length === 0 && !fs.existsSync(ourOwn),
   ours
 )
 check('ownedPaths: nothing was written to the backup directory', !fs.existsSync(path.join(displaceRoot, 'backup-owned')))
+
+// A REAL folder the profile only partly owns. `isOwned` says "yes" for the
+// folder as soon as one tracked file lives inside it - the right answer to "may
+// Modão have this path", the wrong answer to "is everything in here Modão's" -
+// and the per-folder answer took the stray file with it. This is the field
+// failure in miniature: scripts\ held managed plugins and untracked files side
+// by side. Decided per file, the stray is copied out like any loose plugin.
+const partly = path.join(gameFolder, 'modloader', 'Half Ours')
+fs.mkdirSync(path.join(partly, 'data'), { recursive: true })
+fs.writeFileSync(path.join(partly, 'tracked.dff'), 'a file another install of this profile provides')
+fs.writeFileSync(path.join(partly, 'data', 'stray.ini'), 'a file the user put there and nobody tracks')
+const partial = await displaceForeign({
+  target: partly,
+  relativePath: 'modloader/Half Ours',
+  ownedPaths: new Set(['modloader/Half Ours/tracked.dff'].map(ownedKey)),
+  backupDir: path.join(displaceRoot, 'backup-partial'),
+  quarantineDir: path.join(displaceRoot, 'quarantine-partial')
+})
+check(
+  'ownedPaths: a partly-owned folder is judged file by file, not as a folder',
+  partial.backedUp.length === 1 && partial.backedUp[0].relativePath === 'modloader/Half Ours/data/stray.ini',
+  partial.backedUp
+)
+check(
+  'ownedPaths: the stray inside it is backed up with its bytes',
+  partial.backedUp.length === 1 &&
+    fs.existsSync(partial.backedUp[0].backupPath) &&
+    fs.readFileSync(partial.backedUp[0].backupPath, 'utf8') === 'a file the user put there and nobody tracks',
+  partial.backedUp
+)
+check(
+  'ownedPaths: and the stray is listed in quarantine',
+  partial.quarantined.length === 1 &&
+    partial.quarantined[0].relativePath === 'modloader/Half Ours/data/stray.ini' &&
+    fs.existsSync(partial.quarantined[0].quarantinePath),
+  partial.quarantined
+)
+check(
+  'ownedPaths: the tracked file inside it is not copied out - the store has it',
+  !fs.existsSync(path.join(displaceRoot, 'backup-partial', 'modloader', 'Half Ours', 'tracked.dff')),
+  fs.existsSync(path.join(displaceRoot, 'backup-partial')) ? fs.readdirSync(path.join(displaceRoot, 'backup-partial', 'modloader', 'Half Ours')) : null
+)
+check('ownedPaths: the folder is gone once the stray is safe', !fs.existsSync(partly))
+
+// The cheap path has to stay cheap: a folder where every file is accounted for
+// copies nothing and creates no backup directory at all.
+const whollyOurs = path.join(gameFolder, 'modloader', 'All Ours')
+fs.mkdirSync(whollyOurs, { recursive: true })
+fs.writeFileSync(path.join(whollyOurs, 'a.dff'), 'ours')
+fs.writeFileSync(path.join(whollyOurs, 'b.txd'), 'ours too')
+const allOurs = await displaceForeign({
+  target: whollyOurs,
+  relativePath: 'modloader/All Ours',
+  ownedPaths: new Set(['modloader/All Ours/a.dff', 'modloader/All Ours/b.txd'].map(ownedKey)),
+  backupDir: path.join(displaceRoot, 'backup-all-ours'),
+  quarantineDir: path.join(displaceRoot, 'quarantine-all-ours')
+})
+check(
+  'ownedPaths: a wholly-owned folder still costs nothing',
+  allOurs.backedUp.length === 0 &&
+    allOurs.quarantined.length === 0 &&
+    !fs.existsSync(path.join(displaceRoot, 'backup-all-ours')) &&
+    !fs.existsSync(whollyOurs),
+  allOurs
+)
 
 // The exact shape of the bug, as an assertion: build the set the broken switch
 // built - the install's own targets - and the user's file is judged ours.

@@ -538,6 +538,13 @@ export async function runE2E(): Promise<number> {
   await fsp.mkdir(handFolder, { recursive: true })
   await fsp.writeFile(path.join(handFolder, 'by-hand.ifp'), 'animations the user made themselves')
   const handHash = await sha256File(path.join(handFolder, 'by-hand.ifp'))
+  // And a file nested deeper, at the name the mod's own payload uses. Both are
+  // untracked, so both have to come out file by file rather than the folder
+  // being judged once and taken whole.
+  const strayRel = 'modloader/Animações de Kung Fu melhoradas/extra/kungfu.ifp'
+  await fsp.mkdir(path.join(handFolder, 'extra'), { recursive: true })
+  await fsp.writeFile(path.join(handFolder, 'extra', 'kungfu.ifp'), 'a stray the user left inside that folder')
+  const strayHash = await sha256File(path.join(handFolder, 'extra', 'kungfu.ifp'))
 
   const collide = await planSwitch(risky.id)
   check(
@@ -553,6 +560,11 @@ export async function runE2E(): Promise<number> {
   check(
     'a real mod folder an incoming junction would replace is reported too',
     collide.unmanaged.includes(handRel) && collide.willBeOverwritten.includes(handRel),
+    collide.willBeOverwritten
+  )
+  check(
+    'every file inside it is reported, one by one',
+    collide.unmanaged.includes(strayRel) && collide.willBeOverwritten.includes(strayRel),
     collide.willBeOverwritten
   )
 
@@ -610,6 +622,20 @@ export async function runE2E(): Promise<number> {
     'the displaced folder is in the switch snapshot, file by file',
     !!handEntry && fs.existsSync(handEntry.backupPath) && (await sha256File(handEntry.backupPath)) === handHash,
     handEntry
+  )
+  const strayEntry = collideJournal.manifest.find((m) => m.relativePath === strayRel)
+  check(
+    'the stray nested inside it is in the snapshot too',
+    !!strayEntry && fs.existsSync(strayEntry.backupPath) && (await sha256File(strayEntry.backupPath)) === strayHash,
+    strayEntry
+  )
+  const strayCopies = (await walk(path.join(Paths.quarantine(), 'displaced'))).filter((f) =>
+    f.abs.toLowerCase().includes('extra')
+  )
+  check(
+    'and the stray is in quarantine with its own bytes',
+    (await Promise.all(strayCopies.map((f) => sha256File(f.abs)))).includes(strayHash),
+    strayCopies.map((f) => f.abs)
   )
 
   // And leaving the profile again hands the path back to its owner.
