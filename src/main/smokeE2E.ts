@@ -11,6 +11,7 @@ import {
   createProfile,
   listProfiles,
   restorePreviousState,
+  SwitchVerificationError,
   unmanagedContent
 } from './profiles/manager'
 import { listJournals, planSwitch, verifySnapshot } from './profiles/switchTx'
@@ -675,6 +676,109 @@ export async function runE2E(): Promise<number> {
     const abs = path.join(game, ...rel.split('/'))
     check(
       `${rel} survived being vacated by the undo`,
+      fs.existsSync(abs) && (await sha256File(abs)) === riskyBytes.get(rel),
+      abs
+    )
+  }
+
+  // --- a mod that passes the plan and then does not arrive -------------------
+  // The field failure: a mod was in the profile's mod set, was not materialised
+  // by the switch, and nothing said so - the user found out in the game. The
+  // pre-switch refusal above cannot catch this one, because the payload is
+  // still there when the plan is made. So take it away after the plan has
+  // passed and before the files are placed, which is exactly what a payload
+  // deleted by a cleaner, a sync client or a failing disk looks like.
+  const ghost = await createProfile({ name: 'Mod que some' })
+  await activateProfile(ghost.id)
+  const ghostSource = path.join(tmp, 'beta-gang')
+  await fsp.mkdir(path.join(ghostSource, 'modloader', 'Beta Gang Members'), { recursive: true })
+  await fsp.writeFile(path.join(ghostSource, 'modloader', 'Beta Gang Members', 'members.dat'), 'beta gang bytes')
+  const ghostPlan = await createPlan({
+    archivePath: ghostSource,
+    profileId: ghost.id,
+    modId: null,
+    modVersionId: null,
+    title: 'Beta Gang Members',
+    author: 'Junior_Djjr',
+    sourceUrl: null
+  })
+  const ghostInstall = await applyPlan(ghostPlan.planId, ghost.id)
+  const ghostRow = getDb().prepare('SELECT store_key, folder_name FROM install WHERE id = ?').get(ghostInstall.installId) as {
+    store_key: string | null
+    folder_name: string | null
+  }
+  const ghostLabel = ghostRow.folder_name ?? 'Beta Gang Members'
+  const ghostFiles = (
+    getDb().prepare('SELECT relative_path FROM install_file WHERE install_id = ?').all(ghostInstall.installId) as {
+      relative_path: string
+    }[]
+  ).map((r) => r.relative_path)
+
+  // Back to the profile the user is really on, so the failing switch is a
+  // switch away from a profile with files of its own - the state the rollback
+  // has to put back.
+  await activateProfile(risky.id)
+
+  let vanished: unknown = null
+  await activateProfile(ghost.id, (phase, done) => {
+    // Between the plan and the placing: the store still held the payload when
+    // planSwitch looked, and does not by the time materialise reads it.
+    if (phase === 'link' && done === 0 && ghostRow.store_key) {
+      for (const rel of ghostFiles) fs.rmSync(path.join(storeDir(ghostRow.store_key), ...rel.split('/')), { force: true })
+    }
+  }).catch((e) => {
+    vanished = e
+  })
+
+  check('a mod that did not reach the game folder blocks the switch', vanished instanceof SwitchVerificationError, vanished)
+  const vanishReport = vanished instanceof SwitchVerificationError ? vanished.verification : null
+  check(
+    'the blocking failure names the mod that did not arrive',
+    !!vanishReport &&
+      vanishReport.missingMods.some((m) => m.label === ghostLabel) &&
+      vanishReport.blockingProblems.join(' ').includes(ghostLabel),
+    vanishReport?.blockingProblems
+  )
+  check(
+    'and it is an error the UI must show, not a line in a log',
+    vanished instanceof Error && vanished.message.includes(ghostLabel),
+    vanished instanceof Error ? vanished.message : vanished
+  )
+  check(
+    'the profile that did not reconcile was NOT recorded active',
+    (await listProfiles()).find((p) => p.isActive)?.id === risky.id,
+    (await listProfiles()).find((p) => p.isActive)?.name
+  )
+  const ghostJournalId = vanished instanceof SwitchVerificationError ? vanished.journalId : -1
+  const ghostJournal = (await listJournals()).find((j) => j.id === ghostJournalId)
+  check(
+    'the refused switch is journalled as failed, with the report attached',
+    ghostJournal?.state === 'failed' && ghostJournal.verification !== null,
+    ghostJournal?.state
+  )
+
+  // The way out the user is offered has to undo a switch that never became
+  // active: the profile that landed is not the profile the DB calls active.
+  const ghostUndo = await restorePreviousState()
+  check(
+    'the rollback vacates the profile that landed without ever activating',
+    !fs.existsSync(path.join(game, 'modloader', ghostLabel)),
+    ghostUndo.log
+  )
+  check(
+    'the rollback says it removed that profile, not the one the DB called active',
+    ghostUndo.log.some((l) => l.includes('Mod que some')),
+    ghostUndo.log
+  )
+  check(
+    'the profile from before the refused switch is active again',
+    (await listProfiles()).find((p) => p.isActive)?.id === risky.id,
+    (await listProfiles()).find((p) => p.isActive)?.name
+  )
+  for (const rel of riskyFiles) {
+    const abs = path.join(game, ...rel.split('/'))
+    check(
+      `${rel} came back after undoing the refused switch`,
       fs.existsSync(abs) && (await sha256File(abs)) === riskyBytes.get(rel),
       abs
     )

@@ -12,7 +12,7 @@ const COLORS = ['#d8a657', '#8ab0a0', '#b08a8a', '#9a92b5', '#a6a08c', '#7f97b5'
 
 export function ProfilesScreen(): JSX.Element {
   const t = useT()
-  const { profiles, refreshProfiles, pushToast, game, orphanSaves, checkOrphanSaves } = useApp()
+  const { profiles, refreshProfiles, pushToast, game, orphanSaves, checkOrphanSaves, setSwitchFailure } = useApp()
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Profile | null>(null)
   const [deleting, setDeleting] = useState<Profile | null>(null)
@@ -33,6 +33,19 @@ export function ProfilesScreen(): JSX.Element {
     try {
       const result = await api.activateProfile(p.id)
       await Promise.all([refreshProfiles(), checkOrphanSaves()])
+      // Refused after materialising: the profile is not active. That report
+      // belongs in the blocking dialog, not in the "here is what happened"
+      // modal a successful switch opens.
+      if (!result.ok) {
+        setSwitchFailure({
+          name: result.verification.profileName,
+          previousProfileName: result.previousProfileName,
+          log: result.log,
+          verification: result.verification,
+          journalId: result.journalId
+        })
+        return
+      }
       setSwitchLog({
         name: p.name,
         elapsedMs: result.elapsedMs,
@@ -631,5 +644,87 @@ function DryRunReport(props: { plan: SwitchPlan; onForgetMissing?: () => void })
         </table>
       </div>
     </div>
+  )
+}
+
+/**
+ * The switch that was refused.
+ *
+ * This is deliberately a dialog and not a toast: the switch did not happen, the
+ * game folder is in a state the user did not ask for, and there is exactly one
+ * action that puts it back. It is rendered from the app shell rather than from
+ * this screen, because a profile can be switched from the header on any screen
+ * and that path used to show nothing at all.
+ *
+ * Distinct from the game-is-running refusal, which stops a switch BEFORE
+ * anything is touched: this one is content that did not arrive.
+ */
+export function SwitchBlockedDialog(): JSX.Element | null {
+  const t = useT()
+  const failure = useApp((s) => s.switchFailure)
+  const setSwitchFailure = useApp((s) => s.setSwitchFailure)
+  const refreshProfiles = useApp((s) => s.refreshProfiles)
+  const checkUnmanaged = useApp((s) => s.checkUnmanaged)
+  const pushToast = useApp((s) => s.pushToast)
+  const [restoring, setRestoring] = useState(false)
+
+  if (!failure) return null
+
+  async function restore(): Promise<void> {
+    setRestoring(true)
+    try {
+      const result = await api.restorePreviousSwitch()
+      await Promise.all([refreshProfiles(), checkUnmanaged()])
+      setSwitchFailure(null)
+      pushToast('success', t('messages.profile.restoredFiles', { count: result.restored }))
+    } catch (e) {
+      pushToast('error', (e as Error).message)
+    } finally {
+      setRestoring(false)
+    }
+  }
+
+  return (
+    <Modal
+      key="switch-blocked"
+      title={t('profiles.switchBlockedTitle', { name: failure.name })}
+      subtitle={t('profiles.switchBlockedSubtitle')}
+      onClose={() => setSwitchFailure(null)}
+      width={720}
+      footer={
+        <>
+          {failure.journalId !== null ? (
+            <Button
+              variant="danger"
+              disabled={restoring}
+              onClick={() => void restore()}
+              icon={<Icon.undo width={13} height={13} />}
+            >
+              {restoring ? t('profiles.restoring') : t('profiles.restorePrevious')}
+            </Button>
+          ) : null}
+          <span className="spacer" />
+          <Button variant="primary" onClick={() => setSwitchFailure(null)}>
+            {t('app.close')}
+          </Button>
+        </>
+      }
+    >
+      <div className="notice" data-kind="error" style={{ marginBottom: 12 }}>
+        <span className="notice-mark" />
+        <div>
+          <strong>{t('profiles.switchBlockedLead', { name: failure.name })}</strong>
+          <div className="faint">
+            {failure.previousProfileName
+              ? t('profiles.switchBlockedStillActive', { name: failure.previousProfileName })
+              : t('profiles.switchBlockedNoPrevious')}{' '}
+            {t('profiles.switchBlockedWhatToDo')}
+          </div>
+        </div>
+      </div>
+      <VerificationReport v={failure.verification} />
+      <h3>{t('profiles.whatHappened')}</h3>
+      <pre className="pre">{failure.log.join('\n')}</pre>
+    </Modal>
   )
 }

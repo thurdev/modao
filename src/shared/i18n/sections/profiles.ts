@@ -36,7 +36,15 @@ export const profiles = {
     planning: 'Planejando…',
     duplicate: 'Duplicar',
     switchedTo: 'Trocado para {name}',
-    switchedButFailed: 'Trocado para {name} — mas não passou na verificação',
+    switchedButFailed: 'Trocado para {name} — com observações',
+    switchBlockedTitle: '{name} não foi ativado',
+    switchBlockedSubtitle: 'A troca foi recusada depois de materializar',
+    switchBlockedLead:
+      'A pasta do jogo não ficou com o que {name} diz ter, então o perfil não foi marcado como ativo — o jogo não abriria com esses mods. Isto não tem nada a ver com o jogo estar aberto: é o conteúdo que não chegou.',
+    switchBlockedStillActive: '{name} continua sendo o perfil ativo.',
+    switchBlockedNoPrevious: 'Nenhum perfil está ativo agora.',
+    switchBlockedWhatToDo:
+      'Use “Restaurar estado anterior” para desfazer a troca com o backup verificado, ou conserte os mods listados e tente de novo. Nenhum arquivo seu foi apagado.',
     restorePrevious: 'Restaurar estado anterior',
     restoring: 'Restaurando…',
     whatHappened: 'O que aconteceu',
@@ -105,7 +113,15 @@ export const profiles = {
     planning: 'Planning…',
     duplicate: 'Duplicate',
     switchedTo: 'Switched to {name}',
-    switchedButFailed: 'Switched to {name} — but it did not verify',
+    switchedButFailed: 'Switched to {name} — with notes',
+    switchBlockedTitle: '{name} was not activated',
+    switchBlockedSubtitle: 'The switch was refused after materialising',
+    switchBlockedLead:
+      'The game folder does not hold what {name} says it holds, so the profile was not recorded active — the game would not have started with those mods. This has nothing to do with the game being open: it is the content that did not arrive.',
+    switchBlockedStillActive: '{name} is still the active profile.',
+    switchBlockedNoPrevious: 'No profile is active right now.',
+    switchBlockedWhatToDo:
+      'Use “Restore previous state” to undo the switch from the verified backup, or fix the mods listed above and try again. Nothing of yours was deleted.',
     restorePrevious: 'Restore previous state',
     restoring: 'Restoring…',
     whatHappened: 'What happened',

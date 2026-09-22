@@ -34,6 +34,7 @@ import {
   deleteProfile,
   importManifest,
   listProfiles,
+  SwitchVerificationError,
   unmanagedContent,
   updateProfile,
   type ImportResult,
@@ -495,8 +496,8 @@ export function registerIpc(): void {
       const result = await activateProfile(id, (phase, d, t) => progress(task.id, 'Switching profile', phase, d, t))
       task.end()
       const profile = (await listProfiles()).find((p) => p.id === id)!
-      // A switch that did not verify is not a switch that worked: say so, and
-      // leave the journal in place so "Restore previous state" can undo it.
+      // Notes that do not block: the profile IS active and its mods ARE in
+      // place, but something adjacent (an unresolved dependency) wants saying.
       if (result.verification && !result.verification.ok) {
         toast(
           'error',
@@ -509,6 +510,7 @@ export function registerIpc(): void {
         toast('success', t('messages.profile.switchedActive', { profile: profile.name, seconds: (result.elapsedMs / 1000).toFixed(1) }))
       }
       return {
+        ok: true as const,
         profile,
         elapsedMs: result.elapsedMs,
         log: result.log,
@@ -517,6 +519,29 @@ export function registerIpc(): void {
       }
     } catch (e) {
       task.end((e as Error).message)
+      // Reconciliation failed: the switch is off. The profile was never
+      // recorded active, so the renderer gets the whole report back rather than
+      // a bare message - it has to open the failure dialog, not a toast that
+      // scrolls away while the user believes the switch worked.
+      if (e instanceof SwitchVerificationError) {
+        const profile = (await listProfiles()).find((p) => p.id === id) ?? null
+        toast(
+          'error',
+          t('messages.profile.switchBlocked', {
+            profile: e.profileName,
+            problem: e.verification.blockingProblems[0] ?? t('messages.profile.seeSwitchReport')
+          })
+        )
+        return {
+          ok: false as const,
+          profile,
+          elapsedMs: 0,
+          log: e.log,
+          journalId: e.journalId,
+          verification: e.verification,
+          previousProfileName: e.previousProfileName
+        }
+      }
       throw e
     }
   })

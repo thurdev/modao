@@ -31,6 +31,19 @@ import type {
   TxdAnalysis
 } from '@shared/types'
 
+/**
+ * What a profile switch came back with. `ok: false` means it was refused after
+ * materialising because the game folder does not hold what the profile says it
+ * holds - nothing was activated, and `verification.blockingProblems` says why.
+ */
+export type ActivateOutcome = {
+  profile: Profile | null
+  elapsedMs: number
+  log: string[]
+  journalId: number | null
+  verification: SwitchVerification | null
+} & ({ ok: true } | { ok: false; verification: SwitchVerification; previousProfileName: string | null })
+
 interface Bridge {
   invoke(channel: IpcChannel, ...args: unknown[]): Promise<unknown>
   onProgress(cb: (p: Progress) => void): () => void
@@ -102,14 +115,15 @@ export const api = {
   updateProfile: (id: number, patch: { name?: string; color?: string; notes?: string }) =>
     call<Profile>('profiles:update', id, patch),
   removeProfile: (id: number) => call<void>('profiles:remove', id),
+  /**
+   * `ok: false` is a switch that materialised and then failed reconciliation:
+   * the profile was NOT activated, the previous one still is, and `verification`
+   * names every mod that did not reach the game folder. It comes back as a
+   * value rather than a thrown message so the caller can show the report and
+   * offer the rollback.
+   */
   activateProfile: (id: number) =>
-    call<{
-      profile: Profile
-      elapsedMs: number
-      log: string[]
-      journalId: number | null
-      verification: SwitchVerification | null
-    }>('profiles:activate', id),
+    call<ActivateOutcome>('profiles:activate', id),
   /** What a switch would do, file by file. Changes nothing. */
   switchPlan: (id: number) => call<SwitchPlan>('profiles:switchPlan', id),
   verifyProfile: (id: number) => call<SwitchVerification>('profiles:verify', id),

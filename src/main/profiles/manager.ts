@@ -242,6 +242,43 @@ export interface ActivateResult {
 }
 
 /**
+ * A switch that materialised but did not reconcile: the game folder does not
+ * hold what the profile says it holds.
+ *
+ * It carries the whole verification so the UI can name every mod that did not
+ * arrive, and the journal id so the user can be offered the rollback. A mod
+ * that vanished on a switch used to be a line in a log nobody opened, under a
+ * profile the app had already recorded as active.
+ */
+export class SwitchVerificationError extends Error {
+  readonly verification: SwitchVerification
+  readonly log: string[]
+  readonly journalId: number
+  readonly profileId: number
+  readonly profileName: string
+  readonly previousProfileName: string | null
+
+  constructor(args: {
+    verification: SwitchVerification
+    log: string[]
+    journalId: number
+    previousProfileName: string | null
+  }) {
+    super(
+      `${args.verification.profileName} was not activated: the game folder does not hold what it says it holds.\n` +
+        args.verification.blockingProblems.map((p) => `  - ${p}`).join('\n')
+    )
+    this.name = 'SwitchVerificationError'
+    this.verification = args.verification
+    this.log = args.log
+    this.journalId = args.journalId
+    this.profileId = args.verification.profileId
+    this.profileName = args.verification.profileName
+    this.previousProfileName = args.previousProfileName
+  }
+}
+
+/**
  * Switching profiles, as a transaction.
  *
  *   1. plan      - work out every file that would move, touching nothing
@@ -251,7 +288,10 @@ export interface ActivateResult {
  *   4. apply     - vacate, swap saves, materialise; only snapshotted files may
  *                  be removed, and unmanaged files are never touched
  *   5. verify    - the switch is not complete until the game folder holds what
- *                  the profile says it holds
+ *                  the profile says it holds. Only then is the profile recorded
+ *                  active; a failure here throws SwitchVerificationError and
+ *                  leaves the previous profile active, with the journal in
+ *                  place for "Restore previous state".
  *
  * Steps 1-3 change nothing in the game folder, so a failure before step 4 leaves
  * the install exactly as it was.
@@ -389,22 +429,37 @@ export async function activateProfile(
       )
     }
 
+    await syncProfileIni(id)
+    setJournalState(journal.id, 'applied')
+
+    // Reconciliation runs BEFORE the profile is recorded active. It used to run
+    // after, so a mod that never reached the game folder left the app claiming
+    // the broken profile was in place and the user found out in the game.
+    // Nothing below this line happens unless the folder holds what the profile
+    // says it holds.
+    onProgress?.('verify', 0, 1)
+    const verification = await verifySwitch(id)
+    recordVerification(journal.id, verification)
+    if (verification.blockingProblems.length) {
+      log.push(`The switch was refused after materialising: ${verification.blockingProblems.join(' ')}`)
+      throw new SwitchVerificationError({
+        verification,
+        log,
+        journalId: journal.id,
+        previousProfileName: current?.name ?? null
+      })
+    }
+
     db.transaction(() => {
       db.prepare('UPDATE profile SET is_active = 0').run()
       db.prepare('UPDATE profile SET is_active = 1 WHERE id = ?').run(id)
     })()
-    await syncProfileIni(id)
-    setJournalState(journal.id, 'applied')
-
-    onProgress?.('verify', 0, 1)
-    const verification = await verifySwitch(id)
-    recordVerification(journal.id, verification)
     setJournalState(journal.id, verification.ok ? 'verified' : 'failed', verification.ok ? null : verification.problems.join(' '))
     log.push(
       verification.ok
         ? `Verified: ${verification.modsMaterialised}/${verification.modsExpected} mod(s) in place, ` +
             `${verification.asiCount} .asi, ${verification.cleoPluginCount} CLEO plugin(s), ${verification.cleoScriptCount} CLEO script(s).`
-        : `Switch applied but did NOT verify: ${verification.problems.join(' ')}`
+        : `Switched. Notes that do not block the switch: ${verification.problems.join(' ')}`
     )
 
     return { elapsedMs: Date.now() - t0, log, journalId: journal.id, verification, quarantined }
@@ -419,11 +474,17 @@ export async function activateProfile(
  * linked in is taken out, every file in the verified backup goes back where it
  * came from, the saves swap back, and the previous profile is active again.
  *
- * Vacating the profile that is active right now is the same removal a switch
- * does, so it gets the same interlock. It used to run with no options at all,
- * which meant no snapshot set, which meant every tracked real file of that
+ * Vacating the profile whose files are in the game folder is the same removal a
+ * switch does, so it gets the same interlock. It used to run with no options at
+ * all, which meant no snapshot set, which meant every tracked real file of that
  * profile was deleted outright - and for an adopted install (no store copy, no
  * recorded hash) there was nothing anywhere to put back.
+ *
+ * "Whose files are in the game folder" is usually the active profile, but not
+ * after a switch that materialised and then failed reconciliation: that profile
+ * was never recorded active, so the DB still names the one before it while the
+ * folder holds the one that failed. Undoing that switch has to vacate the
+ * profile that actually landed.
  */
 export async function restorePreviousState(journalId?: number): Promise<{ log: string[]; restored: number }> {
   const db = getDb()
@@ -432,7 +493,14 @@ export async function restorePreviousState(journalId?: number): Promise<{ log: s
   if (journal.fromProfileId === null) throw new Error('That switch had no previous profile to go back to.')
 
   const log: string[] = []
-  const current = db.prepare('SELECT id, name FROM profile WHERE is_active = 1').get() as { id: number; name: string } | undefined
+  const active = db.prepare('SELECT id, name FROM profile WHERE is_active = 1').get() as { id: number; name: string } | undefined
+  // A journal that reached verification and still failed is exactly the
+  // materialised-but-not-activated case; a failure before that point recorded
+  // no verification and materialised nothing of the incoming profile.
+  const landedButNotActive = journal.state === 'failed' && journal.verification !== null && journal.toProfileId !== active?.id
+  const current = landedButNotActive
+    ? (db.prepare('SELECT id, name FROM profile WHERE id = ?').get(journal.toProfileId) as { id: number; name: string } | undefined)
+    : active
   if (current) {
     const game = requireActiveGame()
     // Adopted content exists only in the game folder; it has to exist somewhere
