@@ -15,6 +15,7 @@ import { Paths } from './util/paths'
 import { dirSize, exists, walk } from './util/fsx'
 import { activeGame, addGame, detectCandidates, listGames, requireActiveGame, setActiveGame } from './game/detect'
 import { describeFsError, forgetWriteAccess, isProtectedLocation, probeWriteAccess } from './game/access'
+import { assertGameNotRunning } from './game/running'
 import { readPe } from './game/pe'
 import {
   activateProfile,
@@ -261,6 +262,29 @@ function requireWritableGame(): void {
   throw new Error(access.reason ?? t('messages.access.cannotWrite', { path: game.path }))
 }
 
+/**
+ * The other half of "fail before touching anything": is the game open?
+ *
+ * Write access says nothing about it - a running gta_sa.exe does not lock
+ * modloader\, so the probe above succeeds and the write lands in a folder Mod
+ * Loader is watching. It hot-reloads it and the game dies mid-session. This is
+ * a refusal, not a warning: there is no safe way to continue.
+ */
+async function requireGameClosed(): Promise<void> {
+  await assertGameNotRunning(requireActiveGame())
+}
+
+/**
+ * What every handler that writes into the game folder runs first, in this
+ * order: the running check comes before the access probe because the probe
+ * itself writes a file into modloader\, which is exactly what must not happen
+ * while the watcher is live.
+ */
+async function requireIdleGame(): Promise<void> {
+  await requireGameClosed()
+  requireWritableGame()
+}
+
 export function registerIpc(): void {
   // --- app ------------------------------------------------------------------
   ipcMain.handle('app:settings', () => settings())
@@ -321,7 +345,10 @@ export function registerIpc(): void {
   ipcMain.handle('app:storage', () => storageReport())
   ipcMain.handle('app:elevation', () => elevationState())
   ipcMain.handle('app:relaunchElevated', (_e, remember: boolean) => relaunchElevated(!!remember))
-  ipcMain.handle('app:recheckAccess', () => {
+  // The forced probe writes a file into modloader\, which is itself a write the
+  // watcher would pick up - so the running check comes first here too.
+  ipcMain.handle('app:recheckAccess', async () => {
+    await requireGameClosed()
     const game = requireActiveGame()
     forgetWriteAccess(game.path)
     return probeWriteAccess(game.path, true)
@@ -351,6 +378,10 @@ export function registerIpc(): void {
   ipcMain.handle('game:active', () => activeGame())
   ipcMain.handle('game:adopt', async (_e, gameId: number, profileName: string) => {
     setActiveGame(gameId)
+    // Adoption rewrites modloader.ini with the priorities it found, so it is a
+    // write like any other. The access probe is deliberately not run: adopting
+    // is how a read-only install gets indexed in the first place.
+    await requireGameClosed()
     const task = newTask('Adopting existing install')
     try {
       const result = await adoptInstall(profileName, (d, t) => progress(task.id, 'Adopting existing install', 'indexing', d, t))
@@ -363,7 +394,7 @@ export function registerIpc(): void {
     }
   })
   ipcMain.handle('game:adoptInto', async (_e, profileId: number) => {
-    requireWritableGame()
+    await requireIdleGame()
 
     const id = requireProfile(profileId)
     const task = newTask('Scanning the game folder')
@@ -403,12 +434,14 @@ export function registerIpc(): void {
   ipcMain.handle('profiles:create', (_e, input: { name: string; color: string; notes: string; copyFrom?: number }) =>
     createProfile(input)
   )
-  ipcMain.handle('profiles:update', (_e, id: number, patch: { name?: string; color?: string; notes?: string }) =>
-    updateProfile(id, patch)
-  )
+  // Renaming the active profile rewrites its section header in modloader.ini.
+  ipcMain.handle('profiles:update', async (_e, id: number, patch: { name?: string; color?: string; notes?: string }) => {
+    await requireGameClosed()
+    return updateProfile(id, patch)
+  })
   ipcMain.handle('profiles:remove', (_e, id: number) => deleteProfile(id))
   ipcMain.handle('profiles:activate', async (_e, id: number) => {
-    requireWritableGame()
+    await requireIdleGame()
 
     const task = newTask('Switching profile')
     try {
@@ -443,7 +476,7 @@ export function registerIpc(): void {
   ipcMain.handle('profiles:switchPlan', (_e, id: number) => planSwitch(requireProfile(id)))
   ipcMain.handle('profiles:verify', (_e, id: number) => verifySwitch(requireProfile(id)))
   ipcMain.handle('profiles:restorePrevious', async (_e, journalId?: number) => {
-    requireWritableGame()
+    await requireIdleGame()
     const task = newTask('Restoring the previous state')
     try {
       const result = await restorePreviousState(journalId)
@@ -475,6 +508,8 @@ export function registerIpc(): void {
     return res.filePath
   })
   ipcMain.handle('profiles:importArchive', async (): Promise<ImportResult | null> => {
+    // An import that lands on the active profile writes modloader.ini.
+    await requireGameClosed()
     const res = await dialog.showOpenDialog({
       title: t('messages.profile.importTitle'),
       filters: [{ name: t('messages.profile.fileFilterName'), extensions: ['json'] }],
@@ -494,24 +529,24 @@ export function registerIpc(): void {
 
   // --- library --------------------------------------------------------------
   ipcMain.handle('library:list', (_e, profileId: number) => listInstalled(requireProfile(profileId)))
-  ipcMain.handle('library:setEnabled', (_e, installId: number, enabled: boolean) => {
-    requireWritableGame()
+  ipcMain.handle('library:setEnabled', async (_e, installId: number, enabled: boolean) => {
+    await requireIdleGame()
     return setEnabled(installId, enabled)
   })
-  ipcMain.handle('library:setPriority', (_e, installId: number, priority: number) => {
-    requireWritableGame()
+  ipcMain.handle('library:setPriority', async (_e, installId: number, priority: number) => {
+    await requireIdleGame()
     return setPriority(installId, priority)
   })
   ipcMain.handle('library:uninstall', async (_e, installId: number) => {
-    requireWritableGame()
+    await requireIdleGame()
     const result = await uninstall(installId)
     toast('success', t('messages.library.uninstalled', { count: result.restored }))
     return result
   })
   ipcMain.handle('library:rollbackPreview', (_e, installId: number) => rollbackPreview(installId))
   ipcMain.handle('library:readme', (_e, installId: number) => readInstallReadme(installId))
-  ipcMain.handle('library:subModSetEnabled', (_e, installId: number, rel: string, enabled: boolean) => {
-    requireWritableGame()
+  ipcMain.handle('library:subModSetEnabled', async (_e, installId: number, rel: string, enabled: boolean) => {
+    await requireIdleGame()
     return setSubModEnabled(installId, rel, enabled)
   })
 
@@ -618,7 +653,7 @@ export function registerIpc(): void {
     setDestination(planId, sourcePath, destination as DestinationClass)
   )
   ipcMain.handle('install:apply', async (_e, planId: string, profileId: number) => {
-    requireWritableGame()
+    await requireIdleGame()
     const task = newTask('Applying install plan')
     try {
       const result = await applyPlan(planId, profileId, (phase, c, tot) => progress(task.id, 'Applying install plan', phase, c, tot))
@@ -653,7 +688,7 @@ export function registerIpc(): void {
     return listConflicts(profileId, overrides)
   })
   ipcMain.handle('conflicts:applyPriorities', async (_e, profileId: number, changes: { installId: number; priority: number }[]) => {
-    requireWritableGame()
+    await requireIdleGame()
     await applyPriorities(requireProfile(profileId), changes)
     toast('success', t('messages.conflicts.prioritiesWritten'))
   })
@@ -669,12 +704,19 @@ export function registerIpc(): void {
   ipcMain.handle('saves:list', (_e, profileId: number) => listSnapshots(requireProfile(profileId)))
   ipcMain.handle('saves:snapshot', (_e, profileId: number, label: string) => snapshot(requireProfile(profileId), label || 'manual', false))
   ipcMain.handle('saves:restore', async (_e, snapshotId: number) => {
+    // The live save folder belongs to the running game: it holds the slots open
+    // and writes them back on exit, so a restore now is silently undone.
+    await requireGameClosed()
     await restoreSnapshot(snapshotId)
     toast('success', t('messages.saves.restored'))
   })
   ipcMain.handle('saves:currentSlots', (_e, profileId: number) => currentSlots(requireProfile(profileId)))
   ipcMain.handle('saves:detectExisting', () => detectExistingSaves())
   ipcMain.handle('saves:importExisting', async (_e, profileId: number, label: string) => {
+    // An import is remembered forever by a content marker: taking it from a
+    // folder the running game is halfway through writing records a torn copy as
+    // the one the user arrived with, and it is never offered again.
+    await requireGameClosed()
     const result = await importExistingSaves(requireProfile(profileId), label || 'Imported from your existing install')
     toast('success', t('messages.saves.imported', { slots: result.slots }))
     return result
@@ -707,7 +749,7 @@ export function registerIpc(): void {
     return reportFromGame(game.path, expected)
   })
   ipcMain.handle('health:fixStreamingMemory', async (_e, memoryMb?: number) => {
-    requireWritableGame()
+    await requireIdleGame()
     const game = requireActiveGame()
     const { setStreamingMemory, SAFE_STREAMING_MEMORY_MB } = await import('./game/streamIni')
     const result = await setStreamingMemory(
@@ -720,13 +762,22 @@ export function registerIpc(): void {
   })
   ipcMain.handle('health:logs', () => collectLogs())
   ipcMain.handle('health:bisectStart', async (_e, profileId: number) => {
-    requireWritableGame()
+    await requireIdleGame()
     // The session applies its own first step: it turns mods off through the ini
     // rather than moving files, so there is nothing else to do here.
     return startBisect(requireProfile(profileId))
   })
-  ipcMain.handle('health:bisectResult', (_e, sessionId: string, result: 'good' | 'bad') => recordResult(sessionId, result))
-  ipcMain.handle('health:bisectAbort', (_e, sessionId: string) => abortBisect(sessionId))
+  // Both of these rewrite modloader.ini - recording a result applies the next
+  // step, aborting restores the original. Bisecting is launch-test-record in a
+  // loop, so it is the likeliest thing to be done with the game still open.
+  ipcMain.handle('health:bisectResult', async (_e, sessionId: string, result: 'good' | 'bad') => {
+    await requireGameClosed()
+    return recordResult(sessionId, result)
+  })
+  ipcMain.handle('health:bisectAbort', async (_e, sessionId: string) => {
+    await requireGameClosed()
+    return abortBisect(sessionId)
+  })
   ipcMain.handle('health:bisectCurrent', (_e, profileId: number) => currentBisect(requireProfile(profileId)))
 
   // --- tasks ----------------------------------------------------------------

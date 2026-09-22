@@ -50,7 +50,9 @@ export const messages = {
       restarting: 'O Modão está reiniciando com direitos de administrador.'
     },
     access: {
-      cannotWrite: 'O Modão não consegue escrever em {path}.'
+      cannotWrite: 'O Modão não consegue escrever em {path}.',
+      gameRunning:
+        'O {exe} está aberto agora. O Mod Loader fica de olho na pasta modloader\\ e recarrega na hora o que mudar, então mexer aí com o jogo rodando trava ele (CrashList 0x007F3825 — textura descarregada no meio do jogo). Feche o jogo e tente de novo; nada foi alterado.'
     },
     app: {
       nonHttpUrl: 'Não é permitido abrir uma URL que não seja http.'
@@ -148,7 +150,9 @@ export const messages = {
       restarting: 'Modão is restarting with administrator rights.'
     },
     access: {
-      cannotWrite: 'Modão cannot write to {path}.'
+      cannotWrite: 'Modão cannot write to {path}.',
+      gameRunning:
+        '{exe} is running right now. Mod Loader watches modloader\\ and hot-reloads whatever changes, so writing to it with the game open crashes the game (CrashList 0x007F3825 — a texture unloaded mid-session). Close the game and try again; nothing was changed.'
     },
     app: {
       nonHttpUrl: 'Refusing to open a non-http URL.'
