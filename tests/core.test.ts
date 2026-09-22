@@ -53,6 +53,7 @@ import { limitAdjusterNames, parseStreamIni, SAFE_STREAMING_MEMORY_MB } from '..
 import { pluginEvidence } from '../src/main/formats/strings'
 import {
   assertGameNotRunning,
+  checkGameRunning,
   forgetRunningProcesses,
   gameExeNames,
   gameRunningVerdict,
@@ -1514,6 +1515,50 @@ check(
   'adopt: with the game closed the change goes through',
   (await whenGameClosed(saInstall, () => (activeGameId = 2), listerIdle)) === 2 && activeGameId === 2
 )
+forgetRunningProcesses()
+
+// --- a health run diagnoses without writing ---------------------------------
+// runHealthCheck forces a write-access probe, which creates a file inside
+// modloader\. health:run is not refused while the game is up - a diagnosis is
+// what the user asked for - so the handler establishes the running state first,
+// and that is what suppresses the probe. This is that sequence.
+const healthRoot = path.join(tmp, 'health-game')
+const healthModloader = path.join(healthRoot, 'modloader')
+fs.mkdirSync(healthModloader, { recursive: true })
+const healthGame = { path: healthRoot, kind: 'sa' as const }
+const listerRunningHealth = async (): Promise<RunningProcess[]> => [proc('gta_sa.exe', path.join(healthRoot, 'gta_sa.exe'))]
+
+forgetWriteAccess()
+forgetRunningProcesses()
+await checkGameRunning(healthGame, listerRunningHealth) // what the handler awaits
+const healthAccess = probeWriteAccess(healthRoot, true) // what runHealthCheck does
+check(
+  'health: a health run creates nothing under modloader\\ while the game is running',
+  fs.readdirSync(healthModloader).length === 0 && healthAccess.writable === true,
+  healthAccess
+)
+
+// Non-vacuous: with the folder gone, a probe that actually ran could only say
+// ENOENT, and the cache is empty, so "writable" is proof nothing touched the
+// disk. The control below shows the same call does probe once the game closes.
+fs.rmSync(healthRoot, { recursive: true, force: true })
+forgetWriteAccess()
+forgetRunningProcesses()
+await checkGameRunning(healthGame, listerRunningHealth)
+check(
+  'health: the forced probe inside it is suppressed, not merely cached',
+  probeWriteAccess(healthRoot, true).writable === true && !fs.existsSync(healthRoot)
+)
+forgetWriteAccess()
+forgetRunningProcesses()
+await checkGameRunning(healthGame, listerIdle)
+const healthClosed = probeWriteAccess(healthRoot, true)
+check(
+  'health: with the game closed that same probe runs for real',
+  healthClosed.writable === false && healthClosed.code === 'ENOENT',
+  healthClosed
+)
+forgetWriteAccess()
 forgetRunningProcesses()
 
 fs.rmSync(tmp, { recursive: true, force: true })

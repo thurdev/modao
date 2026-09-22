@@ -21,7 +21,7 @@ import {
   probeWriteAccess,
   writeAccessUnlessGameRunning
 } from './game/access'
-import { assertGameNotRunning, forgetRunningProcesses, whenGameClosed } from './game/running'
+import { assertGameNotRunning, checkGameRunning, forgetRunningProcesses, whenGameClosed } from './game/running'
 import { readPe } from './game/pe'
 import {
   activateProfile,
@@ -296,6 +296,22 @@ function requireWritableGame(): void {
  */
 async function requireGameClosed(gameId?: number): Promise<void> {
   await assertGameNotRunning(gameTarget(gameId) ?? requireActiveGame())
+}
+
+/**
+ * Reads the process table and records the answer, refusing nothing.
+ *
+ * This is the read-shaped half of the guard. The synchronous access probes
+ * further down - `requireActiveGame()`, and the forced one inside
+ * `runHealthCheck` - create a file inside modloader\ unless the running state
+ * is already known, and asking here costs nothing but a process listing. So a
+ * handler the user is entitled to run with the game open calls this instead of
+ * `requireGameClosed`, and keeps working; only the checks that genuinely need
+ * a write fall back to the last answer on record.
+ */
+async function noteWhetherGameIsRunning(): Promise<void> {
+  const target = gameTarget()
+  if (target) await checkGameRunning(target)
 }
 
 /**
@@ -754,7 +770,14 @@ export function registerIpc(): void {
   })
 
   // --- health ---------------------------------------------------------------
-  ipcMain.handle('health:run', (_e, profileId: number) => runHealthCheck(requireProfile(profileId)))
+  // A health run is a diagnosis the user asked for, so it is not refused while
+  // the game is up - it is made not to write. Its write-access check forces a
+  // probe, which creates a file inside modloader\; establishing the running
+  // state first is what suppresses that, with no write of its own.
+  ipcMain.handle('health:run', async (_e, profileId: number) => {
+    await noteWhetherGameIsRunning()
+    return runHealthCheck(requireProfile(profileId))
+  })
   ipcMain.handle('health:crashes', (_e, profileId: number) => listCrashes(requireProfile(profileId)))
   ipcMain.handle('health:incidents', (_e, profileId: number) => listIncidents(requireProfile(profileId)))
   ipcMain.handle('health:scanCrashes', (_e, profileId: number) => scanCrashes(requireProfile(profileId)))
