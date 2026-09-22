@@ -268,6 +268,15 @@ export function registerIpc(): void {
     const { checkForUpdate } = await import('./util/updates')
     return checkForUpdate(force === true)
   })
+  ipcMain.handle('app:knowledge', async () => {
+    const { knowledgeSummary, recentRules } = await import('./knowledge/store')
+    const summary = knowledgeSummary()
+    return { ...summary, recent: recentRules() }
+  })
+  ipcMain.handle('app:forgetRule', async (_e, id: number) => {
+    const { unlearn } = await import('./knowledge/store')
+    unlearn(id)
+  })
   ipcMain.handle('app:dismissUpdate', async (_e, version: string) => {
     const { dismissUpdate } = await import('./util/updates')
     dismissUpdate(version)

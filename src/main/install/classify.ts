@@ -341,6 +341,38 @@ function detectVariantGroups(root: Node, readmes: ReadmeParse[]): VariantGroup[]
   return groups
 }
 
+/**
+ * Mod Loader mechanics that decide whether a correctly-copied mod actually
+ * works. Each of these is a documented rule of the loader, and each one has a
+ * failure that looks like a broken mod rather than a misplaced file.
+ */
+
+/** A .txd in a folder literally named "txd" is treated as a SPRITE texture. */
+const SPRITE_FOLDER = /^txd$/i
+
+/**
+ * A CLEO script inside a mod keeps its sidecar files only if it sits in that
+ * mod's own cleo\ folder. Dropped into the game's cleo\ instead, the script
+ * loads and its data files do not.
+ */
+function cleoTargetInsideMod(modName: string, rel: string): string {
+  const base = rel.split('/').pop() as string
+  return `modloader/${modName}/cleo/${base}`
+}
+
+/** A .col needs a .txt telling Mod Loader to load it; raising the COL limit does not. */
+function colHasLoader(files: { sourcePath: string }[], colPath: string): boolean {
+  const stem = (colPath.split('/').pop() ?? '').replace(/\.col$/i, '').toLowerCase()
+  return files.some((f) => {
+    if (!/\.txt$/i.test(f.sourcePath)) return false
+    const name = (f.sourcePath.split('/').pop() ?? '').toLowerCase()
+    return name.includes(stem) || name === 'colfile.txt'
+  })
+}
+
+/** Clothes belong in a folder named after the archive they replace. */
+const CLOTHES_HINT = /(player\.img|clothes|roupas?)/i
+
 // ---------------------------------------------------------------------------
 // Classification into destination classes
 // ---------------------------------------------------------------------------
@@ -621,6 +653,65 @@ export async function classifyTree(
       await handleNode(child, ctx.fallbackName)
     }
     rejoinSplitAsi()
+  }
+
+  // Mechanics Mod Loader enforces, checked once the whole plan is known.
+  for (const f of files) {
+    const target = f.targetRelative.toLowerCase()
+
+    // A sprite folder is a promise about what is in it.
+    if (/\.txd$/i.test(target) && target.split('/').some((seg) => SPRITE_FOLDER.test(seg))) {
+      const hasModels = files.some((other) => /\.dff$/i.test(other.targetRelative))
+      if (hasModels) {
+        warnings.push({
+          severity: 'warn',
+          code: 'txd-sprite-folder',
+          message: `${path.basename(f.targetRelative)} is in a folder named "txd", which Mod Loader treats as sprites.`,
+          detail:
+            'Vehicle, ped, weapon and map textures in a folder called "txd" are loaded as sprite textures and render ' +
+            'wrongly or not at all. Only HUD and menu sprites belong there.'
+        })
+        break
+      }
+    }
+  }
+
+  for (const f of files) {
+    if (!/\.col$/i.test(f.sourcePath)) continue
+    if (colHasLoader(files, f.sourcePath)) continue
+    warnings.push({
+      severity: 'info',
+      code: 'col-without-loader',
+      message: `${path.basename(f.sourcePath)} has no .txt telling Mod Loader to load it.`,
+      detail:
+        'Ship a .txt beside it containing "COLFILE 0 path/to.col". Raising the game\'s COL limit instead is what ' +
+        'produces the crash at 0x015632B0.'
+    })
+    break
+  }
+
+  const clothes = files.filter((f) => CLOTHES_HINT.test(f.sourcePath) && /\.(dff|txd)$/i.test(f.sourcePath))
+  if (clothes.length > 0 && !files.some((f) => /player\.img/i.test(f.targetRelative))) {
+    warnings.push({
+      severity: 'info',
+      code: 'clothes-folder',
+      message: 'Clothing models have to sit in a folder named "player.img".',
+      detail: 'Mod Loader routes a mod folder called player.img into the clothes archive; any other name is ignored.'
+    })
+  }
+
+  // "Load first" is about .asi order, which is alphabetical from the mod folder
+  // name - not about priority, which only decides file conflicts.
+  const wantsFirst = ctx.readmes.some((r) => /(carregar|load)\s+(primeiro|first|antes)/i.test(r.raw))
+  if (wantsFirst && files.some((f) => /\.asi$/i.test(f.targetRelative))) {
+    warnings.push({
+      severity: 'info',
+      code: 'asi-load-order',
+      message: 'The readme says this has to load before other plugins.',
+      detail:
+        'Mod Loader loads .asi plugins in alphabetical order of their mod folder. Prefixing the folder with "$" ' +
+        'makes it load first. Priority does not affect load order - it only decides who wins a duplicated file.'
+    })
   }
 
   if (readmeSaysAsi && !files.some((f) => f.destination === 'asi-plugin')) {

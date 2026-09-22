@@ -10,6 +10,7 @@ import type {
   FileConflict,
   GameInstall,
   HealthReport,
+  KnowledgeReport,
   ModLoaderLogReport,
   SwitchJournal,
   SwitchPlan,
@@ -37,6 +38,10 @@ export interface ModãoApi {
     checkUpdate(force?: boolean): Promise<UpdateStatus>
     /** Stop offering this exact version. */
     dismissUpdate(version: string): Promise<void>
+    /** Everything the app has learned, with its evidence. */
+    knowledge(): Promise<KnowledgeReport>
+    /** Forget one learned rule. */
+    forgetRule(id: number): Promise<void>
     settings(): Promise<AppSettings>
     setSetting(key: keyof AppSettings, value: unknown): Promise<AppSettings>
     openExternal(url: string): Promise<void>
@@ -177,6 +182,8 @@ export const IPC_CHANNELS = [
   'app:settings',
   'app:checkUpdate',
   'app:dismissUpdate',
+  'app:knowledge',
+  'app:forgetRule',
   'app:setSetting',
   'app:openExternal',
   'app:revealPath',

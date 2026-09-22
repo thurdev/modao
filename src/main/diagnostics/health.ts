@@ -343,6 +343,10 @@ async function modLoaderVerdictCheck(profileId: number, game: GameInstall): Prom
   }
 
   const tracked = report.mods.filter((m) => expected.includes(m.folder))
+  // Mod Loader's own verdict is the only source that says whether an install
+  // WORKED, so it is what the app remembers about this mod.
+  const { learnVerdict } = await import('../knowledge/learn')
+  for (const m of tracked) learnVerdict(m.folder, { verdict: m.verdict, explanation: m.explanation })
   const bad = tracked.filter((m) => m.verdict !== 'active')
   const label: Record<string, string> = {
     active: t('checks.verdictActive'),

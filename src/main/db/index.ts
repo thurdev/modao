@@ -264,6 +264,31 @@ const MIGRATIONS: Migration[] = [
       d.exec("ALTER TABLE profile ADD COLUMN game_kind TEXT")
       d.exec('CREATE INDEX IF NOT EXISTS idx_profile_game ON profile(game_id)')
     }
+  },
+  {
+    version: 6,
+    name: 'knowledge',
+    up: (d) => {
+      // What the app has learned, and where each piece came from. The source is
+      // stored because the difference between "the author wrote this" and "the
+      // app guessed from a folder name" decides which one wins.
+      d.exec(`
+      CREATE TABLE knowledge_rule (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        subject_kind TEXT NOT NULL,
+        source TEXT NOT NULL,
+        evidence TEXT NOT NULL,
+        value_json TEXT NOT NULL,
+        weight INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        times_seen INTEGER NOT NULL DEFAULT 1,
+        UNIQUE(kind, subject, subject_kind, source)
+      );
+      CREATE INDEX idx_knowledge_lookup ON knowledge_rule(kind, subject);
+      `)
+    }
   }
 ]
 

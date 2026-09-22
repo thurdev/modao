@@ -29,6 +29,7 @@ import { classifyDownload, looksLikeArchive, normalizeForFetch } from '../src/sh
 import { parseCrashDump, parseModLoaderLog } from '../src/main/diagnostics/modloaderLog'
 import { limitAdjusterNames, parseStreamIni, SAFE_STREAMING_MEMORY_MB } from '../src/main/game/streamIni'
 import { pluginEvidence } from '../src/main/formats/strings'
+import { signatureForArchive } from '../src/main/knowledge/signature'
 
 let failures = 0
 function check(name: string, cond: boolean, extra?: unknown): void {
@@ -664,6 +665,81 @@ check(
   restoredState.excludeAll === false && restoredState.include.length === 0,
   restoredState
 )
+
+// --- Mod Loader mechanics that decide whether a copied mod works ------------
+const mech = path.join(tmp, 'mechanics')
+function mechFile(rel: string): void {
+  const p = path.join(mech, rel)
+  fs.mkdirSync(path.dirname(p), { recursive: true })
+  fs.writeFileSync(p, 'x')
+}
+mechFile('Cool Cars/models/infernus.dff')
+mechFile('Cool Cars/txd/infernus.txd')
+mechFile('Cool Cars/models/infernus.col')
+mechFile('Cool Cars/player.img/shirt.dff')
+const mechOut = await classifyTree(
+  mech,
+  { asiRelative: 'scripts', readmes: [], fallbackName: 'Cool Cars' },
+  {}
+)
+const warned = (code: string): boolean => mechOut.warnings.some((w) => w.code === code)
+check(
+  'mechanics: a vehicle texture in a folder named txd is flagged as a sprite folder',
+  warned('txd-sprite-folder'),
+  mechOut.warnings.map((w) => w.code)
+)
+check('mechanics: a .col with no COLFILE line is flagged', warned('col-without-loader'), mechOut.warnings.map((w) => w.code))
+
+const asiFirst = path.join(tmp, 'loadfirst')
+fs.mkdirSync(asiFirst, { recursive: true })
+fs.writeFileSync(path.join(asiFirst, 'EarlyPatch.asi'), 'x')
+const firstOut = await classifyTree(
+  asiFirst,
+  {
+    asiRelative: 'scripts',
+    readmes: [
+      {
+        file: 'leiame.txt',
+        encoding: 'windows-1252',
+        raw: 'Este mod precisa carregar primeiro, antes dos outros plugins.',
+        language: 'pt-BR',
+        instructions: [],
+        requirementUrls: [],
+        declared: [],
+        confidence: 0.5
+      }
+    ],
+    fallbackName: 'EarlyPatch'
+  },
+  {}
+)
+check(
+  'mechanics: "load first" suggests the $ prefix, which is load order, not priority',
+  firstOut.warnings.some((w) => w.code === 'asi-load-order'),
+  firstOut.warnings.map((w) => w.code)
+)
+
+// --- how a mod is recognised again -------------------------------------------
+// A rule learned once has to apply to that archive forever, and to archives
+// shaped the same way even when their file names differ.
+const sigA = signatureForArchive(['VHud.asi', 'VHud/blips/a.png', 'VHud/data/b.dat'], 'Leiame do VHud')
+const sigAgain = signatureForArchive(['VHud/data/b.dat', 'VHud.asi', 'VHud/blips/a.png'], 'Leiame do VHud')
+check('signature: the same archive signs the same whatever order the files arrive in', sigA.exact === sigAgain.exact)
+
+const sigOther = signatureForArchive(['Other.asi', 'Other/blips/x.png', 'Other/data/y.dat'], 'Outro leiame')
+check('signature: a different archive is a different identity', sigA.exact !== sigOther.exact)
+check(
+  'signature: but an archive laid out the same way shares a shape',
+  sigA.shape === sigOther.shape,
+  [sigA.shapeParts, sigOther.shapeParts]
+)
+
+const sigBig = signatureForArchive(
+  ['Pack/models/' + Array.from({ length: 40 }, (_, i) => `car${i}.dff`).join(''), 'Pack/data/handling.cfg'],
+  null
+)
+check('signature: a differently shaped archive does not share it', sigA.shape !== sigBig.shape)
+check('signature: the shape says what it is made of, for showing the user', sigA.shapeParts.some((p) => p.startsWith('folders:')), sigA.shapeParts)
 
 // --- download links ----------------------------------------------------------
 // Which links Modão can fetch on its own decides whether "Install" installs

@@ -5,7 +5,7 @@ import { api, formatBytes, formatDate, relativeTime } from '../api'
 import { useApp } from '../state/store'
 import { LANGUAGES } from '@shared/i18n'
 import { useT } from '../lib/i18n'
-import { Button, Confirm, ErrorNote, Field, Loading, Switch, useAsync } from '../components/ui'
+import { Badge, Button, Confirm, ErrorNote, Field, Loading, Switch, useAsync } from '../components/ui'
 import { Icon } from '../components/icons'
 import { itemVariants, listVariants } from '../lib/motion'
 
@@ -13,6 +13,7 @@ export function SettingsScreen(): JSX.Element {
   const t = useT()
   const [update, setUpdate] = useState<UpdateStatus | null>(null)
   const [checking, setChecking] = useState(false)
+  const knowledge = useAsync(() => api.knowledge(), [])
   // The screen shows what the last check found, without starting a new one.
   useEffect(() => {
     void api.checkUpdate().then(setUpdate).catch(() => undefined)
@@ -87,6 +88,54 @@ export function SettingsScreen(): JSX.Element {
             </select>
           }
         />
+      </motion.section>
+
+      {/* ── learned rules ───────────────────────────────────── */}
+      <motion.section variants={itemVariants} className="card">
+        <div className="card-head">
+          <h3>{t('settings.knowledge')}</h3>
+          <span className="spacer" />
+          <span className="faint">
+            {knowledge.data ? t('settings.knowledgeCount', { count: knowledge.data.total }) : ''}
+          </span>
+        </div>
+        <div className="card-body">
+          <p className="muted" style={{ marginTop: 0 }}>
+            {t('settings.knowledgeDesc')}
+          </p>
+          {knowledge.data && knowledge.data.recent.length > 0 ? (
+            <div className="table-wrap" style={{ maxHeight: 280, overflow: 'auto' }}>
+              <table className="table">
+                <tbody>
+                  {knowledge.data.recent.map((rule) => (
+                    <tr key={rule.id}>
+                      <td style={{ width: 130 }}>
+                        <Badge tone={rule.source === 'user' ? 'accent' : 'neutral'}>
+                          {t(`settings.source${rule.source.charAt(0).toUpperCase()}${rule.source.slice(1)}`)}
+                        </Badge>
+                      </td>
+                      <td className="faint">{rule.evidence}</td>
+                      <td style={{ width: 96 }}>
+                        <Button
+                          size="sm"
+                          variant="quiet"
+                          onClick={async () => {
+                            await api.forgetRule(rule.id)
+                            knowledge.reload()
+                          }}
+                        >
+                          {t('settings.forget')}
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="faint">{t('settings.knowledgeEmpty')}</p>
+          )}
+        </div>
       </motion.section>
 
       {/* ── updates ─────────────────────────────────────────── */}

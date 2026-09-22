@@ -13,6 +13,7 @@ import type {
   FileConflict,
   GameInstall,
   HealthReport,
+  KnowledgeReport,
   ModLoaderLogReport,
   ImgAnalysis,
   IfpAnalysis,
@@ -58,6 +59,8 @@ export const api = {
 
   checkUpdate: (force?: boolean) => call<UpdateStatus>('app:checkUpdate', force),
   dismissUpdate: (version: string) => call<void>('app:dismissUpdate', version),
+  knowledge: () => call<KnowledgeReport>('app:knowledge'),
+  forgetRule: (id: number) => call<void>('app:forgetRule', id),
   settings: () => call<AppSettings>('app:settings'),
   setSetting: (key: keyof AppSettings, value: unknown) => call<AppSettings>('app:setSetting', key, value),
   openExternal: (url: string) => call<void>('app:openExternal', url),

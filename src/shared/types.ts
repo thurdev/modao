@@ -654,3 +654,28 @@ export interface UpdateStatus {
   checkedAt: string | null
   error: string | null
 }
+
+/**
+ * One thing the app has learned, and where it learned it. The source and the
+ * evidence are part of the record so a rule can be read, argued with and
+ * deleted rather than taken on faith.
+ */
+export interface KnowledgeEntry {
+  id: number
+  kind: string
+  subject: string
+  subjectKind: string
+  source: string
+  evidence: string
+  weight: number
+  timesSeen: number
+  createdAt: string
+  value: unknown
+}
+
+export interface KnowledgeReport {
+  total: number
+  byKind: Record<string, number>
+  bySource: Record<string, number>
+  recent: KnowledgeEntry[]
+}

@@ -18,6 +18,14 @@ import { findReadmes, parseReadme } from './readme'
 import { classifyTree, type OverlayMatch } from './classify'
 import { providesKey } from '../conflicts'
 import { resolveDependencies } from '../deps/resolver'
+import {
+  knownAbout,
+  layoutDisagreement,
+  learnFromBinary,
+  learnFromReadme,
+  learnLayout,
+  signatureForArchive
+} from '../knowledge/learn'
 import { t } from '../util/i18n'
 import { dematerialise, ingest, materialise, ownedKey, quarantineEdited, storeKey } from '../store/contentStore'
 import { requireActiveGame } from '../game/detect'
@@ -176,6 +184,22 @@ async function buildPlan(planId: string, meta: BuildMeta): Promise<InstallPlan> 
       })
     }
   }
+  // What this archive is, and what the app already knows about archives like it.
+  const archiveFiles = (await walk(extractRoot)).map((f) => f.rel)
+  const signature = signatureForArchive(archiveFiles, readmes[0]?.raw ?? null)
+  learnFromReadme(signature, readmes)
+  for (const file of archiveFiles) {
+    if (!/\.asi$/i.test(file)) continue
+    const buf = await fsp.readFile(path.join(extractRoot, file)).catch(() => null)
+    if (!buf) continue
+    const { pluginEvidence } = await import('../formats/strings')
+    const evidence = pluginEvidence(buf)
+    learnFromBinary(signature, path.basename(file), evidence.probes, evidence.rootFolder)
+  }
+  const known = knownAbout(signature)
+  const disagreement = layoutDisagreement(known.layout, files)
+  if (disagreement) warnings.push(disagreement)
+
   if (readmes.length === 0) {
     warnings.push({ severity: 'info', code: 'no-readme', message: 'This archive ships no readme; the plan comes from file inspection alone.' })
   }
@@ -352,6 +376,16 @@ export async function applyPlan(
   const game = state.game
 
   if (plan.requiresVariantChoice) throw new Error('Choose a variant before installing.')
+  // The layout the user accepted is the layout to expect next time an archive
+  // of this shape turns up.
+  learnLayout(
+    signatureForArchive(
+      plan.files.map((f) => f.sourcePath),
+      plan.readmes[0]?.raw ?? null
+    ),
+    plan.files,
+    'inference'
+  )
   const blocking = plan.warnings.filter(
     (w) =>
       w.severity === 'error' &&

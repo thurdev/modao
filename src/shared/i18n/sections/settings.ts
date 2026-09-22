@@ -7,6 +7,18 @@
  */
 export const settings = {
   pt: {
+    knowledge: 'O que o Modão aprendeu',
+    knowledgeDesc:
+      'Cada regra guarda de onde veio: o leiame do autor, uma string dentro do plugin, o que o Mod Loader registrou depois de jogar, ou uma correção sua. Correção sua vale mais que tudo. Nada aqui é inventado, e dá para apagar qualquer regra.',
+    knowledgeEmpty: 'Nada aprendido ainda. Instale um mod e jogue uma vez.',
+    knowledgeCount: '{count} regra(s) aprendida(s)',
+    sourceReadme: 'leiame do autor',
+    sourceBinary: 'dentro do plugin',
+    'sourceModloader-log': 'modloader.log',
+    sourceCrash: 'crash',
+    sourceUser: 'você corrigiu',
+    sourceSeed: 'vem com o app',
+    sourceInference: 'deduzido',
     catalog: 'Catálogo',
     indexTitle: 'Indexar o MixMods pela rede',
     indexDesc:
@@ -51,6 +63,18 @@ export const settings = {
     themeSystem: 'Do sistema'
   },
   en: {
+    knowledge: 'What Modão has learned',
+    knowledgeDesc:
+      "Every rule keeps where it came from: the author's readme, a string inside the plugin, what Mod Loader recorded after you played, or a correction you made. Your correction outranks everything. Nothing here is invented, and any rule can be deleted.",
+    knowledgeEmpty: 'Nothing learned yet. Install a mod and play once.',
+    knowledgeCount: '{count} learned rule(s)',
+    sourceReadme: "the author's readme",
+    sourceBinary: 'inside the plugin',
+    'sourceModloader-log': 'modloader.log',
+    sourceCrash: 'a crash',
+    sourceUser: 'you corrected it',
+    sourceSeed: 'ships with the app',
+    sourceInference: 'inferred',
     catalog: 'Catalogue',
     indexTitle: 'Index MixMods over the network',
     indexDesc:
