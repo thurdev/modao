@@ -90,6 +90,15 @@ export const checks = {
     verdictInert: 'inerte',
     verdictMisInstalled: 'instalado errado',
     verdictUnknown: 'não mencionado no log',
+    upstreamTitle: 'Build desatualizada (releases do autor)',
+    upstreamNoRepos: 'Nenhum mod deste perfil tem uma release conhecida no GitHub para comparar',
+    upstreamUnavailable: 'Não foi possível falar com o GitHub agora — nada a dizer sobre a idade das builds',
+    upstreamCurrent: '{count} mod(s) conferido(s) contra a release mais recente do autor; nenhum atrasado',
+    upstreamSomeUnknown: '{count} mod(s) não puderam ser comparados (sem release, sem arquivo equivalente, ou sem rede).',
+    upstreamOutdated: '{count} mod(s) estão numa build mais antiga que a release mais recente do autor',
+    upstreamDetail:
+      'Uma build velha é o suspeito mais barato de todos: um download resolve, contra uma noite inteira de bissecção. O Modão compara tamanho e SHA-256 do arquivo instalado com o arquivo da release; quando a release só publica um .zip, o timestamp do PE serve de indício. Sem rede, a resposta é “não sei” — nunca “desatualizado”.',
+    upstreamItem: '{title} - {file}: instalado {installed} bytes, release {tag} de {repo} tem {latest} bytes',
     sizeTitle: 'Tamanho dos mods',
     sizeSummary: '{size} GB de mods ligados',
     sizeDetail:
@@ -180,6 +189,15 @@ export const checks = {
     verdictInert: 'inert',
     verdictMisInstalled: 'mis-installed',
     verdictUnknown: 'not mentioned in the log',
+    upstreamTitle: 'Outdated build (upstream releases)',
+    upstreamNoRepos: 'No mod in this profile has a known GitHub release to compare against',
+    upstreamUnavailable: 'GitHub could not be reached just now - nothing to say about how old these builds are',
+    upstreamCurrent: '{count} mod(s) checked against their newest release; none behind',
+    upstreamSomeUnknown: '{count} mod(s) could not be compared (no release, no matching asset, or no network).',
+    upstreamOutdated: '{count} mod(s) are on a build older than their newest release',
+    upstreamDetail:
+      'An old build is the cheapest suspect there is: one download against a whole evening of bisecting. Modão compares the installed file size and SHA-256 with the release asset; when a release only ships a .zip, the PE timestamp is taken as a hint. With no network the answer is "unknown" - never "outdated".',
+    upstreamItem: '{title} - {file}: installed {installed} bytes, release {tag} of {repo} has {latest} bytes',
     sizeTitle: 'Asset size',
     sizeSummary: '{size} GB of enabled mods',
     sizeDetail:

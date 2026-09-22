@@ -5,6 +5,7 @@ import { getDb } from '../db'
 import { t } from '../util/i18n'
 import { limitAdjusterNames, readStreamIni, RISKY_STREAMING_MEMORY_MB, SAFE_STREAMING_MEMORY_MB } from '../game/streamIni'
 import { reportFromGame } from './modloaderLog'
+import { outdatedBuildCheck } from './upstream'
 import { gameDefinition } from '@shared/games'
 import { exists, walk } from '../util/fsx'
 import { requireActiveGame } from '../game/detect'
@@ -192,6 +193,10 @@ export async function runHealthCheck(profileId: number): Promise<HealthReport> {
 
   // 12. Oversized assets
   checks.push(await oversizedCheck(profileId))
+
+  // 13. Is the build simply old? The cheapest suspect in any crash, and the one
+  // the field report found last after days of bisecting.
+  checks.push(await outdatedBuildCheck(profileId))
 
   const blocking = checks.filter((c) => c.status === 'fail').length
   const warnings = checks.filter((c) => c.status === 'warn').length

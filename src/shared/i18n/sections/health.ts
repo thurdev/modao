@@ -59,6 +59,10 @@ export const health = {
     bisectLoaded_one: '{count} mod está carregado nesta rodada.',
     bisectLoaded_other: '{count} mods estão carregados nesta rodada.',
     bisectNoFiles: 'Nada é movido: o Modão usa o próprio ExcludeAllMods do Mod Loader, então as pastas ficam onde estão.',
+    bisectOutdatedTitle: 'Descarte primeiro: {count} mod(s) com build desatualizada',
+    bisectOutdatedDetail:
+      'Uma build velha custa um download; uma bissecção custa uma noite. Atualize estes antes de acreditar em qualquer resultado da bissecção.',
+    bisectOutdatedLine: '{title}: instalado {installed} bytes, a release mais recente de {repo} tem {latest}',
     bisectCareTitle: 'Três coisas que o método exige',
     bisectCareMany: 'Mais de um mod pode ser culpado ao mesmo tempo. Achar um não garante que acabou.',
     bisectCareAddress:
@@ -127,6 +131,10 @@ export const health = {
     bisectLoaded_one: '{count} mod is loaded for this run.',
     bisectLoaded_other: '{count} mods are loaded for this run.',
     bisectNoFiles: "Nothing is moved: Modão uses Mod Loader's own ExcludeAllMods, so the folders stay where they are.",
+    bisectOutdatedTitle: 'Rule these out first: {count} mod(s) on an outdated build',
+    bisectOutdatedDetail:
+      'An old build costs one download; a bisect costs an evening. Update these before trusting any bisect result.',
+    bisectOutdatedLine: '{title}: installed at {installed} bytes, the newest {repo} release is {latest}',
     bisectCareTitle: 'Three things the method demands',
     bisectCareMany: 'More than one mod can be guilty at the same time. Finding one does not mean you are done.',
     bisectCareAddress:

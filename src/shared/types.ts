@@ -1,5 +1,6 @@
 import type { Language } from './i18n'
 import type { GameKind } from './games'
+import type { OutdatedBuild } from './upstream'
 /** Shared domain types. Imported by main, preload and renderer. */
 
 export type DestinationClass =
@@ -478,6 +479,12 @@ export interface BisectSession {
   knownBad: number[]
   culprit: number | null
   history: { step: number; tested: number[]; result: 'good' | 'bad' }[]
+  /**
+   * Mods whose installed binary is older than the newest upstream release, as
+   * the outdated-build check found them before the first halving. Optional: a
+   * session started before this check existed simply carries nothing.
+   */
+  outdated?: OutdatedBuild[]
 }
 
 export interface LogEntry {
@@ -610,6 +617,14 @@ export interface SwitchVerification {
   iniStaleKeys: string[]
   unresolvedDependencies: string[]
   problems: string[]
+  /**
+   * The subset of `problems` that means the game folder does not hold what the
+   * profile says it holds. A switch with any of these is not a switch: it is
+   * refused, the profile is never recorded active, and the user is offered the
+   * rollback. The rest of `problems` - an unresolved dependency, say - is
+   * advice about mods that ARE in place, and never blocks.
+   */
+  blockingProblems: string[]
   checkedAt: string
 }
 

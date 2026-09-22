@@ -508,6 +508,26 @@ function Bisect(props: { profileId: number; pushToast: ToastFn }): JSX.Element {
               </motion.div>
             </motion.div>
 
+            {active.outdated?.length ? (
+              <div className="notice" data-kind="warn" style={{ marginBottom: 12 }}>
+                <span className="notice-mark" />
+                <div className="col" style={{ gap: 4 }}>
+                  <strong>{t('health.bisectOutdatedTitle', { count: active.outdated.length })}</strong>
+                  <span className="faint">{t('health.bisectOutdatedDetail')}</span>
+                  {active.outdated.map((o) => (
+                    <span className="faint" key={o.installId}>
+                      {t('health.bisectOutdatedLine', {
+                        title: o.title,
+                        installed: o.installedBytes.toLocaleString(),
+                        latest: o.upstreamBytes === null ? '?' : o.upstreamBytes.toLocaleString(),
+                        repo: o.repo
+                      })}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
             <div className="notice" data-kind="warn" style={{ marginBottom: 12 }}>
               <span className="notice-mark" />
               <div className="col" style={{ gap: 4 }}>

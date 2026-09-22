@@ -62,6 +62,16 @@ import {
   type RunningProcess
 } from '../src/main/game/running'
 import { signatureForArchive } from '../src/main/knowledge/signature'
+import {
+  bisectGate,
+  compareAgainstUpstream,
+  resolveRepo,
+  UPSTREAM_REGISTRY,
+  type InstalledBinary,
+  type OutdatedBuild,
+  type ReleaseFetcher,
+  type UpstreamRelease
+} from '../src/shared/upstream'
 
 let failures = 0
 function check(name: string, cond: boolean, extra?: unknown): void {
@@ -1516,6 +1526,175 @@ check(
   (await whenGameClosed(saInstall, () => (activeGameId = 2), listerIdle)) === 2 && activeGameId === 2
 )
 forgetRunningProcesses()
+
+// --- outdated builds against upstream releases -------------------------------
+// The field report: Collectibles on Radar installed as a 2021-12-26 build of
+// 282,112 bytes, crashing every launch; upstream v1.0.4 is 253,440 bytes and
+// fixes it. Days of bisecting for something one HTTP request answers.
+const COLLECTIBLES_SHA = 'a'.repeat(64)
+const UPSTREAM_SHA = 'b'.repeat(64)
+
+const installedCollectibles: InstalledBinary = {
+  relativePath: 'CollectiblesOnRadar.asi',
+  sizeBytes: 282_112,
+  sha256: COLLECTIBLES_SHA,
+  // 2021-12-26, as the PE header records it.
+  peTimestamp: Math.floor(Date.parse('2021-12-26T00:00:00Z') / 1000)
+}
+
+function release(assets: { name: string; sizeBytes: number; sha256?: string | null }[], publishedAt = '2026-02-01T00:00:00Z'): UpstreamRelease {
+  return {
+    tag: 'v1.0.4',
+    publishedAt,
+    htmlUrl: 'https://github.com/kong78/collectibles-on-radar-gta-sa/releases/tag/v1.0.4',
+    assets: assets.map((a) => ({ name: a.name, sizeBytes: a.sizeBytes, sha256: a.sha256 ?? null }))
+  }
+}
+
+const KONG = { owner: 'kong78', repo: 'collectibles-on-radar-gta-sa' }
+const stub = (r: UpstreamRelease | null): ReleaseFetcher => async () => r
+const offline: ReleaseFetcher = async () => {
+  throw new Error('getaddrinfo ENOTFOUND api.github.com')
+}
+
+// Every repo the spec named has to be in the seeded registry, or the mod that
+// started all of this is still invisible to the check.
+for (const want of [
+  'kong78/collectibles-on-radar-gta-sa',
+  'Flentric/SA.MapCollectibles',
+  'CookiePLMonster/SilentPatch',
+  'GTAmodding/III.VC.SA.LimitAdjuster',
+  'JuniorDjjr/CLEOPlus',
+  'cleolibrary/CLEO4',
+  'ThirteenAG/III.VC.SA.WindowedMode'
+]) {
+  check(
+    `upstream: the registry is seeded with ${want}`,
+    UPSTREAM_REGISTRY.some((e) => `${e.owner}/${e.repo}` === want)
+  )
+}
+
+// How a mod is resolved to a repo, in the order the resolver tries.
+check(
+  'upstream: a catalog slug resolves to its repo',
+  JSON.stringify(resolveRepo({ slug: 'sa-silentpatch' })) ===
+    JSON.stringify({ owner: 'CookiePLMonster', repo: 'SilentPatch', via: 'slug' }),
+  resolveRepo({ slug: 'sa-silentpatch' })
+)
+check(
+  'upstream: a GitHub release download URL resolves to its repo',
+  resolveRepo({
+    slug: 'whatever-mixmods-called-it',
+    downloadUrl: 'https://github.com/ThirteenAG/III.VC.SA.WindowedMode/releases/tag/1.3'
+  })?.via === 'url'
+)
+check(
+  'upstream: an unregistered mod with no GitHub link resolves to nothing',
+  resolveRepo({ slug: 'tuning-mod', sourceUrl: 'https://www.mixmods.com.br/2019/01/tuning-mod/' }) === null
+)
+check(
+  'upstream: the installed binary alone identifies the repo',
+  resolveRepo({ slug: 'unknown', fileNames: ['modloader\\Collectibles\\CollectiblesOnRadar.asi'] })?.repo ===
+    'collectibles-on-radar-gta-sa'
+)
+
+// The comparison itself, driven by a stubbed fetcher - no network in tests.
+const same = await compareAgainstUpstream(
+  installedCollectibles,
+  KONG,
+  stub(release([{ name: 'CollectiblesOnRadar.asi', sizeBytes: 282_112, sha256: COLLECTIBLES_SHA }]))
+)
+check('upstream: same size and hash is current', same.state === 'current' && same.reason === 'sha-match', same)
+
+const sizeOnly = await compareAgainstUpstream(
+  installedCollectibles,
+  KONG,
+  stub(release([{ name: 'CollectiblesOnRadar.asi', sizeBytes: 282_112 }]))
+)
+check('upstream: same size with no digest published is current', sizeOnly.state === 'current' && sizeOnly.reason === 'size-match', sizeOnly)
+
+const theFieldReport = await compareAgainstUpstream(
+  installedCollectibles,
+  KONG,
+  stub(release([{ name: 'CollectiblesOnRadar.asi', sizeBytes: 253_440 }]))
+)
+check(
+  'upstream: 282,112 bytes installed against a 253,440 byte release is outdated',
+  theFieldReport.state === 'outdated' && theFieldReport.reason === 'size-differs',
+  theFieldReport
+)
+
+const hashDiffers = await compareAgainstUpstream(
+  installedCollectibles,
+  KONG,
+  stub(release([{ name: 'CollectiblesOnRadar.asi', sizeBytes: 282_112, sha256: UPSTREAM_SHA }]))
+)
+check('upstream: same size, different hash is outdated', hashDiffers.state === 'outdated' && hashDiffers.reason === 'sha-differs', hashDiffers)
+
+// The rule that matters most: a user with no network is never told their mods
+// are stale.
+const noNetwork = await compareAgainstUpstream(installedCollectibles, KONG, offline)
+check('upstream: a fetch failure is unknown, never outdated', noNetwork.state === 'unknown' && noNetwork.reason === 'fetch-failed', noNetwork)
+const noRelease = await compareAgainstUpstream(installedCollectibles, KONG, stub(null))
+check('upstream: a repo with no release is unknown', noRelease.state === 'unknown' && noRelease.reason === 'no-release', noRelease)
+
+// Most of these repos publish a .zip, so there is nothing to compare byte for
+// byte and the PE timestamp is the only hint available.
+const zipOnlyOld = await compareAgainstUpstream(installedCollectibles, KONG, stub(release([{ name: 'CollectiblesOnRadar.zip', sizeBytes: 90_000 }])))
+check(
+  'upstream: an archive-only release far newer than the PE timestamp is a hinted outdated',
+  zipOnlyOld.state === 'outdated' && zipOnlyOld.reason === 'pe-older-than-release',
+  zipOnlyOld
+)
+const zipOnlyFresh = await compareAgainstUpstream(
+  { ...installedCollectibles, peTimestamp: Math.floor(Date.parse('2026-01-28T00:00:00Z') / 1000) },
+  KONG,
+  stub(release([{ name: 'CollectiblesOnRadar.zip', sizeBytes: 90_000 }]))
+)
+check(
+  'upstream: a binary compiled just before the release is not called outdated',
+  zipOnlyFresh.state === 'unknown' && zipOnlyFresh.reason === 'no-comparable-asset',
+  zipOnlyFresh
+)
+
+// What startBisect does with that answer, as a rule it can be held to.
+const finding: OutdatedBuild = {
+  installId: 7,
+  title: 'Collectibles on Radar',
+  relativePath: 'CollectiblesOnRadar.asi',
+  repo: 'kong78/collectibles-on-radar-gta-sa',
+  installedBytes: 282_112,
+  upstreamBytes: 253_440,
+  upstreamTag: 'v1.0.4',
+  releaseUrl: 'https://github.com/kong78/collectibles-on-radar-gta-sa/releases/tag/v1.0.4',
+  reason: 'size-differs'
+}
+const refused = bisectGate([finding], false)
+check('bisect: an outdated mod is surfaced instead of a first bisect step', !refused.proceed && refused.refusal?.key === 'messages.bisect.outdatedFirst', refused)
+check(
+  'bisect: the refusal names the mod and both sizes',
+  refused.refusal?.params.title === 'Collectibles on Radar' &&
+    refused.refusal?.params.installed === (282_112).toLocaleString() &&
+    refused.refusal?.params.latest === (253_440).toLocaleString(),
+  refused.refusal
+)
+const told = bisectGate([finding], true)
+check('bisect: once told, the user is not locked out of bisecting', told.proceed && told.outdated.length === 1, told)
+check('bisect: with nothing outdated the bisect starts as before', bisectGate([], false).proceed)
+// Offline produces an empty finding list, which must read as "carry on", not
+// as a refusal the user cannot clear.
+check('bisect: an offline check never refuses a bisect', bisectGate([], false).refusal === null)
+
+for (const language of ['pt-BR', 'en'] as const) {
+  const refusal = translate(language, 'messages.bisect.outdatedFirst', refused.refusal?.params)
+  check(
+    `bisect: the refusal is written in ${language}`,
+    refusal.includes('Collectibles on Radar') && refusal.includes((253_440).toLocaleString()) && !refusal.includes('{'),
+    refusal
+  )
+  const title = translate(language, 'checks.upstreamTitle')
+  check(`upstream: the health check has a ${language} title`, title.length > 0 && title !== 'upstreamTitle', title)
+}
 
 // --- a health run diagnoses without writing ---------------------------------
 // runHealthCheck forces a write-access probe, which creates a file inside

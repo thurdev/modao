@@ -20,7 +20,8 @@ export const messages = {
     profile: {
       forgotMissing: '{count} mod(s) que não existem mais foram removidos deste perfil. Nenhum arquivo foi apagado do disco.',
       gone: 'Perfil #{id} não existe mais. Escolha um perfil e tente de novo.',
-      switchNotVerified: '{profile} foi ativado, mas não passou na verificação: {problem}',
+      switchNotVerified: '{profile} foi ativado, mas há observações: {problem}',
+      switchBlocked: '{profile} NÃO foi ativado: {problem}',
       seeSwitchReport: 'veja o relatório da troca',
       switchedActive: '{profile} ativo em {seconds}s',
       restoredFiles: '{count} arquivo(s) restaurado(s) do backup pré-troca.',
@@ -45,6 +46,10 @@ export const messages = {
     },
     library: {
       uninstalled: 'Desinstalado: {count} arquivo(s) restaurado(s).'
+    },
+    bisect: {
+      outdatedFirst:
+        'Antes de bisseccionar: {count} mod(s) deste perfil estão numa versão mais antiga que a release mais recente do autor. O primeiro é {title} — instalado com {installed} bytes, a última release de {repo} tem {latest}. Uma build velha custa um download; uma bissecção custa uma noite. Atualize por {url} e teste de novo. Se ainda assim quiser bisseccionar, clique outra vez.'
     },
     elevation: {
       restarting: 'O Modão está reiniciando com direitos de administrador.'
@@ -120,7 +125,8 @@ export const messages = {
       forgotMissing:
         '{count} mod(s) that no longer exist were removed from this profile. No file was deleted from disk.',
       gone: 'Profile #{id} no longer exists. Pick a profile and try again.',
-      switchNotVerified: '{profile} was switched in but did not verify: {problem}',
+      switchNotVerified: '{profile} was switched in, with notes: {problem}',
+      switchBlocked: '{profile} was NOT activated: {problem}',
       seeSwitchReport: 'see the switch report',
       switchedActive: '{profile} active in {seconds}s',
       restoredFiles: 'Restored {count} file(s) from the pre-switch backup.',
@@ -145,6 +151,10 @@ export const messages = {
     },
     library: {
       uninstalled: 'Uninstalled: {count} displaced file(s) restored.'
+    },
+    bisect: {
+      outdatedFirst:
+        'Before bisecting: {count} mod(s) in this profile are older than the newest release their author published. The first is {title} - installed at {installed} bytes, the latest {repo} release is {latest}. An old build costs one download; a bisect costs an evening. Update it from {url} and test again. If you still want to bisect, click again.'
     },
     elevation: {
       restarting: 'Modão is restarting with administrator rights.'

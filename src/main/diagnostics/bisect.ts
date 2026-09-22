@@ -1,9 +1,13 @@
 import crypto from 'node:crypto'
 import path from 'node:path'
 import type { BisectSession } from '@shared/types'
+import { bisectGate, type OutdatedBuild, type ReleaseFetcher } from '@shared/upstream'
 import { getDb } from '../db'
 import { requireActiveGame } from '../game/detect'
 import { applyIgnoreState, readIgnoreState, readIniFile, writeIniFile, type IgnoreState } from '../game/modloaderIni'
+import { t } from '../util/i18n'
+import { log } from '../util/log'
+import { fetchLatestRelease, scanUpstream } from './upstream'
 
 /**
  * Guided bisect: halve the enabled mod set, launch, record the result, repeat.
@@ -46,9 +50,39 @@ function folderOf(profileId: number, installId: number): string | null {
   return row?.folder_name ?? null
 }
 
-export async function startBisect(profileId: number): Promise<BisectSession> {
+/**
+ * Profiles that have already been told about an outdated mod. The refusal is
+ * information, not a lock: once it has been delivered the user decides.
+ */
+const OUTDATED_TOLD = new Set<number>()
+
+/** Exposed for the IPC layer and for tests that want a clean slate. */
+export function forgetOutdatedWarning(profileId?: number): void {
+  if (profileId === undefined) OUTDATED_TOLD.clear()
+  else OUTDATED_TOLD.delete(profileId)
+}
+
+export async function startBisect(
+  profileId: number,
+  fetchRelease: ReleaseFetcher = fetchLatestRelease
+): Promise<BisectSession> {
   const installs = enabledInstalls(profileId)
   if (installs.length < 2) throw new Error('Bisect needs at least two enabled mods.')
+
+  // The precondition the field report paid for: an old build is one download,
+  // a bisect is an evening. The check runs before the first halving, and a
+  // network that does not answer leaves `outdated` empty rather than guessing.
+  let outdated: OutdatedBuild[] = []
+  try {
+    outdated = (await scanUpstream(profileId, fetchRelease)).outdated
+  } catch (e) {
+    log('bisect could not run the outdated-build check; continuing', { error: (e as Error).message })
+  }
+  const gate = bisectGate(outdated, OUTDATED_TOLD.has(profileId))
+  if (!gate.proceed && gate.refusal) {
+    OUTDATED_TOLD.add(profileId)
+    throw new Error(t(gate.refusal.key, gate.refusal.params))
+  }
 
   const game = requireActiveGame()
   const iniPath = path.join(game.path, 'modloader', 'modloader.ini')
@@ -64,7 +98,10 @@ export async function startBisect(profileId: number): Promise<BisectSession> {
     knownGood: [],
     knownBad: [],
     culprit: null,
-    history: []
+    history: [],
+    // Carried on the session so the panel can keep saying "rule these out
+    // first" for as long as the bisect runs, not only at the moment it started.
+    outdated: gate.outdated
   }
   // Remember what the user had, not what the app assumes they had: restoring
   // "everything on" would silently re-enable mods they turned off themselves.
