@@ -427,6 +427,10 @@ function Crashes(props: { profileId: number; pushToast: ToastFn }): JSX.Element 
               </>
             )}
 
+            {detail.primary.processId === 'modloader.log' ? (
+              <ModLoaderCrashDetail raw={detail.primary.raw} t={t} />
+            ) : null}
+
             {detail.related.length ? (
               <>
                 <hr className="divider" />
@@ -476,6 +480,92 @@ function DeepAnalysisView(props: { result: DeepAnalysisResult; t: TranslateFn })
       ) : null}
       <p className="faint">{result.note}</p>
     </div>
+  )
+}
+
+/**
+ * scanModLoaderCrash (src/main/diagnostics/eventlog.ts) writes the register
+ * dump, stack dump and backtrace it parsed out of modloader.log into the
+ * crash_report row's `raw` column as plain text, under headings it controls
+ * itself ("Registers:", "Stack dump:", "Backtrace:"). This reads that text
+ * back into the same structure for display - the parsing already happened in
+ * modloaderLog.ts; this just stops throwing the structure away before the
+ * user sees it.
+ */
+function parseModLoaderDetail(raw: string): { registers: { name: string; value: string }[]; stack: string[]; backtrace: string[] } {
+  const registers: { name: string; value: string }[] = []
+  const stack: string[] = []
+  const backtrace: string[] = []
+  let section: 'registers' | 'stack' | 'backtrace' | null = null
+
+  for (const line of raw.split('\n')) {
+    if (line === 'Registers:') {
+      section = 'registers'
+      continue
+    }
+    if (line === 'Stack dump:') {
+      section = 'stack'
+      continue
+    }
+    if (line === 'Backtrace:') {
+      section = 'backtrace'
+      continue
+    }
+    if (!line) continue
+
+    if (section === 'registers') {
+      for (const pair of line.split(/\s+/)) {
+        const [name, value] = pair.split('=')
+        if (name && value) registers.push({ name, value })
+      }
+      section = null // the register line is exactly one line
+    } else if (section === 'stack') {
+      stack.push(line)
+    } else if (section === 'backtrace') {
+      backtrace.push(line)
+    }
+  }
+  return { registers, stack, backtrace }
+}
+
+/**
+ * What Mod Loader's own crash handler captured, laid out as its own readable
+ * blocks rather than left inside the raw-event text. The raw blob below this
+ * still carries the same text in full - this is an addition, not a replacement.
+ */
+function ModLoaderCrashDetail(props: { raw: string; t: TranslateFn }): JSX.Element | null {
+  const { raw, t } = props
+  const parsed = parseModLoaderDetail(raw)
+  if (!parsed.registers.length && !parsed.stack.length && !parsed.backtrace.length) return null
+
+  return (
+    <>
+      <hr className="divider" />
+      {parsed.registers.length ? (
+        <>
+          <h3>{t('crashes.registers')}</h3>
+          <div className="row wrap mono" style={{ gap: '4px 16px', marginBottom: 8 }}>
+            {parsed.registers.map((r) => (
+              <span key={r.name}>
+                <strong>{r.name}</strong>={r.value}
+              </span>
+            ))}
+          </div>
+        </>
+      ) : null}
+      {parsed.backtrace.length ? (
+        <>
+          <h3>{t('crashes.backtrace')}</h3>
+          <pre className="pre mono">{parsed.backtrace.join('\n')}</pre>
+        </>
+      ) : null}
+      {parsed.stack.length ? (
+        <>
+          <h3>{t('crashes.stackDump')}</h3>
+          <pre className="pre mono">{parsed.stack.join('\n')}</pre>
+        </>
+      ) : null}
+    </>
   )
 }
 

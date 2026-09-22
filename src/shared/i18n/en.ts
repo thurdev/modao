@@ -112,7 +112,10 @@ export const en: DeepPartial<typeof ptBR> = {
     deepAnalysisNotFound:
       'This address does not fall inside any section of gta_sa.exe as read from disk - it may belong to a DLL, a region generated at runtime, or the executable on disk is not the one that crashed.',
     deepAnalysisDisclaimer:
-      'This is a hex window around the crash address, not a disassembly: Modão has no x86 decoder and bundles neither Python nor capstone. Paste these bytes into a disassembler (a hex-to-asm site, IDA Free, Ghidra) to read the actual instructions.'
+      'This is a hex window around the crash address, not a disassembly: Modão has no x86 decoder and bundles neither Python nor capstone. Paste these bytes into a disassembler (a hex-to-asm site, IDA Free, Ghidra) to read the actual instructions.',
+    registers: 'Registers at the moment of the fault',
+    backtrace: 'Backtrace',
+    stackDump: 'Stack dump'
   },
   access: {
     theGameFolder: 'the game folder',

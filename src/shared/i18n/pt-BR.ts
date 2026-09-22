@@ -109,7 +109,10 @@ export const ptBR = {
     deepAnalysisNotFound:
       'Esse endereço não cai dentro de nenhuma seção do gta_sa.exe lido do disco — pode pertencer a uma DLL, a uma região gerada em tempo de execução, ou o executável no disco não é o mesmo que crashou.',
     deepAnalysisDisclaimer:
-      'Isto é uma janela de bytes ao redor do endereço do crash, não uma desmontagem: o Modão não tem um decodificador x86 e não empacota Python nem capstone. Cole esses bytes num desmontador (um site hex-para-asm, IDA Free, Ghidra) para ler as instruções de verdade.'
+      'Isto é uma janela de bytes ao redor do endereço do crash, não uma desmontagem: o Modão não tem um decodificador x86 e não empacota Python nem capstone. Cole esses bytes num desmontador (um site hex-para-asm, IDA Free, Ghidra) para ler as instruções de verdade.',
+    registers: 'Registradores no momento da falha',
+    backtrace: 'Backtrace',
+    stackDump: 'Stack dump'
   },
   access: {
     theGameFolder: 'a pasta do jogo',
