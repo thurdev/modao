@@ -1,0 +1,223 @@
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import type { CrashIncident, CrashReport } from '@shared/types'
+import { getDb } from '../db'
+import { lookup } from './crashlist'
+import { groupIncidents, parseModuleName, resolveCrashAddress } from '@shared/crash'
+
+const execFileAsync = promisify(execFile)
+
+export interface RawCrashEvent {
+  timeCreated: string
+  message: string
+  provider: string
+}
+
+/**
+ * Reads crash records straight out of the Windows Event Log:
+ *   Log "Application", provider "Application Error", matching gta_sa.exe.
+ *
+ * A hang is different: it produces either an "Application Hang" record or no
+ * record at all. The absence of an entry is itself diagnostic - it means the
+ * game stopped responding rather than crashing, which rules out the whole
+ * exception-address workflow.
+ */
+export async function readCrashEvents(maxEvents = 200): Promise<RawCrashEvent[]> {
+  const ps = `
+$ErrorActionPreference = 'SilentlyContinue'
+$events = Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName=@('Application Error','Application Hang')} -MaxEvents ${maxEvents}
+$events | Where-Object { $_.Message -like '*gta_sa.exe*' } |
+  Select-Object @{n='timeCreated';e={$_.TimeCreated.ToString('o')}},
+                @{n='provider';e={$_.ProviderName}},
+                @{n='message';e={$_.Message}} |
+  ConvertTo-Json -Depth 3 -Compress
+`
+  const { stdout } = await execFileAsync(
+    'powershell.exe',
+    ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', ps],
+    { windowsHide: true, maxBuffer: 16 * 1024 * 1024 }
+  ).catch((e: Error & { stdout?: string }) => ({ stdout: e.stdout ?? '' }))
+
+  const text = stdout.trim()
+  if (!text) return []
+  try {
+    const parsed = JSON.parse(text) as RawCrashEvent | RawCrashEvent[]
+    return Array.isArray(parsed) ? parsed : [parsed]
+  } catch {
+    return []
+  }
+}
+
+export interface ParsedCrash {
+  occurredAt: string
+  module: string
+  exceptionCode: string
+  faultOffset: string
+  /** Windows reports the pid of the dead process; every record from one run shares it. */
+  processId: string
+  /** The faulting module was already unloaded when the fault hit. */
+  moduleUnloaded: boolean
+  kind: 'exception' | 'hang'
+  raw: string
+}
+
+export function parseCrashEvent(ev: RawCrashEvent): ParsedCrash | null {
+  const msg = ev.message ?? ''
+  if (!/gta_sa\.exe/i.test(msg)) return null
+  // Every record Windows writes for one dead process carries the same pid, which
+  // is what turns four log lines into one incident.
+  const processId = /Faulting process id:\s*(0x[0-9A-Fa-f]+|\d+)/i.exec(msg)?.[1]?.toLowerCase() ?? ''
+  if (/Application Hang/i.test(ev.provider)) {
+    return {
+      occurredAt: ev.timeCreated,
+      module: 'gta_sa.exe',
+      exceptionCode: '',
+      faultOffset: '',
+      processId,
+      moduleUnloaded: false,
+      kind: 'hang',
+      raw: msg
+    }
+  }
+  const module = /Faulting module name:\s*([^,\r\n]+)/i.exec(msg)?.[1]?.trim() ?? 'unknown'
+  const exceptionCode = /Exception code:\s*(0x[0-9A-Fa-f]+)/i.exec(msg)?.[1] ?? ''
+  const faultOffset = /Fault offset:\s*(0x[0-9A-Fa-f]+)/i.exec(msg)?.[1] ?? ''
+  if (!faultOffset) return null
+  return {
+    occurredAt: ev.timeCreated,
+    module,
+    exceptionCode,
+    faultOffset,
+    processId,
+    moduleUnloaded: parseModuleName(module).unloaded,
+    kind: 'exception',
+    raw: msg
+  }
+}
+
+export interface ScanResult {
+  found: number
+  added: number
+  hangSuspected: boolean
+  message: string
+}
+
+export async function scanCrashes(profileId: number | null): Promise<ScanResult> {
+  const events = await readCrashEvents()
+  const db = getDb()
+  let added = 0
+  let hangs = 0
+
+  for (const ev of events) {
+    const parsed = parseCrashEvent(ev)
+    if (!parsed) continue
+    if (parsed.kind === 'hang') hangs++
+
+    // Only a fault inside gta_sa.exe has an absolute address CrashList can
+    // answer for; a DLL offset looked up against the exe index is a wrong answer
+    // stated confidently.
+    const addressing =
+      parsed.kind === 'exception'
+        ? resolveCrashAddress(parsed.module, parsed.faultOffset)
+        : { kind: 'none' as const, display: '', lookupAddress: null, note: null }
+    const match = addressing.lookupAddress ? await lookup(addressing.lookupAddress) : null
+    const cause = match?.cause ?? (match?.nearest ? `${match.nearest.cause} (nearest known address ${match.nearest.address})` : null)
+
+    const info = db
+      .prepare(
+        `INSERT OR IGNORE INTO crash_report
+           (profile_id, occurred_at, fault_offset, module, exception_code, crash_address, matched_cause, matched_solution,
+            kind, raw, resolved, process_id, module_unloaded, address_kind, address_note)
+         VALUES (?,?,?,?,?,?,?,?,?,?,0,?,?,?,?)`
+      )
+      .run(
+        profileId,
+        parsed.occurredAt,
+        parsed.faultOffset,
+        parsed.module,
+        parsed.exceptionCode,
+        addressing.display,
+        cause,
+        match?.solution ?? null,
+        parsed.kind,
+        parsed.raw,
+        parsed.processId,
+        parsed.moduleUnloaded ? 1 : 0,
+        addressing.kind,
+        addressing.note
+      )
+    if (info.changes > 0) added++
+  }
+
+  const message =
+    events.length === 0
+      ? 'No "Application Error" record for gta_sa.exe in the Windows Event Log. If the game stopped responding rather than closing, that is expected: a hang leaves no exception record, and the absence of one rules out a crash address entirely.'
+      : `${events.length} event(s) found, ${added} new.${hangs ? ` ${hangs} were hangs (no fault address available).` : ''}`
+
+  return { found: events.length, added, hangSuspected: events.length === 0 || hangs > 0, message }
+}
+
+export function listCrashes(profileId: number | null): CrashReport[] {
+  const rows = getDb()
+    .prepare(
+      profileId === null
+        ? 'SELECT * FROM crash_report ORDER BY occurred_at DESC LIMIT 100'
+        : 'SELECT * FROM crash_report WHERE profile_id = ? OR profile_id IS NULL ORDER BY occurred_at DESC LIMIT 100'
+    )
+    .all(...(profileId === null ? [] : [profileId])) as {
+    id: number
+    profile_id: number | null
+    occurred_at: string
+    fault_offset: string
+    module: string
+    exception_code: string
+    crash_address: string
+    matched_cause: string | null
+    matched_solution: string | null
+    kind: string
+    raw: string
+    resolved: number
+    process_id: string | null
+    module_unloaded: number | null
+    address_kind: string | null
+    address_note: string | null
+  }[]
+  return rows.map((r) => {
+    // Rows written before the module-aware scan have no addressing recorded;
+    // derive it here rather than showing the old exe-only guess.
+    const addressing =
+      r.kind === 'hang'
+        ? { kind: 'none' as const, display: '', lookupAddress: null, note: null }
+        : resolveCrashAddress(r.module, r.fault_offset)
+    const kind = (r.address_kind as CrashReport['addressKind'] | null) ?? addressing.kind
+    return {
+      id: r.id,
+      profileId: r.profile_id,
+      occurredAt: r.occurred_at,
+      faultOffset: r.fault_offset,
+      module: parseModuleName(r.module).name,
+      moduleRaw: r.module,
+      moduleUnloaded: r.module_unloaded === null ? parseModuleName(r.module).unloaded : !!r.module_unloaded,
+      processId: r.process_id ?? '',
+      exceptionCode: r.exception_code,
+      crashAddress: kind === 'exe' ? r.crash_address || addressing.display : addressing.display,
+      addressKind: kind,
+      addressNote: r.address_note ?? addressing.note,
+      matchedCause: kind === 'exe' ? r.matched_cause : null,
+      matchedSolution: kind === 'exe' ? r.matched_solution : null,
+      resolved: !!r.resolved,
+      kind: r.kind === 'hang' ? 'hang' : 'exception',
+      raw: r.raw
+    }
+  })
+}
+
+export { groupIncidents }
+
+export function listIncidents(profileId: number | null): CrashIncident[] {
+  return groupIncidents(listCrashes(profileId))
+}
+
+export function setCrashResolved(id: number, resolved: boolean): void {
+  getDb().prepare('UPDATE crash_report SET resolved = ? WHERE id = ?').run(resolved ? 1 : 0, id)
+}

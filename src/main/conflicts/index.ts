@@ -1,0 +1,126 @@
+import path from 'node:path'
+import type { ConflictClaimant, FileConflict } from '@shared/types'
+import { getDb } from '../db'
+import { resolveWinner } from '../game/modloaderIni'
+import { storeDir } from '../store/contentStore'
+import { analyzeTxd, describeTxdProblems } from '../formats/txd'
+import { exists } from '../util/fsx'
+
+interface ProvidesRow {
+  install_id: number
+  relative_path: string
+  sha256: string | null
+  size: number
+  priority: number
+  enabled: number
+  mod_id: number
+  title: string
+  folder_name: string | null
+  store_key: string | null
+}
+
+/**
+ * The conflict index answers one question: when two mods supply the same
+ * relative filename, which one does Mod Loader actually load? Priority decides
+ * it - higher wins, 0 means the mod is ignored entirely, ties fall back to
+ * folder order.
+ */
+export function listConflicts(profileId: number, overrides: Record<number, number> = {}): FileConflict[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT p.install_id, p.relative_path, p.sha256, p.size,
+              i.priority, i.enabled, i.folder_name, i.store_key,
+              m.id AS mod_id, m.title
+         FROM provides p
+         JOIN install i ON i.id = p.install_id
+         JOIN mod_version mv ON mv.id = i.mod_version_id
+         JOIN mod m ON m.id = mv.mod_id
+        WHERE i.profile_id = ?
+          AND p.relative_path IN (
+              SELECT p2.relative_path FROM provides p2
+              JOIN install i2 ON i2.id = p2.install_id
+             WHERE i2.profile_id = ?
+             GROUP BY p2.relative_path HAVING COUNT(DISTINCT p2.install_id) > 1)
+        ORDER BY p.relative_path`
+    )
+    .all(profileId, profileId) as ProvidesRow[]
+
+  const byPath = new Map<string, ProvidesRow[]>()
+  for (const r of rows) {
+    const list = byPath.get(r.relative_path) ?? []
+    list.push(r)
+    byPath.set(r.relative_path, list)
+  }
+
+  const conflicts: FileConflict[] = []
+  for (const [relativePath, group] of byPath) {
+    const claimants: ConflictClaimant[] = group.map((g) => ({
+      installId: g.install_id,
+      modId: g.mod_id,
+      title: g.title,
+      priority: overrides[g.install_id] ?? g.priority,
+      enabled: !!g.enabled,
+      size: g.size,
+      sha256: g.sha256 ?? ''
+    }))
+    // Identical bytes from both mods are not a real conflict.
+    const distinct = new Set(claimants.map((c) => c.sha256).filter(Boolean))
+    const winnerRow = resolveWinner(
+      group.map((g) => ({
+        priority: overrides[g.install_id] ?? g.priority,
+        folder: g.folder_name ?? g.title,
+        enabled: !!g.enabled,
+        installId: g.install_id
+      }))
+    )
+    conflicts.push({
+      relativePath,
+      kind: relativePath.startsWith('cleo/') || relativePath.startsWith('scripts/') ? 'physical' : 'modloader',
+      claimants,
+      winner: winnerRow ? claimants.find((c) => c.installId === winnerRow.installId) ?? null : null,
+      binaryNotes: distinct.size <= 1 ? ['Both mods ship identical bytes - the winner does not matter here.'] : []
+    })
+  }
+  return conflicts.sort((a, b) => b.claimants.length - a.claimants.length || a.relativePath.localeCompare(b.relativePath))
+}
+
+/** Adds binary-level detail (non-power-of-two textures) to the most contested files. */
+export async function annotateConflicts(conflicts: FileConflict[], limit = 25): Promise<FileConflict[]> {
+  let budget = limit
+  for (const c of conflicts) {
+    if (budget <= 0) break
+    if (!/\.txd$/i.test(c.relativePath)) continue
+    for (const claim of c.claimants) {
+      if (budget-- <= 0) break
+      const file = locateProvided(claim.installId, c.relativePath)
+      if (!file) continue
+      const a = await analyzeTxd(file).catch(() => null)
+      if (!a) continue
+      const problems = describeTxdProblems(a)
+      if (problems.length) c.binaryNotes.push(`${claim.title}: ${problems.join(' ')}`)
+      else c.binaryNotes.push(`${claim.title}: ${a.textureCount} textures, all power-of-two.`)
+    }
+  }
+  return conflicts
+}
+
+/** Resolves a provides key back to the file inside the content store. */
+export function locateProvided(installId: number, providesKey: string): string | null {
+  const row = getDb()
+    .prepare(
+      `SELECT i.store_key, f.relative_path
+         FROM install i
+         JOIN install_file f ON f.install_id = i.id
+        WHERE i.id = ? AND lower(f.relative_path) LIKE ?`
+    )
+    .get(installId, `%${providesKey.toLowerCase()}`) as { store_key: string; relative_path: string } | undefined
+  if (!row?.store_key) return null
+  const p = path.join(storeDir(row.store_key), row.relative_path)
+  return exists(p) ? p : null
+}
+
+/** The conflict key a file is indexed under: inside a Mod Loader folder, the path relative to that folder. */
+export function providesKey(gameRelative: string): string {
+  const m = /^modloader\/[^/]+\/(.+)$/i.exec(gameRelative)
+  return (m ? m[1] : gameRelative).toLowerCase()
+}
