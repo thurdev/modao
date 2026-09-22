@@ -3,7 +3,7 @@ import { promisify } from 'node:util'
 import type { CrashIncident, CrashReport } from '@shared/types'
 import { getDb } from '../db'
 import { lookup } from './crashlist'
-import { groupIncidents, parseModuleName, resolveCrashAddress } from '@shared/crash'
+import { describeAbsoluteAddress, groupIncidents, parseModuleName, resolveCrashAddress } from '@shared/crash'
 import { activeGame } from '../game/detect'
 
 const execFileAsync = promisify(execFile)
@@ -195,13 +195,17 @@ export function listCrashes(profileId: number | null): CrashReport[] {
     address_note: string | null
   }[]
   return rows.map((r) => {
-    // Rows written before the module-aware scan have no addressing recorded;
-    // derive it here rather than showing the old exe-only guess.
-    const addressing =
-      r.kind === 'hang'
-        ? { kind: 'none' as const, display: '', lookupAddress: null, note: null }
-        : resolveCrashAddress(r.module, r.fault_offset)
-    const kind = (r.address_kind as CrashReport['addressKind'] | null) ?? addressing.kind
+    // A row written by the module-aware scan already holds the finished
+    // address, computed once at the single site that adds the image base -
+    // reading it back must never re-derive it, or an absolute address from
+    // modloader.log gets the base added a second time on every read.
+    //
+    // Only rows written before address_kind existed are derived here, and for
+    // those the derivation is authoritative: a stale exe-era address stored
+    // against a DLL fault must not leak back out.
+    const legacy =
+      r.address_kind === null && r.kind !== 'hang' ? resolveCrashAddress(r.module, r.fault_offset) : null
+    const kind = (r.address_kind as CrashReport['addressKind'] | null) ?? legacy?.kind ?? 'none'
     return {
       id: r.id,
       profileId: r.profile_id,
@@ -212,9 +216,9 @@ export function listCrashes(profileId: number | null): CrashReport[] {
       moduleUnloaded: r.module_unloaded === null ? parseModuleName(r.module).unloaded : !!r.module_unloaded,
       processId: r.process_id ?? '',
       exceptionCode: r.exception_code,
-      crashAddress: kind === 'exe' ? r.crash_address || addressing.display : addressing.display,
+      crashAddress: legacy ? legacy.display : r.crash_address,
       addressKind: kind,
-      addressNote: r.address_note ?? addressing.note,
+      addressNote: r.address_note ?? legacy?.note ?? null,
       matchedCause: kind === 'exe' ? r.matched_cause : null,
       matchedSolution: kind === 'exe' ? r.matched_solution : null,
       resolved: !!r.resolved,
@@ -253,7 +257,11 @@ async function scanModLoaderCrash(profileId: number | null): Promise<{ added: nu
   if (!crash) return { added: 0, note: null }
 
   const occurredAt = crash.occurredAt ?? new Date().toISOString()
-  const addressing = crash.module ? resolveCrashAddress(crash.module, crash.address ?? '') : null
+  // modloader.log records the address the process faulted at - the image base
+  // is already in it (crash.addressIsAbsolute). Putting it through
+  // resolveCrashAddress would add 0x400000 to a number that has it, turning the
+  // real 0x005B8E55 into a meaningless 0x009B8E55.
+  const addressing = crash.module ? describeAbsoluteAddress(crash.module, crash.address ?? '') : null
   const detail = [
     crash.reason,
     crash.lastStreamedFile ? `Last file opened for streaming: ${crash.lastStreamedFile}` : '',
@@ -272,7 +280,10 @@ async function scanModLoaderCrash(profileId: number | null): Promise<{ added: nu
     .run(
       profileId,
       occurredAt,
-      crash.address ?? '',
+      // fault_offset stays EMPTY: this source reports no offset, and storing
+      // the absolute address in that column is what made listCrashes re-derive
+      // base + already-based-address on every read.
+      '',
       crash.module ?? 'gta_sa.exe',
       '',
       addressing?.display ?? crash.address ?? '',

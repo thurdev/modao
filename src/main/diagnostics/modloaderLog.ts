@@ -160,6 +160,9 @@ export function parseCrashDump(text: string): ModLoaderCrash | null {
     /EXCEPTION_[A-Z_]+/.exec(tail)?.[0] ??
     'Mod Loader recorded a crash'
 
+  // This is the address the process faulted at, as the process saw it: the
+  // image base is already in it. It is NOT a fault offset, and the caller is
+  // told so by addressIsAbsolute below.
   const address = /(?:at|address)\s+(0x[0-9A-Fa-f]{6,16})/i.exec(tail)?.[1] ?? /\b(0x[0-9A-Fa-f]{8})\b/.exec(tail)?.[1] ?? null
   const module = /in module "?([A-Za-z0-9_.\- ]+\.(?:exe|dll|asi))"?/i.exec(tail)?.[1] ?? null
 
@@ -180,7 +183,7 @@ export function parseCrashDump(text: string): ModLoaderCrash | null {
   const streamed = [...text.matchAll(/Opening file for streaming "?([^"\r\n]+)"?/gi)].pop()?.[1] ?? null
   const when = /\[(\d{4}-\d{2}-\d{2}[^\]]*)\]/.exec(tail)?.[1] ?? null
 
-  return { occurredAt: when, reason, address, module, backtrace, lastStreamedFile: streamed }
+  return { occurredAt: when, reason, address, addressIsAbsolute: true, module, backtrace, lastStreamedFile: streamed }
 }
 
 export async function reportFromGame(gamePath: string, expected: string[] = []): Promise<ModLoaderLogReport | null> {

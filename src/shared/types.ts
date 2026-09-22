@@ -645,6 +645,12 @@ export interface ModLoaderCrash {
   occurredAt: string | null
   reason: string
   address: string | null
+  /**
+   * Mod Loader's handler records the address the process faulted at, which is
+   * already absolute - the image base is in it. Marked so no caller can mistake
+   * it for a fault offset and base it a second time.
+   */
+  addressIsAbsolute: true
   module: string | null
   backtrace: string[]
   lastStreamedFile: string | null

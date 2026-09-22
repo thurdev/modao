@@ -18,7 +18,14 @@ import {
   applyIgnoreState,
   readIgnoreState
 } from '../src/main/game/modloaderIni'
-import { groupIncidents, parseModuleName, resolveCrashAddress } from '../src/shared/crash'
+import {
+  describeAbsoluteAddress,
+  groupIncidents,
+  normalizeAddress,
+  parseModuleName,
+  resolveCrashAddress
+} from '../src/shared/crash'
+import { collectAddresses, parseCrashList } from '../src/shared/crashlist'
 import type { CrashReport } from '../src/shared/types'
 import {
   canonicalDependencyName,
@@ -203,6 +210,26 @@ check('crash: a DLL fault is shown as module+offset', dllCrash.kind === 'module'
 check('crash: a DLL fault is never looked up in CrashList', dllCrash.lookupAddress === null, dllCrash)
 check('crash: the UI is told why there is no lookup', !!dllCrash.note && /CrashList/.test(dllCrash.note), dllCrash.note)
 
+// The literal VERIFY of spec item 05: feed it a std.data.dll_unloaded event and
+// assert it does not add the image base. The "_unloaded" suffix must not make
+// the module stop being a DLL.
+const unloadedCrash = resolveCrashAddress('std.data.dll_unloaded', '0x0001a2b0')
+check(
+  'crash: an already-unloaded DLL fault does not get the image base',
+  unloadedCrash.kind === 'module' && !/0x004[0-9A-F]{5}/.test(unloadedCrash.display),
+  unloadedCrash
+)
+check(
+  'crash: an already-unloaded DLL fault still renders as module+offset',
+  unloadedCrash.display === 'std.data.dll+0x0001A2B0',
+  unloadedCrash.display
+)
+check(
+  'crash: an already-unloaded DLL fault is never looked up in CrashList',
+  unloadedCrash.lookupAddress === null,
+  unloadedCrash
+)
+
 check('crash: an unloaded module is recognised', parseModuleName('std.data.dll_unloaded').unloaded)
 check('crash: its real name is kept', parseModuleName('std.data.dll_unloaded').name === 'std.data.dll')
 check('crash: gta_sa.exe is recognised whatever the case', parseModuleName('GTA_SA.EXE').isExe)
@@ -244,6 +271,130 @@ check(
   grouped.primary.module
 )
 check('crash: incidents are listed newest first', incidents[0].processId === '0x2b10', incidents.map((i) => i.processId))
+
+// --- the image base is added once, at one site -------------------------------
+// The field report saw one crash rendered as both 0x004C67BB and 0x008C67BB:
+// 0x400000 added to an address that already had it. A source that reports an
+// ABSOLUTE address - modloader.log's own crash handler - goes through
+// describeAbsoluteAddress, which normalises and adds nothing.
+const absolute = describeAbsoluteAddress('gta_sa.exe', '0x005B8E55')
+check(
+  'crash: an already-absolute address is not based a second time',
+  absolute.kind === 'exe' && absolute.display === '0x005B8E55' && absolute.lookupAddress === '0x005B8E55',
+  absolute
+)
+check(
+  'crash: describing an absolute address twice changes nothing',
+  describeAbsoluteAddress('gta_sa.exe', absolute.display).display === '0x005B8E55',
+  describeAbsoluteAddress('gta_sa.exe', absolute.display)
+)
+check(
+  'crash: an absolute address inside a DLL is still never looked up',
+  describeAbsoluteAddress('std.data.dll', '0x0F2B1000').lookupAddress === null,
+  describeAbsoluteAddress('std.data.dll', '0x0F2B1000')
+)
+
+// The spec's own VERIFY for item 06, run as a test: "search for every site that
+// adds 0x400000 and confirm there is only one." String literals and prose are
+// stripped first - the UI labels the arithmetic, it does not perform it.
+function sourceFilesUnder(dir: string, out: string[] = []): string[] {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name)
+    if (entry.isDirectory()) sourceFilesUnder(full, out)
+    else if (/\.tsx?$/.test(entry.name)) out.push(full)
+  }
+  return out
+}
+const baseAdditions: string[] = []
+for (const file of sourceFilesUnder('src')) {
+  fs.readFileSync(file, 'utf8')
+    .split(/\r?\n/)
+    .forEach((line, i) => {
+      const code = line.replace(/'[^']*'|"[^"]*"|`[^`]*`/g, '')
+      if (/(?:IMAGE_BASE|0x400000|4194304)\s*\+|\+\s*(?:IMAGE_BASE|0x400000|4194304)\b/.test(code)) {
+        baseAdditions.push(`${file.replace(/\\/g, '/')}:${i + 1}`)
+      }
+    })
+}
+check(
+  'crash: exactly one site in src/ adds the image base',
+  baseAdditions.length === 1 && baseAdditions[0].startsWith('src/shared/crash.ts:'),
+  baseAdditions
+)
+
+// --- CrashList ---------------------------------------------------------------
+// The real CrashList is a pt-BR document in Windows-1252, written as
+// "Erro:"/"Causa:" stanzas - not an ini. A parser anchored on hex at the start
+// of the line matches none of it, which is why two addresses that ARE in the
+// list came back as "não está no CrashList".
+const bundledCrashList = parseCrashList(
+  iconv.decode(fs.readFileSync(path.join('resources', 'seed', 'CrashList.txt')), 'win1252')
+)
+check(
+  'CrashList: 0x004C67BB resolves to the pedestrian model limit entry',
+  /Limite de modelos de pedestres no \.ide/.test(bundledCrashList.get('0x004C67BB')?.cause ?? ''),
+  bundledCrashList.get('0x004C67BB')
+)
+check(
+  'CrashList: 0x007F3825 resolves to the texture unload entry',
+  /Descarregamento de uma textura/.test(bundledCrashList.get('0x007F3825')?.cause ?? ''),
+  bundledCrashList.get('0x007F3825')
+)
+check(
+  'CrashList: the one-liner entries of the bundled excerpt are still read',
+  /modelo que nao existe/.test(bundledCrashList.get('0x00749B7B')?.cause ?? ''),
+  bundledCrashList.get('0x00749B7B')
+)
+check(
+  'CrashList: case, 0x prefix and zero padding are all the same key',
+  ['4c67bb', '0X004C67BB', '004c67bb', '0x4C67BB'].every(
+    (a) => bundledCrashList.get(normalizeAddress(a))?.address === '0x004C67BB'
+  )
+)
+
+// A stanza indexes EVERY address it names, including runs joined by "Ou".
+const multiLine = parseCrashList(
+  [
+    'Erro: 0x004C9691 0x00732924 0x00749B7B',
+    'Causa: Três endereços, uma causa.',
+    '',
+    'Erro: 0x00564192 0x0053CB61 Ou 0x00801D58 0x005D9802 0x007F3851 0x00552A53',
+    'Causa: Dois grupos separados por Ou.',
+    'Solução: Continua sendo uma entrada só.',
+    '',
+    'Erro: 0x006A1000',
+    'Ou 0x006A2000',
+    'Causa: O Ou continuou na linha seguinte.'
+  ].join('\r\n')
+)
+check(
+  'CrashList: every address on a multi-address Erro: line is indexed',
+  ['0x004C9691', '0x00732924', '0x00749B7B'].every((a) => multiLine.get(a)?.cause === 'Três endereços, uma causa.'),
+  [...multiLine.keys()]
+)
+check(
+  'CrashList: an Ou line indexes both runs against the one entry',
+  ['0x00564192', '0x0053CB61', '0x00801D58', '0x005D9802', '0x007F3851', '0x00552A53'].every(
+    (a) => multiLine.get(a)?.cause === 'Dois grupos separados por Ou.'
+  ),
+  [...multiLine.keys()]
+)
+check(
+  'CrashList: the entry keeps its solution across every address it names',
+  multiLine.get('0x00552A53')?.solution === 'Continua sendo uma entrada só.',
+  multiLine.get('0x00552A53')
+)
+check(
+  'CrashList: an Ou continued onto its own line still belongs to the entry',
+  multiLine.get('0x006A1000')?.cause === 'O Ou continuou na linha seguinte.' &&
+    multiLine.get('0x006A2000')?.cause === 'O Ou continuou na linha seguinte.',
+  [multiLine.get('0x006A1000'), multiLine.get('0x006A2000')]
+)
+check(
+  'CrashList: a pt-BR word spelled in hex digits is not read as an address',
+  collectAddresses('Causa: a textura dedada do veiculo').length === 0,
+  collectAddresses('Causa: a textura dedada do veiculo')
+)
 
 // --- readme ------------------------------------------------------------------
 const readmePt = iconv.encode(

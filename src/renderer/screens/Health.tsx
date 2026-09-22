@@ -365,7 +365,9 @@ function Crashes(props: { profileId: number; pushToast: ToastFn }): JSX.Element 
               <dt>{detail.primary.addressKind === 'exe' ? t('crashes.crashAddress') : t('crashes.faultLocation')}</dt>
               <dd className="mono">
                 {detail.primary.crashAddress || '—'}
-                {detail.primary.addressKind === 'exe' ? ' (0x400000 + fault offset)' : ''}
+                {/* Only true when there WAS a fault offset. A modloader.log crash
+                    reports the absolute address directly and nothing was added. */}
+                {detail.primary.addressKind === 'exe' && detail.primary.faultOffset ? ' (0x400000 + fault offset)' : ''}
               </dd>
             </dl>
 

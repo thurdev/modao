@@ -121,6 +121,10 @@ export async function runSmoke(): Promise<number> {
   check('fault offset 0x00349b7b maps to 0x00749B7B', address === '0x00749B7B', address)
   const match = await lookup(address)
   check('CrashList match found', !!match.cause && /modelo|txd/i.test(match.cause), match)
+  // Not pinned to the bundled excerpt: this is an address the spec names, read
+  // out of an "Erro:" stanza, so a refreshed CrashList still answers it.
+  const pedLimit = await lookup('0x004c67bb')
+  check('CrashList reads an Erro: stanza', /Limite de modelos de pedestres/i.test(pedLimit.cause ?? ''), pedLimit)
 
   check('provides key strips the mod folder', providesKey('modloader/Weapon Icons/models/hud.txd') === 'models/hud.txd')
   check('provides key keeps non-modloader paths', providesKey('cleo/radar.cs') === 'cleo/radar.cs')

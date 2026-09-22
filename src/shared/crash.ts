@@ -54,6 +54,9 @@ export function resolveCrashAddress(module: string, faultOffset: string): CrashA
     return { kind: 'none', display: raw, lookupAddress: null, note: 'The fault offset could not be read.' }
   }
   if (m.isExe) {
+    // The ONLY place in the codebase that adds the image base. Everything that
+    // needs an absolute address goes through here or through a value this
+    // produced; nothing adds it a second time.
     const address = normalizeAddress(IMAGE_BASE + off)
     return { kind: 'exe', display: address, lookupAddress: address, note: null }
   }
@@ -61,11 +64,43 @@ export function resolveCrashAddress(module: string, faultOffset: string): CrashA
     kind: 'module',
     display: `${m.name || 'unknown module'}+0x${off.toString(16).toUpperCase().padStart(8, '0')}`,
     lookupAddress: null,
-    note:
-      `The fault is inside ${m.name || 'another module'}, not gta_sa.exe. CrashList indexes addresses in the ` +
-      'executable only, so there is nothing to look this up against: the offset is relative to that module, ' +
-      'and Windows does not report where it was loaded.'
+    note: foreignModuleNote(m.name)
   }
+}
+
+/**
+ * The same answer for a source that already reports an ABSOLUTE address.
+ *
+ * Mod Loader's own crash handler writes the address as the process saw it -
+ * image base included - so running it through resolveCrashAddress adds
+ * 0x400000 to a number that already has it and produces the 0x009B8E55 shape
+ * the field report describes. This normalises and adds nothing.
+ */
+export function describeAbsoluteAddress(module: string, absolute: string): CrashAddressing {
+  const m = parseModuleName(module)
+  const raw = String(absolute ?? '').trim()
+  if (!raw) return { kind: 'none', display: '', lookupAddress: null, note: 'No crash address was recorded.' }
+  const n = Number.parseInt(raw.replace(/^0x/i, ''), 16)
+  if (!Number.isFinite(n)) {
+    return { kind: 'none', display: raw, lookupAddress: null, note: 'The crash address could not be read.' }
+  }
+  const address = normalizeAddress(n)
+  if (m.isExe) return { kind: 'exe', display: address, lookupAddress: address, note: null }
+  return {
+    kind: 'module',
+    // Absolute, so there is no offset to show: the DLL's own base is unknown.
+    display: `${m.name || 'unknown module'} @ ${address}`,
+    lookupAddress: null,
+    note: foreignModuleNote(m.name)
+  }
+}
+
+function foreignModuleNote(name: string): string {
+  return (
+    `The fault is inside ${name || 'another module'}, not gta_sa.exe. CrashList indexes addresses in the ` +
+    'executable only, so there is nothing to look this up against: the offset is relative to that module, ' +
+    'and Windows does not report where it was loaded.'
+  )
 }
 
 /** The line to show for a module that was already unloaded when the fault hit. */
