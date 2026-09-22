@@ -621,3 +621,52 @@ export async function restoreFromJournal(
   db.prepare("UPDATE switch_journal SET state = 'restored', restored_at = ? WHERE id = ?").run(new Date().toISOString(), journalId)
   return { restored, problems }
 }
+
+export interface ForgottenInstall {
+  installId: number
+  label: string
+  /** The paths that are gone, so the user can see what they are losing. */
+  files: string[]
+}
+
+/**
+ * Drops installs whose payload no longer exists anywhere.
+ *
+ * A profile can end up holding mods that are gone: adopted from the game folder
+ * before the app copied anything into its store, then deleted from that folder.
+ * Nothing can materialise them, so the switch refuses to run - correctly, but
+ * it leaves the user with a profile they cannot open at all.
+ *
+ * This forgets those entries and nothing else. A mod with files still in the
+ * game folder, or a payload in the store, is never touched, and no file is
+ * removed from disk: the rows go, the disk does not change.
+ */
+export function forgetMissingInstalls(profileId: number): ForgottenInstall[] {
+  const db = getDb()
+  const game = requireActiveGame()
+  const forgotten: ForgottenInstall[] = []
+
+  for (const row of installsOf(profileId)) {
+    const files = db.prepare('SELECT relative_path FROM install_file WHERE install_id = ?').all(row.id) as {
+      relative_path: string
+    }[]
+    const anyLive = files.some((f) => exists(path.join(game.path, f.relative_path)))
+    const hasPayload = row.store_key
+      ? files.some((f) => exists(path.join(storeDir(row.store_key as string), f.relative_path)))
+      : false
+    if (anyLive || hasPayload) continue
+
+    forgotten.push({
+      installId: row.id,
+      label: labelOf(row, files[0]?.relative_path),
+      files: files.map((f) => f.relative_path)
+    })
+    db.transaction(() => {
+      db.prepare('DELETE FROM provides WHERE install_id = ?').run(row.id)
+      db.prepare('DELETE FROM install_file WHERE install_id = ?').run(row.id)
+      db.prepare('DELETE FROM submod_state WHERE install_id = ?').run(row.id)
+      db.prepare('DELETE FROM install WHERE id = ?').run(row.id)
+    })()
+  }
+  return forgotten
+}

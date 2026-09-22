@@ -468,6 +468,25 @@ export async function applyPlan(
     return id
   })()
 
+  // Installing a mod that is already in this profile replaces it. Two entries
+  // for one mod is not a state anyone asked for: it splits the priority, and
+  // deleting the copy that looks redundant takes the files the other one is
+  // still providing.
+  // Matched two ways, because an install from a file has no catalogue version
+  // to compare: the same release, or the same payload in the store - which is
+  // keyed by slug, version and variant, so re-installing one archive lands on
+  // the same key.
+  const previous = getDb()
+    .prepare(
+      `SELECT id FROM install
+        WHERE profile_id = ? AND id != ?
+          AND ((? IS NOT NULL AND mod_version_id = ?) OR (store_key IS NOT NULL AND store_key = ?))`
+    )
+    .all(profileId, installId, plan.modVersionId, plan.modVersionId, key) as { id: number }[]
+  for (const old of previous) {
+    await uninstall(old.id)
+  }
+
   onProgress?.('link', 0, stored.length)
   const backupDir = path.join(Paths.profileBackups(profileId), String(installId))
   const owned = ownedPaths(profileId, installId)

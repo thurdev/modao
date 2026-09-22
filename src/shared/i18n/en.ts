@@ -119,6 +119,8 @@ export const en: DeepPartial<typeof ptBR> = {
     optional: 'You are on {current}. Updating is optional - nothing is installed unless you say so.',
     open: 'See the release',
     updateNow: 'Update now',
+    updateAndRestart: 'Update and restart',
+    checkFailed: 'Could not check for an update: {error}',
     starting: 'Starting…',
     downloading: 'Downloading {percent}% of {size} · {speed}/s',
     readyToInstall: 'Version {version} downloaded and ready',

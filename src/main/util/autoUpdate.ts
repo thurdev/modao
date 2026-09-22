@@ -32,6 +32,8 @@ type Updater = typeof import('electron-updater').autoUpdater
 let updater: Updater | null = null
 let downloading = false
 let downloaded: string | null = null
+/** The user pressed update, so the download installs itself when it lands. */
+let installWhenReady = false
 
 function send(channel: string, payload: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -70,6 +72,14 @@ async function getUpdater(): Promise<Updater | null> {
     downloaded = info.version
     log('update downloaded', { version: info.version })
     send('event:updateReady', { version: info.version })
+    if (installWhenReady) {
+      // They already said yes. Asking again, after the download they waited
+      // for, is a second question about a decision already made.
+      installWhenReady = false
+      setImmediate(() => {
+        void installUpdateAndRestart().catch((e) => logError('auto install failed', e))
+      })
+    }
   })
   autoUpdater.on('error', (err) => {
     downloading = false
@@ -120,12 +130,23 @@ export async function checkForUpdate(): Promise<UpdateStatus> {
       releaseUrl: `https://github.com/thurdev/modao/releases/tag/v${latest ?? current}`
     }
   } catch (e) {
-    return { ...base, error: (e as Error).message }
+    // The feed can be unreachable for reasons that have nothing to do with the
+    // app; fall back to asking GitHub directly so the user still learns that a
+    // version exists, and keep the reason visible either way.
+    logError('update check failed', e)
+    try {
+      const { checkForUpdate: viaApi } = await import('./updates')
+      const status = await viaApi(true)
+      return { ...base, ...status, error: status.error ?? (e as Error).message }
+    } catch {
+      return { ...base, error: (e as Error).message }
+    }
   }
 }
 
 /** Starts the download the user asked for. Progress arrives as events. */
-export async function downloadUpdate(): Promise<{ started: boolean; message: string }> {
+export async function downloadUpdate(andInstall = true): Promise<{ started: boolean; message: string }> {
+  installWhenReady = andInstall
   const u = await getUpdater()
   if (!u) {
     return {

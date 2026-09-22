@@ -317,6 +317,58 @@ const MIGRATIONS: Migration[] = [
            );
       `)
     }
+  },
+  {
+    version: 8,
+    name: 'drop-duplicate-and-re-adopted-installs',
+    up: (d) => {
+      // Adoption used to index a file an install had just placed, so a mod
+      // whose payload is one .asi appeared twice: once as itself, once as
+      // "TrilogyChaosMod.SA.asi". And installing the same mod again added a
+      // second entry instead of replacing the first.
+      //
+      // Both are fixed at the source; these are the rows they already made.
+      // Only bookkeeping is removed - every file stays exactly where it is,
+      // still owned by the install that really provides it.
+      d.exec(`
+        DELETE FROM install WHERE id IN (
+          SELECT a.id FROM install a
+            JOIN mod_version amv ON amv.id = a.mod_version_id
+            JOIN mod am ON am.id = amv.mod_id
+           WHERE am.category = 'Adopted'
+             AND a.store_key IS NULL
+             AND EXISTS (
+               SELECT 1 FROM install_file af
+                 JOIN install_file bf ON lower(bf.relative_path) = lower(af.relative_path)
+                 JOIN install b ON b.id = bf.install_id
+                WHERE af.install_id = a.id AND b.id != a.id AND b.profile_id = a.profile_id
+                  AND b.store_key IS NOT NULL
+             )
+             AND NOT EXISTS (
+               SELECT 1 FROM install_file af
+                WHERE af.install_id = a.id
+                  AND NOT EXISTS (
+                    SELECT 1 FROM install_file bf JOIN install b ON b.id = bf.install_id
+                     WHERE lower(bf.relative_path) = lower(af.relative_path)
+                       AND b.id != a.id AND b.profile_id = a.profile_id
+                  )
+             )
+        );
+
+        DELETE FROM install WHERE id IN (
+          SELECT later.id FROM install later
+           WHERE EXISTS (
+             SELECT 1 FROM install earlier
+              WHERE earlier.profile_id = later.profile_id
+                AND earlier.mod_version_id = later.mod_version_id
+                AND earlier.id < later.id
+           )
+        );
+      `)
+      // install_file and provides follow their install.
+      d.exec('DELETE FROM install_file WHERE install_id NOT IN (SELECT id FROM install)')
+      d.exec('DELETE FROM provides WHERE install_id NOT IN (SELECT id FROM install)')
+    }
   }
 ]
 

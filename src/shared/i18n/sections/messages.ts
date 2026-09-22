@@ -18,6 +18,7 @@ export const messages = {
         'O perfil {profile} não tem esse mod. Requisito satisfeito em outro perfil não vale: o jogo só enxerga o que está materializado agora. Instale ele neste perfil, ou marque que quer instalar assim mesmo.'
     },
     profile: {
+      forgotMissing: '{count} mod(s) que não existem mais foram removidos deste perfil. Nenhum arquivo foi apagado do disco.',
       gone: 'Perfil #{id} não existe mais. Escolha um perfil e tente de novo.',
       switchNotVerified: '{profile} foi ativado, mas não passou na verificação: {problem}',
       seeSwitchReport: 'veja o relatório da troca',
@@ -114,6 +115,8 @@ export const messages = {
         'Profile {profile} does not have it. A requirement satisfied in another profile counts for nothing - the game only sees what is materialised right now. Install it into this profile, or tick that you want to install anyway.'
     },
     profile: {
+      forgotMissing:
+        '{count} mod(s) that no longer exist were removed from this profile. No file was deleted from disk.',
       gone: 'Profile #{id} no longer exists. Pick a profile and try again.',
       switchNotVerified: '{profile} was switched in but did not verify: {problem}',
       seeSwitchReport: 'see the switch report',

@@ -272,9 +272,9 @@ export function registerIpc(): void {
     const { checkForUpdate } = await import('./util/autoUpdate')
     return checkForUpdate()
   })
-  ipcMain.handle('app:downloadUpdate', async () => {
+  ipcMain.handle('app:downloadUpdate', async (_e, andInstall?: boolean) => {
     const { downloadUpdate } = await import('./util/autoUpdate')
-    return downloadUpdate()
+    return downloadUpdate(andInstall !== false)
   })
   ipcMain.handle('app:installUpdate', async () => {
     const { installUpdateAndRestart } = await import('./util/autoUpdate')
@@ -456,6 +456,12 @@ export function registerIpc(): void {
     }
   })
   ipcMain.handle('profiles:switchHistory', () => listJournals())
+  ipcMain.handle('profiles:forgetMissing', async (_e, profileId: number) => {
+    const { forgetMissingInstalls } = await import('./profiles/switchTx')
+    const forgotten = forgetMissingInstalls(requireProfile(profileId))
+    if (forgotten.length) toast('info', t('messages.profile.forgotMissing', { count: forgotten.length }))
+    return forgotten
+  })
   ipcMain.handle('profiles:duplicate', (_e, id: number, name: string) => createProfile({ name, copyFrom: id }))
   ipcMain.handle('profiles:exportArchive', async (_e, id: number) => {
     const manifest = buildManifest(id)

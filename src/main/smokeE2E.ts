@@ -576,26 +576,31 @@ export async function runE2E(): Promise<number> {
     (await sha256File(path.join(game, 'gta_sa.exe'))) === exeBefore
   )
 
-  // The same pack again, as a second install in the same profile.
-  const packPlanB = await createPlan({
-    archivePath: packSource,
+  // Two DIFFERENT mods that ship the same file: removing one must leave what
+  // the other still provides. (The same mod twice is no longer possible - a
+  // second install replaces the first.)
+  const otherSource = path.join(tmp, 'other-mod')
+  await fsp.mkdir(path.join(otherSource, 'modloader', 'Other Mod'), { recursive: true })
+  await fsp.writeFile(path.join(otherSource, 'modloader', 'Other Mod', 'own.dat'), 'its own file')
+  await fsp.writeFile(path.join(otherSource, 'vorbisFile.dll'), 'asi loader')
+  const otherPlan = await createPlan({
+    archivePath: otherSource,
     profileId: risky.id,
     modId: null,
     modVersionId: null,
-    title: 'Essentials',
-    author: 'Junior_Djjr',
+    title: 'Other Mod',
+    author: 'Someone',
     sourceUrl: null
   })
-  const packB = await applyPlan(packPlanB.planId, risky.id)
-  check('pack: the profile now holds two copies of it', packA.installId !== packB.installId)
+  const other = await applyPlan(otherPlan.planId, risky.id)
+  check('pack: a second mod shipping the same loader is installed alongside', other.installId !== packA.installId)
 
   const sharedFile = path.join(game, 'vorbisFile.dll')
   const sharedBytes = await sha256File(sharedFile)
 
-  // Delete the spare, exactly as the user did.
-  const removal = await uninstall(packA.installId)
+  const removal = await uninstall(other.installId)
   check(
-    'pack: deleting the duplicate leaves the files the other copy still provides',
+    'pack: removing one leaves the file the other still provides',
     fs.existsSync(sharedFile) && (await sha256File(sharedFile)) === sharedBytes,
     removal
   )
@@ -612,6 +617,58 @@ export async function runE2E(): Promise<number> {
     'pack: and the game executable survived all of it',
     fs.existsSync(path.join(game, 'gta_sa.exe')) && (await sha256File(path.join(game, 'gta_sa.exe'))) === exeBefore
   )
+
+  // --- one mod, one entry ----------------------------------------------------
+  // A mod whose whole payload is a single .asi appeared three times: once as
+  // itself, once because adoption re-indexed the file it had just placed, and
+  // once more because installing it again added a second entry.
+  const asiOnly = path.join(tmp, 'story-mode')
+  await fsp.mkdir(asiOnly, { recursive: true })
+  await fsp.writeFile(path.join(asiOnly, 'TrilogyChaosMod.SA.asi'), fakePe(4096, 0x60000000, 0x2102))
+
+  const storyPlan = await createPlan({
+    archivePath: asiOnly,
+    profileId: risky.id,
+    modId: null,
+    modVersionId: null,
+    title: 'Story Mode v2.0',
+    author: 'Junior_Djjr',
+    sourceUrl: null
+  })
+  const story = await applyPlan(storyPlan.planId, risky.id)
+  const countNamed = (needle: string): number =>
+    listInstalled(risky.id).filter((m) => m.title.toLowerCase().includes(needle.toLowerCase())).length
+
+  check('one entry: the mod is installed once', countNamed('Story Mode') === 1, listInstalled(risky.id).map((m) => m.title))
+
+  // Adoption must not claim the file the install just placed.
+  const afterInstallScan = await adoptIntoProfile(risky.id)
+  check(
+    'one entry: adoption does not re-index a file an install already owns',
+    countNamed('TrilogyChaosMod') === 0,
+    listInstalled(risky.id).map((m) => m.title)
+  )
+  check('one entry: and it reports nothing adopted', afterInstallScan.adopted === 0, afterInstallScan.report)
+  check(
+    'one entry: the plugin is still in the game folder',
+    fs.existsSync(path.join(game, 'scripts', 'TrilogyChaosMod.SA.asi'))
+  )
+
+  // Installing the same mod again replaces it rather than adding a second.
+  const againPlan = await createPlan({
+    archivePath: asiOnly,
+    profileId: risky.id,
+    modId: storyPlan.modId,
+    modVersionId: storyPlan.modVersionId,
+    title: 'Story Mode v2.0',
+    author: 'Junior_Djjr',
+    sourceUrl: null
+  })
+  const again = await applyPlan(againPlan.planId, risky.id)
+  check('one entry: installing it again still leaves one entry', countNamed('Story Mode') === 1, listInstalled(risky.id).map((m) => m.title))
+  check('one entry: and the file survived the replacement', fs.existsSync(path.join(game, 'scripts', 'TrilogyChaosMod.SA.asi')))
+  void story
+  void again
 
   getDb().prepare('DELETE FROM profile').run()
   await fsp.rm(tmp, { recursive: true, force: true }).catch(() => undefined)

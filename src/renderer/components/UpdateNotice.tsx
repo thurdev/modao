@@ -56,7 +56,10 @@ export function UpdateNotice(): JSX.Element | null {
     }
   }, [pushToast])
 
-  const show = !hidden && !!status && (ready !== null || (status.available && !status.dismissed))
+  // A failed check is shown too: silence reads as "no update", which is the
+  // one thing it does not mean.
+  const show =
+    !hidden && !!status && (ready !== null || (status.available && !status.dismissed) || !!status.error)
   if (!show || !status) return null
 
   return (
@@ -78,7 +81,11 @@ export function UpdateNotice(): JSX.Element | null {
               : t('updates.available', { version: status.latest ?? '' })}
           </strong>
           <span className="faint">
-            {ready ? t('updates.restartExplains') : t('updates.optional', { current: status.current })}
+            {status.error
+              ? t('updates.checkFailed', { error: status.error })
+              : ready
+                ? t('updates.restartExplains')
+                : t('updates.optional', { current: status.current })}
           </span>
 
           {progress ? (
@@ -123,7 +130,8 @@ export function UpdateNotice(): JSX.Element | null {
                   onClick={async () => {
                     setBusy(true)
                     try {
-                      const result = await api.downloadUpdate()
+                      // One decision: it downloads, installs and comes back.
+                      const result = await api.downloadUpdate(true)
                       if (!result.started) {
                         setBusy(false)
                         pushToast('info', result.message)
@@ -134,7 +142,7 @@ export function UpdateNotice(): JSX.Element | null {
                     }
                   }}
                 >
-                  {busy ? t('updates.starting') : t('updates.updateNow')}
+                  {busy ? t('updates.starting') : t('updates.updateAndRestart')}
                 </Button>
               )}
               {status.releaseUrl ? (

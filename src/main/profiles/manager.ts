@@ -643,6 +643,22 @@ async function adoptLoosePlugins(profileId: number, gamePath: string, asiDir: st
   const db = getDb()
   const out: string[] = []
   const now = new Date().toISOString()
+
+  // Files this profile already owns are not loose. Without this check, adoption
+  // indexed a plugin an install had just placed as a mod of its own: a user
+  // installed Story Mode, whose payload is scripts\TrilogyChaosMod.SA.asi, and
+  // ended up with the mod and a second entry called TrilogyChaosMod.SA.asi.
+  const tracked = new Set(
+    (
+      db
+        .prepare(
+          `SELECT lower(f.relative_path) p FROM install_file f
+             JOIN install i ON i.id = f.install_id
+            WHERE i.profile_id = ?`
+        )
+        .all(profileId) as { p: string }[]
+    ).map((r) => r.p.replace(/\\/g, '/'))
+  )
   const groups: { label: string; dir: string; match: RegExp; dest: string }[] = [
     { label: 'ASI plugins', dir: asiDir, match: /\.asi$/i, dest: 'asi-plugin' },
     { label: 'CLEO plugins', dir: path.join(gamePath, 'cleo'), match: /\.cleo\d?$/i, dest: 'cleo-plugin' },
@@ -654,6 +670,9 @@ async function adoptLoosePlugins(profileId: number, gamePath: string, asiDir: st
       .filter((e) => e.isFile() && g.match.test(e.name) && e.name.toLowerCase() !== 'modloader.asi')
       .map((e) => e.name)
     for (const name of files) {
+      // Already owned by an install in this profile: not loose, not adoptable.
+      const owned = path.relative(gamePath, path.join(g.dir, name)).replace(/\\/g, '/').toLowerCase()
+      if (tracked.has(owned)) continue
       const slug = `adopted-${slugify(name)}`
       let mod = db.prepare('SELECT id FROM mod WHERE slug = ?').get(slug) as { id: number } | undefined
       if (!mod) {
@@ -695,7 +714,10 @@ async function adoptLoosePlugins(profileId: number, gamePath: string, asiDir: st
         size
       )
     }
-    if (files.length) out.push(`${g.label}: adopted ${files.length}`)
+    const adoptedHere = files.filter(
+      (name) => !tracked.has(path.relative(gamePath, path.join(g.dir, name)).replace(/\\/g, '/').toLowerCase())
+    ).length
+    if (adoptedHere) out.push(`${g.label}: adopted ${adoptedHere}`)
   }
   return out
 }

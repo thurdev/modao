@@ -116,6 +116,8 @@ export const ptBR = {
     optional: 'Você está na {current}. Atualizar é opcional — nada é instalado sem você mandar.',
     open: 'Ver a release',
     updateNow: 'Atualizar agora',
+    updateAndRestart: 'Atualizar e reiniciar',
+    checkFailed: 'Não deu para verificar atualização: {error}',
     starting: 'Começando…',
     downloading: 'Baixando {percent}% de {size} · {speed}/s',
     readyToInstall: 'Versão {version} baixada e pronta',

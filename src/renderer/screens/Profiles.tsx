@@ -42,8 +42,29 @@ export function ProfilesScreen(): JSX.Element {
       })
     } catch (e) {
       pushToast('error', (e as Error).message)
+      // A switch refused because mods cannot be materialised leaves the user
+      // stuck on a profile they cannot open. Show them exactly which ones, and
+      // offer the way out.
+      if (/cannot be materialised|não podem ser materializados/i.test((e as Error).message)) {
+        await api
+          .switchPlan(p.id)
+          .then(setDryRun)
+          .catch(() => undefined)
+      }
     } finally {
       setSwitching(null)
+    }
+  }
+
+  /** Removes entries for mods that no longer exist anywhere, so the profile opens again. */
+  async function forgetMissing(profileId: number): Promise<void> {
+    try {
+      const forgotten = await api.forgetMissing(profileId)
+      await refreshProfiles()
+      setDryRun(await api.switchPlan(profileId))
+      if (forgotten.length === 0) pushToast('info', t('profiles.nothingToForget'))
+    } catch (e) {
+      pushToast('error', (e as Error).message)
     }
   }
 
@@ -369,7 +390,7 @@ export function ProfilesScreen(): JSX.Element {
               </>
             }
           >
-            <DryRunReport plan={dryRun} />
+            <DryRunReport plan={dryRun} onForgetMissing={() => void forgetMissing(dryRun.toProfileId)} />
           </Modal>
         ) : null}
       </AnimatePresence>
@@ -528,7 +549,7 @@ function VerificationReport(props: { v: SwitchVerification }): JSX.Element {
   )
 }
 
-function DryRunReport(props: { plan: SwitchPlan }): JSX.Element {
+function DryRunReport(props: { plan: SwitchPlan; onForgetMissing?: () => void }): JSX.Element {
   const t = useT()
   const plan = props.plan
   return (
@@ -562,6 +583,14 @@ function DryRunReport(props: { plan: SwitchPlan }): JSX.Element {
                 </li>
               ))}
             </ul>
+            {props.onForgetMissing ? (
+              <span className="row">
+                <Button size="sm" variant="danger" onClick={() => void props.onForgetMissing?.()}>
+                  {t('profiles.forgetMissing', { count: plan.unresolved.length })}
+                </Button>
+                <span className="faint">{t('profiles.forgetMissingHint')}</span>
+              </span>
+            ) : null}
           </div>
         </div>
       ) : null}

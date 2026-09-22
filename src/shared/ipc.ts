@@ -39,7 +39,7 @@ export interface ModãoApi {
     /** Stop offering this exact version. */
     dismissUpdate(version: string): Promise<void>
     /** Download the update the user asked for. Progress arrives as events. */
-    downloadUpdate(): Promise<{ started: boolean; message: string }>
+    downloadUpdate(andInstall?: boolean): Promise<{ started: boolean; message: string }>
     /** Replace the app with the downloaded version and start it again. */
     installUpdate(): Promise<void>
     /** Everything the app has learned, with its evidence. */
@@ -96,6 +96,8 @@ export interface ModãoApi {
     restorePrevious(journalId?: number): Promise<{ log: string[]; restored: number }>
     /** Recorded switches, newest first. */
     switchHistory(): Promise<SwitchJournal[]>
+    /** Drop installs whose files are gone from both the game folder and the store. */
+    forgetMissing(profileId: number): Promise<{ installId: number; label: string; files: string[] }[]>
     duplicate(id: number, name: string): Promise<Profile>
     exportArchive(id: number): Promise<string | null>
     importArchive(): Promise<{
@@ -222,6 +224,7 @@ export const IPC_CHANNELS = [
   'profiles:verify',
   'profiles:restorePrevious',
   'profiles:switchHistory',
+  'profiles:forgetMissing',
   'profiles:duplicate',
   'profiles:exportArchive',
   'profiles:importArchive',

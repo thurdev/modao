@@ -62,7 +62,8 @@ export const api = {
 
   checkUpdate: (force?: boolean) => call<UpdateStatus>('app:checkUpdate', force),
   dismissUpdate: (version: string) => call<void>('app:dismissUpdate', version),
-  downloadUpdate: () => call<{ started: boolean; message: string }>('app:downloadUpdate'),
+  downloadUpdate: (andInstall = true) =>
+    call<{ started: boolean; message: string }>('app:downloadUpdate', andInstall),
   installUpdate: () => call<void>('app:installUpdate'),
   knowledge: () => call<KnowledgeReport>('app:knowledge'),
   forgetRule: (id: number) => call<void>('app:forgetRule', id),
@@ -115,6 +116,8 @@ export const api = {
   restorePreviousSwitch: (journalId?: number) =>
     call<{ log: string[]; restored: number }>('profiles:restorePrevious', journalId),
   switchHistory: () => call<SwitchJournal[]>('profiles:switchHistory'),
+  forgetMissing: (profileId: number) =>
+    call<{ installId: number; label: string; files: string[] }[]>('profiles:forgetMissing', profileId),
   duplicateProfile: (id: number, name: string) => call<Profile>('profiles:duplicate', id, name),
   exportProfile: (id: number) => call<string | null>('profiles:exportArchive', id),
   importProfile: () =>
