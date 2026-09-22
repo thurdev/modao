@@ -517,6 +517,101 @@ export async function runE2E(): Promise<number> {
     (await listProfiles()).find((p) => p.isActive)?.id === risky.id
   )
 
+  // --- an unmanaged file at a path the incoming profile writes ---------------
+  // Unmanaged.asi above collides with nothing, which is exactly why the
+  // destructive path stayed invisible for so long: it only opens when the
+  // arriving profile wants a path the user already occupies. This is the field
+  // failure in miniature - the user's own scripts\MixSets.asi, and a profile
+  // that installs a MixSets.asi of its own on top of it.
+  await activateProfile(empty.id)
+  const ownMixSets = 'a MixSets.asi the user downloaded and dropped in by hand'
+  const ownMixSetsPath = path.join(game, 'scripts', 'MixSets.asi')
+  await fsp.writeFile(ownMixSetsPath, ownMixSets)
+  const ownMixSetsHash = await sha256File(ownMixSetsPath)
+
+  const collide = await planSwitch(risky.id)
+  check(
+    'a colliding unmanaged file is still reported as unmanaged',
+    collide.unmanaged.includes('scripts/MixSets.asi'),
+    collide.unmanaged
+  )
+  check(
+    'the dry run names the unmanaged file the switch would overwrite',
+    collide.willBeOverwritten.includes('scripts/MixSets.asi'),
+    collide.willBeOverwritten
+  )
+
+  const collided = await activateProfile(risky.id)
+  check('the colliding switch still verified', collided.verification?.ok === true, collided.verification?.problems)
+  check(
+    'the mod took the path it needed',
+    fs.existsSync(ownMixSetsPath) && (await sha256File(ownMixSetsPath)) === riskyBytes.get('scripts/MixSets.asi'),
+    await sha256File(ownMixSetsPath)
+  )
+  check(
+    'the file the user had there is listed as quarantined',
+    collided.quarantined.includes('scripts/MixSets.asi'),
+    collided.quarantined
+  )
+  const displacedCopies = (await walk(path.join(Paths.quarantine(), 'displaced'))).filter((f) =>
+    f.abs.toLowerCase().endsWith('mixsets.asi')
+  )
+  const displacedHashes = await Promise.all(displacedCopies.map((f) => sha256File(f.abs)))
+  check(
+    'the user’s own bytes are in quarantine, not gone',
+    displacedHashes.includes(ownMixSetsHash),
+    displacedCopies.map((f) => f.abs)
+  )
+  const collideJournal = (await listJournals()).find((j) => j.id === collided.journalId)!
+  const collideEntry = collideJournal.manifest.find((m) => m.relativePath === 'scripts/MixSets.asi')
+  check(
+    'the overwritten file is in the switch snapshot as well',
+    !!collideEntry && fs.existsSync(collideEntry.backupPath) && (await sha256File(collideEntry.backupPath)) === ownMixSetsHash,
+    collideEntry
+  )
+
+  // And leaving the profile again hands the path back to its owner.
+  await activateProfile(empty.id)
+  check(
+    'the displaced file is put back when the profile that took its path leaves',
+    fs.existsSync(ownMixSetsPath) && (await sha256File(ownMixSetsPath)) === ownMixSetsHash,
+    fs.existsSync(ownMixSetsPath) ? await sha256File(ownMixSetsPath) : 'missing'
+  )
+  await fsp.rm(ownMixSetsPath, { force: true })
+  await activateProfile(risky.id)
+  check(
+    'the profile is whole again after all of that',
+    riskyFiles.every((rel) => fs.existsSync(path.join(game, ...rel.split('/')))),
+    riskyFiles.filter((rel) => !fs.existsSync(path.join(game, ...rel.split('/'))))
+  )
+
+  // "Restore previous state" while a profile that owns real files is active.
+  // It used to vacate that profile with no snapshot set at all, so every
+  // tracked real file was deleted outright - and an adopted one had no store
+  // copy, no recorded hash and no quarantine entry to come back from. The
+  // earlier restore test above cannot see this: it restores out of an empty
+  // profile, where there is nothing to delete.
+  const undone = await restorePreviousState()
+  check(
+    'the undo backs the active profile up before it vacates it',
+    undone.log.some((l) => l.includes('before removing them')),
+    undone.log
+  )
+  check(
+    'the undo left the profile from before the switch active',
+    (await listProfiles()).find((p) => p.isActive)?.id === empty.id,
+    (await listProfiles()).find((p) => p.isActive)?.name
+  )
+  await activateProfile(risky.id)
+  for (const rel of riskyFiles) {
+    const abs = path.join(game, ...rel.split('/'))
+    check(
+      `${rel} survived being vacated by the undo`,
+      fs.existsSync(abs) && (await sha256File(abs)) === riskyBytes.get(rel),
+      abs
+    )
+  }
+
   // A mod whose payload has gone must block the switch rather than vanish.
   const orphan = await createProfile({ name: 'Broken payload', copyFrom: risky.id })
   const orphanInstall = listInstalled(orphan.id).find((m) => m.title.startsWith('Anima'))!

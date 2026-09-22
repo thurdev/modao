@@ -27,6 +27,7 @@ import {
   parseReadmeText
 } from '../src/main/install/readme'
 import { classifyTree } from '../src/main/install/classify'
+import { displaceForeign, isOwned, ownedKey } from '../src/main/store/displace'
 import { describeFsError, isProtectedLocation } from '../src/main/game/access'
 import { setMainLanguage } from '../src/main/util/i18n'
 import { translate } from '../src/shared/i18n'
@@ -888,6 +889,82 @@ check('download: zip magic recognised', looksLikeArchive(Buffer.from([0x50, 0x4b
 check('download: 7z magic recognised', looksLikeArchive(Buffer.from([0x37, 0x7a, 0xbc, 0xaf])))
 check('download: rar magic recognised', looksLikeArchive(Buffer.from([0x52, 0x61, 0x72, 0x21])))
 check('download: an HTML error page is not an archive', !looksLikeArchive(Buffer.from('<!DOCTYPE', 'latin1')))
+
+// --- ownedPaths: what happens to the file already at a mod's target ----------
+// The regression this pins: a profile switch handed the install its OWN target
+// list as `ownedPaths`, so every target answered "already ours", the backup
+// branch was unreachable, and the user's loose plugins were force-removed with
+// no snapshot, no backup and no quarantine. 14 .asi and 27 CLEO scripts went
+// that way in one switch. `ownedPaths` means the paths owned by the OTHER
+// installs of the profile, and nothing else.
+const displaceRoot = path.join(tmp, 'displace')
+const gameFolder = path.join(displaceRoot, 'game')
+const userBytes = "the user's own MixSets.asi"
+const mixSets = path.join(gameFolder, 'scripts', 'MixSets.asi')
+fs.mkdirSync(path.join(gameFolder, 'scripts'), { recursive: true })
+
+fs.writeFileSync(mixSets, userBytes)
+const displaced = await displaceForeign({
+  target: mixSets,
+  relativePath: 'scripts/MixSets.asi',
+  // What the install path has always passed, and what the switch path now does:
+  // this install's own target is deliberately absent from the set.
+  ownedPaths: new Set(['modloader/Some Other Mod/x.dff'].map(ownedKey)),
+  backupDir: path.join(displaceRoot, 'backup'),
+  quarantineDir: path.join(displaceRoot, 'quarantine')
+})
+check(
+  'ownedPaths: a foreign file is copied out before its path is taken',
+  !!displaced.backedUp && fs.existsSync(displaced.backedUp.backupPath),
+  displaced
+)
+check(
+  'ownedPaths: the backup holds exactly the bytes the user wrote',
+  !!displaced.backedUp && fs.readFileSync(displaced.backedUp.backupPath, 'utf8') === userBytes
+)
+check(
+  'ownedPaths: the user can find the displaced file in quarantine',
+  !!displaced.quarantined && fs.existsSync(displaced.quarantined.quarantinePath),
+  displaced.quarantined
+)
+check(
+  'ownedPaths: the quarantine copy holds the bytes too',
+  !!displaced.quarantined && fs.readFileSync(displaced.quarantined.quarantinePath, 'utf8') === userBytes
+)
+check('ownedPaths: the target is free once both copies exist', !fs.existsSync(mixSets))
+
+// A path another install of this profile already owns is Modão's own content:
+// the store holds those bytes, so it is dropped with no copy and no quarantine
+// entry - a backup there would promise a restore of something never lost.
+const ourOwn = path.join(gameFolder, 'scripts', 'CLEO.asi')
+fs.writeFileSync(ourOwn, 'bytes Modão itself linked in')
+const ours = await displaceForeign({
+  target: ourOwn,
+  relativePath: 'scripts/CLEO.asi',
+  ownedPaths: new Set(['scripts/cleo.asi', 'modloader/Some Other Mod/x.dff'].map(ownedKey)),
+  backupDir: path.join(displaceRoot, 'backup-owned'),
+  quarantineDir: path.join(displaceRoot, 'quarantine-owned')
+})
+check(
+  'ownedPaths: a path the profile already owns is not backed up',
+  ours.backedUp === null && ours.quarantined === null && !fs.existsSync(ourOwn),
+  ours
+)
+check('ownedPaths: nothing was written to the backup directory', !fs.existsSync(path.join(displaceRoot, 'backup-owned')))
+
+// The exact shape of the bug, as an assertion: build the set the broken switch
+// built - the install's own targets - and the user's file is judged ours.
+check(
+  "ownedPaths: an install's own target must never be in the set",
+  isOwned(new Set(['scripts/MixSets.asi'].map(ownedKey)), 'scripts/MixSets.asi') &&
+    !isOwned(new Set(['modloader/Some Other Mod/x.dff'].map(ownedKey)), 'scripts/MixSets.asi')
+)
+check(
+  'ownedPaths: a folder is ours when a file we track lives inside it',
+  isOwned(new Set(['modloader/vhud/data/radar.xml']), 'modloader/VHud') &&
+    !isOwned(new Set(['modloader/vhud/data/radar.xml']), 'modloader/VHudExtra')
+)
+check('ownedPaths: slashes and case fold to one spelling', ownedKey('\\Scripts\\MixSets.ASI\\') === 'scripts/mixsets.asi')
 
 fs.rmSync(tmp, { recursive: true, force: true })
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`)
