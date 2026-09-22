@@ -12,6 +12,7 @@ export const messages = {
     installDeps: {
       streamingFixed: 'Memória de streaming ajustada de {from} para {to} MB. O stream.ini original foi guardado na quarentena.',
       missingRequirement: 'Falta um requisito: {title}',
+      statedConflict: 'O autor diz para não usar junto com {title}, e ele está neste perfil.',
       missingRequirementDetail:
         'O perfil {profile} não tem esse mod. Requisito satisfeito em outro perfil não vale: o jogo só enxerga o que está materializado agora. Instale ele neste perfil, ou marque que quer instalar assim mesmo.'
     },
@@ -106,6 +107,7 @@ export const messages = {
     installDeps: {
       streamingFixed: 'Streaming memory set from {from} to {to} MB. Your original stream.ini was kept in quarantine.',
       missingRequirement: 'Missing requirement: {title}',
+      statedConflict: 'The author says not to use this alongside {title}, which is in this profile.',
       missingRequirementDetail:
         'Profile {profile} does not have it. A requirement satisfied in another profile counts for nothing - the game only sees what is materialised right now. Install it into this profile, or tick that you want to install anyway.'
     },

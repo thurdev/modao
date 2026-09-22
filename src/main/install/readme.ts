@@ -1,7 +1,7 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import iconv from 'iconv-lite'
-import type { DestinationClass, ReadmeInstruction, ReadmeParse } from '@shared/types'
+import type { DeclaredDependency, DestinationClass, ReadmeInstruction, ReadmeParse } from '@shared/types'
 import { walk } from '../util/fsx'
 
 const README_PATTERNS = [
@@ -102,6 +102,7 @@ export function parseReadmeText(file: string, text: string, encoding: string): R
     }
   }
   const urls = [...new Set((text.match(URL_RE) ?? []).map((u) => u.replace(/[.,;]$/, '')))]
+  const declared = parseDeclaredDependencies(text)
   const requirementUrls = urls.filter((u) =>
     /mixmods|gtaforums|gtagarage|cleo|patreon|github|libertycity/i.test(u)
   )
@@ -115,6 +116,7 @@ export function parseReadmeText(file: string, text: string, encoding: string): R
     language,
     instructions,
     requirementUrls,
+    declared,
     confidence: instructions.length === 0 ? 0 : Math.min(1, 0.55 + 0.15 * instructions.length)
   }
 }
@@ -142,4 +144,55 @@ export function findVariantHint(readmes: ReadmeParse[], optionLabels: string[]):
     }
   }
   return null
+}
+
+/**
+ * What the author says the mod needs, in the shapes MixMods readmes use.
+ *
+ * Proper Shaders names SilentPatch and Open Limit Adjuster in exactly this way,
+ * and installing it without them crashed the game - so these lines are read as
+ * dependency edges rather than left as prose nobody parses.
+ */
+export function parseDeclaredDependencies(text: string): DeclaredDependency[] {
+  const out: DeclaredDependency[] = []
+  const push = (kind: DeclaredDependency['kind'], name: string, url: string | null, line: string): void => {
+    const clean = name
+      .replace(/^[\s:\-–—]+|[\s:.\-–—]+$/g, '')
+      .replace(/^(o|a|os|as|the)\s+/i, '')
+      .trim()
+    if (clean.length < 2 || clean.length > 60) return
+    if (out.some((d) => d.kind === kind && d.name.toLowerCase() === clean.toLowerCase())) return
+    out.push({ kind, name: clean, url, line })
+  }
+
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim()
+    if (!line) continue
+    const url = /(https?:\/\/[^\s)>\]]+)/i.exec(line)?.[1]?.replace(/[.,;]$/, '') ?? null
+
+    // "-- Download do Weapon Icons TXD: https://..."
+    const download = /^[-–—*\s]*(?:download|baixe|baixar)\s+(?:do|da|de|of|the)?\s*(.+?)\s*(?::|\bhttps?:)/i.exec(line)
+    if (download) {
+      push('requires', download[1], url, line)
+      continue
+    }
+    // "NECESSARIO: Mod Loader" / "Necessário ter o CLEO 4.4"
+    const needed = /\b(necess[aá]rio|requer|requires?|required|precisa de|voc[eê] precisa)\b[:\s]+(.+)$/i.exec(line)
+    if (needed) {
+      push('requires', needed[2].split(/[,.;(]/)[0], url, line)
+      continue
+    }
+    // "ATENCAO: O mod inclui "gsx.asi", certifique-se de que voce ja nao o tenha"
+    const includes = /\b(inclui|inclu[ií]do|includes?|vem com|acompanha)\b[:\s]+["']?([A-Za-z0-9 _.\-+]+\.(?:asi|cleo\d?|dll))["']?/i.exec(line)
+    if (includes) {
+      push('includes', includes[2], url, line)
+      continue
+    }
+    // "NAO use junto com SkyGfx" / "incompatível com ..."
+    const conflict = /\b(incompat[ií]vel com|n[aã]o use (?:junto )?com|conflita com|conflicts? with|do not use with)\b[:\s]+(.+)$/i.exec(line)
+    if (conflict) {
+      push('conflicts', conflict[2].split(/[,.;(]/)[0], url, line)
+    }
+  }
+  return out
 }

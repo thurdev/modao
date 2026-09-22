@@ -18,7 +18,7 @@ import {
 } from '../src/main/game/modloaderIni'
 import { groupIncidents, parseModuleName, resolveCrashAddress } from '../src/shared/crash'
 import type { CrashReport } from '../src/shared/types'
-import { decodeReadme, parseReadmeText } from '../src/main/install/readme'
+import { decodeReadme, parseDeclaredDependencies, parseReadmeText } from '../src/main/install/readme'
 import { classifyTree } from '../src/main/install/classify'
 import { describeFsError, isProtectedLocation } from '../src/main/game/access'
 import { setMainLanguage } from '../src/main/util/i18n'
@@ -595,6 +595,48 @@ function asarDataStart(headerSize: number): number {
 check('asar: an aligned header needs no padding', asarDataStart(552384) === 16 + 552384)
 check('asar: an unaligned header is padded up to the next boundary', asarDataStart(553) === 16 + 553 + 3, asarDataStart(553))
 check('asar: padding is never four bytes', [0, 1, 2, 3].every((r) => asarDataStart(100 + r) - (16 + 100 + r) < 4))
+
+// --- what the readme says the mod needs --------------------------------------
+// Proper Shaders names SilentPatch and Open Limit Adjuster in its readme and
+// probes for them at runtime. Installed without either, the game crashed - so
+// these lines are read as dependency edges, not left as prose.
+const CRLF = String.fromCharCode(13, 10)
+const declaredText = [
+  'Proper Shaders',
+  '',
+  'NECESSARIO: Mod Loader',
+  'Requer: SilentPatch',
+  '-- Download do Open Limit Adjuster: https://www.mixmods.com.br/2015/03/open-limit-adjuster/',
+  'ATENCAO: O mod inclui "gsx.asi", certifique-se de que voce ja nao o tenha.',
+  'NAO use junto com SkyGfx, os dois fazem a mesma coisa.',
+  'Extraia a pasta "Proper Shaders" para a pasta do ModLoader.'
+].join(CRLF)
+const declared = parseDeclaredDependencies(declaredText)
+const named = (kind: string): string[] => declared.filter((d) => d.kind === kind).map((d) => d.name)
+
+check('readme deps: a NECESSARIO line is a requirement', named('requires').includes('Mod Loader'), named('requires'))
+check('readme deps: a Requer line is a requirement', named('requires').includes('SilentPatch'), named('requires'))
+check(
+  'readme deps: a download line for a companion mod is a requirement',
+  named('requires').includes('Open Limit Adjuster'),
+  named('requires')
+)
+check(
+  'readme deps: the download URL is kept so the app can offer to fetch it',
+  declared.find((d) => d.name === 'Open Limit Adjuster')?.url?.includes('open-limit-adjuster') === true,
+  declared.find((d) => d.name === 'Open Limit Adjuster')?.url
+)
+check('readme deps: a bundled plugin is recorded as included, not required', named('includes').includes('gsx.asi'), named('includes'))
+check('readme deps: an incompatibility is recorded as a conflict', named('conflicts').includes('SkyGfx'), named('conflicts'))
+check(
+  'readme deps: the install instruction is not mistaken for a dependency',
+  !declared.some((d) => /extraia|pasta/i.test(d.name)),
+  declared.map((d) => d.name)
+)
+check(
+  "readme deps: the author's own line is kept, for showing beside the parse",
+  declared.every((d) => d.line.length > 0)
+)
 
 // --- download links ----------------------------------------------------------
 // Which links Modão can fetch on its own decides whether "Install" installs

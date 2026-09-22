@@ -57,6 +57,22 @@ export const checks = {
     texturesOk: '{scanned} arquivo(s) .txd lidos, todas as dimensões são potência de dois',
     texturesDetail:
       'Textura fora de potência de dois é causa documentada de crash (0x00749B7B) e de textura que não aparece.',
+    orphanTitle: 'Configurações órfãs',
+    orphanNone: 'Nenhum .ini sem o plugin dono dele',
+    orphanFound: '{count} arquivo(s) de configuração sem o .asi correspondente',
+    orphanDetail:
+      'Sobram quando um plugin é removido e o .ini dele fica. Não quebram o jogo, mas confundem o diagnóstico: o arquivo sugere um mod que não está mais lá.',
+    fpsTitle: 'Limite de FPS',
+    fpsOk: '{value} FPS — dentro do que o motor aguenta',
+    fpsHigh: '{value} FPS — acima de 60 o GTA SA quebra física, animação e missão',
+    fpsDetail:
+      'O motor do GTA SA amarra física e scripts ao framerate. Acima de 60 FPS carro flutua, moto capota sozinha e missão trava. Se você quer mais FPS, limite a 60 e use interpolação.',
+    fpsUnknown: 'Nenhum limite de FPS configurado que o Modão saiba ler',
+    looseTitle: 'Arquivos soltos no modloader',
+    looseOk: 'Nenhuma pasta com excesso de arquivo solto',
+    looseFound: '{count} mod(s) com mais de {limit} arquivos soltos',
+    looseDetail:
+      'Centenas de .dff/.txd soltos fazem o streamer abrir um arquivo por vez. Em HDD isso vira engasgo constante. Empacotar em .img resolve.',
     streamTitle: 'Memória de streaming (stream.ini)',
     streamMissing: 'Nenhum stream.ini — o jogo usa o padrão dele',
     streamOk: '{value} MB, dentro do que o jogo aguenta',
@@ -131,6 +147,22 @@ export const checks = {
     texturesOk: '{scanned} .txd file(s) scanned, all dimensions are powers of two',
     texturesDetail:
       'Non-power-of-two textures are a documented cause of crashes (0x00749B7B) and of textures failing to render.',
+    orphanTitle: 'Orphaned configs',
+    orphanNone: 'No .ini left behind by a plugin that is gone',
+    orphanFound: '{count} config file(s) with no matching .asi',
+    orphanDetail:
+      'These are left when a plugin is removed and its .ini stays. They break nothing, but they confuse diagnosis: the file suggests a mod that is no longer there.',
+    fpsTitle: 'FPS limit',
+    fpsOk: '{value} FPS - within what the engine can take',
+    fpsHigh: '{value} FPS - above 60 GTA SA breaks physics, animation and missions',
+    fpsDetail:
+      "GTA SA ties physics and scripts to the framerate. Above 60 FPS cars float, bikes flip on their own and missions stall. If you want more frames, cap at 60 and use interpolation.",
+    fpsUnknown: 'No FPS limit that Modão can read',
+    looseTitle: 'Loose files in modloader',
+    looseOk: 'No mod folder with an excess of loose files',
+    looseFound: '{count} mod(s) with more than {limit} loose files',
+    looseDetail:
+      'Hundreds of loose .dff/.txd make the streamer open one file at a time. On a hard disk that is constant stutter. Packing them into an .img fixes it.',
     streamTitle: 'Streaming memory (stream.ini)',
     streamMissing: 'No stream.ini - the game uses its own default',
     streamOk: '{value} MB, within what the game can take',

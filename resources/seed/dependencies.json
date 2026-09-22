@@ -118,6 +118,36 @@
       "kind": "conflicts",
       "target": "renderhook-by-petkagta",
       "note": "ENB and RenderHook both hook the same D3D entry points."
+    },
+    {
+      "mod": "sa-proper-shaders",
+      "kind": "requires",
+      "target": "modloader",
+      "note": "Proper Shaders installs as a Mod Loader folder."
+    },
+    {
+      "mod": "sa-proper-shaders",
+      "kind": "requires",
+      "target": "sa-silentpatch",
+      "note": "Proper Shaders probes for SilentPatch at runtime and prints whether it found it."
+    },
+    {
+      "mod": "sa-proper-shaders",
+      "kind": "requires",
+      "target": "open-limit-adjuster",
+      "note": "Proper Shaders probes for Open Limit Adjuster at runtime; without it the streamer runs out of budget."
+    },
+    {
+      "mod": "more-radar-icons",
+      "kind": "requires",
+      "target": "cleoplus",
+      "note": "More Radar Icons is a CLEO+ script."
+    },
+    {
+      "mod": "sa-vehfuncs",
+      "kind": "provides",
+      "target": "gsx.asi",
+      "note": "VehFuncs ships gsx.asi; a second copy from another mod collides."
     }
   ]
 }

@@ -228,6 +228,23 @@ export interface VariantGroup {
   options: VariantOption[]
 }
 
+/**
+ * A requirement, conflict or bundled plugin the readme states in prose.
+ *
+ * MixMods readmes say these in a handful of shapes and always have: a download
+ * line for a companion mod, a NECESSARIO line, or a warning that the archive
+ * ships an .asi you may already have. They are the mod author's own words about
+ * what the mod needs, which outranks anything the app can infer.
+ */
+export interface DeclaredDependency {
+  kind: 'requires' | 'conflicts' | 'includes'
+  /** The mod as the readme names it. */
+  name: string
+  url: string | null
+  /** The line it came from, so the UI can show the author's own words. */
+  line: string
+}
+
 export interface ReadmeInstruction {
   line: string
   folder: string | null
@@ -241,6 +258,8 @@ export interface ReadmeParse {
   language: 'pt-BR' | 'en' | 'unknown'
   instructions: ReadmeInstruction[]
   requirementUrls: string[]
+  /** Requirements and conflicts the author stated in prose. */
+  declared: DeclaredDependency[]
   confidence: number
 }
 

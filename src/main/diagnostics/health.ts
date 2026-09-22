@@ -181,7 +181,16 @@ export async function runHealthCheck(profileId: number): Promise<HealthReport> {
   // 8. What Mod Loader itself says happened
   checks.push(await modLoaderVerdictCheck(profileId, game))
 
-  // 9. Oversized assets
+  // 9. Configs whose plugin is gone
+  checks.push(await orphanedConfigCheck(game))
+
+  // 10. Frame limiter
+  checks.push(await fpsCapCheck(game))
+
+  // 11. Loose files that make the streamer crawl
+  checks.push(await looseFileCheck(profileId))
+
+  // 12. Oversized assets
   checks.push(await oversizedCheck(profileId))
 
   const blocking = checks.filter((c) => c.status === 'fail').length
@@ -351,5 +360,104 @@ async function modLoaderVerdictCheck(profileId: number, game: GameInstall): Prom
       : t('checks.modsAllActive', { count: tracked.length }),
     detail: t('checks.modsDetail'),
     items: bad.map((m) => `${m.folder} — ${label[m.verdict]}${m.explanation ? `: ${m.explanation}` : ''}`)
+  }
+}
+
+/**
+ * An .ini whose .asi is gone. Harmless to the game, and a trap for whoever is
+ * diagnosing it: the file reads as evidence that a mod is installed when it is
+ * not. After an uninstall these are exactly what is left behind.
+ */
+async function orphanedConfigCheck(game: GameInstall): Promise<HealthCheck> {
+  const dir = game.asiDirectory ?? game.path
+  if (!game.supportsAsi || !exists(dir)) {
+    return { id: 'orphan-config', title: t('checks.orphanTitle'), status: 'skip', summary: t('checks.orphanNone') }
+  }
+  const entries: string[] = await fsp.readdir(dir).catch(() => [])
+  const plugins = new Set(
+    entries.filter((f) => /\.(asi|dll)$/i.test(f)).map((f) => f.replace(/\.(asi|dll)$/i, '').toLowerCase())
+  )
+  const orphans = entries.filter((f) => {
+    if (!/\.(ini|json|cfg|dat)$/i.test(f)) return false
+    const stem = f.replace(/\.(ini|json|cfg|dat)$/i, '').toLowerCase()
+    // A config shared by the game itself is not an orphan.
+    if (['stream', 'modloader', 'cleo', 'gta_sa', 'settings'].includes(stem)) return false
+    return !plugins.has(stem)
+  })
+
+  return {
+    id: 'orphan-config',
+    title: t('checks.orphanTitle'),
+    status: orphans.length ? 'warn' : 'pass',
+    summary: orphans.length ? t('checks.orphanFound', { count: orphans.length }) : t('checks.orphanNone'),
+    detail: orphans.length ? t('checks.orphanDetail') : undefined,
+    items: orphans.slice(0, 12)
+  }
+}
+
+/** Frame limiters worth reading, and the key each one keeps the number under. */
+const FPS_SOURCES: { file: string; key: RegExp }[] = [
+  { file: 'SilentPatchSA.ini', key: /^framelimit/i },
+  { file: 'MixSets.ini', key: /^(fpslimit|framelimit)/i },
+  { file: 'modloader/modloader.ini', key: /^(fpslimit|framelimit)/i }
+]
+
+/**
+ * GTA SA ties physics and mission scripts to the framerate: above 60 the
+ * handling model misbehaves and some missions cannot be finished. A limiter set
+ * higher is a bug report waiting to happen, and it looks like a mod problem.
+ */
+async function fpsCapCheck(game: GameInstall): Promise<HealthCheck> {
+  let found: { value: number; file: string } | null = null
+  for (const source of FPS_SOURCES) {
+    const file = path.join(game.asiDirectory ?? game.path, source.file)
+    const alt = path.join(game.path, source.file)
+    const target = exists(file) ? file : exists(alt) ? alt : null
+    if (!target) continue
+    const text = await fsp.readFile(target, 'latin1').catch(() => '')
+    for (const line of text.split(/\r?\n/)) {
+      const m = /^\s*([A-Za-z]+)\s*=\s*(\d+)/.exec(line)
+      if (m && source.key.test(m[1])) {
+        const value = Number.parseInt(m[2], 10)
+        if (Number.isFinite(value) && value > 0) found = { value, file: target }
+      }
+    }
+  }
+  if (!found) {
+    return { id: 'fps-cap', title: t('checks.fpsTitle'), status: 'skip', summary: t('checks.fpsUnknown') }
+  }
+  return {
+    id: 'fps-cap',
+    title: t('checks.fpsTitle'),
+    status: found.value > 60 ? 'warn' : 'pass',
+    summary: found.value > 60 ? t('checks.fpsHigh', { value: found.value }) : t('checks.fpsOk', { value: found.value }),
+    detail: found.value > 60 ? t('checks.fpsDetail') : undefined,
+    items: [found.file]
+  }
+}
+
+/** Above this many loose files in one mod folder, the streamer starts to hurt. */
+const LOOSE_FILE_LIMIT = 300
+
+async function looseFileCheck(profileId: number): Promise<HealthCheck> {
+  const rows = getDb()
+    .prepare(
+      `SELECT i.folder_name f, COUNT(*) c FROM install_file fi
+         JOIN install i ON i.id = fi.install_id
+        WHERE i.profile_id = ? AND i.enabled = 1 AND i.folder_name IS NOT NULL
+          AND (lower(fi.relative_path) LIKE '%.dff' OR lower(fi.relative_path) LIKE '%.txd')
+        GROUP BY i.folder_name HAVING c > ?`
+    )
+    .all(profileId, LOOSE_FILE_LIMIT) as { f: string; c: number }[]
+
+  return {
+    id: 'loose-files',
+    title: t('checks.looseTitle'),
+    status: rows.length ? 'warn' : 'pass',
+    summary: rows.length
+      ? t('checks.looseFound', { count: rows.length, limit: LOOSE_FILE_LIMIT })
+      : t('checks.looseOk'),
+    detail: rows.length ? t('checks.looseDetail') : undefined,
+    items: rows.map((r) => `${r.f}: ${r.c}`)
   }
 }

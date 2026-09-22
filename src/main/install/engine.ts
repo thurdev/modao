@@ -1,4 +1,5 @@
 import path from 'node:path'
+import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import crypto from 'node:crypto'
 import type {
@@ -11,7 +12,7 @@ import type {
 } from '@shared/types'
 import { getDb } from '../db'
 import { Paths } from '../util/paths'
-import { exists, sha256File, slugify } from '../util/fsx'
+import { exists, sha256File, slugify, walk } from '../util/fsx'
 import { archiveOrDirectory, effectiveRoot } from './archive'
 import { findReadmes, parseReadme } from './readme'
 import { classifyTree, type OverlayMatch } from './classify'
@@ -139,6 +140,23 @@ async function buildPlan(planId: string, meta: BuildMeta): Promise<InstallPlan> 
   await annotateTextures(extractRoot, files, warnings)
 
   const dependencies = meta.modId ? resolveDependencies({ modId: meta.modId, profileId, game }) : []
+
+  // What the author wrote, and what the plugin itself asks for at runtime, are
+  // better evidence than a curated list that only covers catalogued mods. Both
+  // are checked against what this profile actually has.
+  const stated = await statedRequirements(extractRoot, readmes)
+  for (const req of stated) {
+    if (satisfiedInProfile(profileId, game, req.name)) continue
+    warnings.push({
+      severity: req.kind === 'conflicts' ? 'warn' : 'error',
+      code: req.kind === 'conflicts' ? 'dependency-conflict-stated' : 'dependency-missing',
+      message:
+        req.kind === 'conflicts'
+          ? t('messages.installDeps.statedConflict', { title: req.name })
+          : t('messages.installDeps.missingRequirement', { title: req.name }),
+      detail: `${req.line}${req.url ? ` (${req.url})` : ''}`
+    })
+  }
   for (const d of dependencies) {
     if (d.resolution === 'blocking') {
       warnings.push({ severity: 'error', code: 'dependency-conflict', message: d.note ?? `${d.title} must not be installed alongside this mod.` })
@@ -545,4 +563,80 @@ function sanitizeFolderName(title: string): string {
 function profileName(profileId: number): string {
   const row = getDb().prepare('SELECT name FROM profile WHERE id = ?').get(profileId) as { name: string } | undefined
   return row?.name ?? `#${profileId}`
+}
+
+/**
+ * Requirements stated by the mod itself: the readme's own words first, then the
+ * plugin binary's runtime probes.
+ *
+ * A curated dependency list only knows catalogued mods. These two sources know
+ * whatever the author shipped, which is what actually crashes when missing.
+ */
+async function statedRequirements(
+  extractRoot: string,
+  readmes: ReadmeParse[]
+): Promise<{ kind: 'requires' | 'conflicts'; name: string; line: string; url: string | null }[]> {
+  const out: { kind: 'requires' | 'conflicts'; name: string; line: string; url: string | null }[] = []
+  const seen = new Set<string>()
+  const add = (kind: 'requires' | 'conflicts', name: string, line: string, url: string | null): void => {
+    const key = `${kind}:${name.toLowerCase()}`
+    if (seen.has(key)) return
+    seen.add(key)
+    out.push({ kind, name, line, url })
+  }
+
+  for (const r of readmes) {
+    for (const d of r.declared) {
+      // "includes" is the archive bringing its own copy of something - a
+      // collision to watch, not a requirement to satisfy.
+      if (d.kind === 'includes') continue
+      add(d.kind, d.name, d.line, d.url)
+    }
+  }
+
+  // The plugin's own strings: Proper Shaders prints "SilentPatch is installed."
+  // because it looks for it, which is the requirement stated in machine form.
+  const { pluginEvidence } = await import('../formats/strings')
+  for (const file of await walk(extractRoot)) {
+    if (!/\.asi$/i.test(file.rel) || file.size > 32 * 1024 * 1024) continue
+    const buf = await fsp.readFile(path.join(extractRoot, file.rel)).catch(() => null)
+    if (!buf) continue
+    for (const probe of pluginEvidence(buf).probes) {
+      add('requires', probe, `${path.basename(file.rel)} looks for ${probe} at runtime`, null)
+    }
+  }
+  return out
+}
+
+/**
+ * Is this named thing present in THIS profile, or loose in the game folder?
+ *
+ * Name matching is deliberately loose - "Open Limit Adjuster" in a readme is
+ * "OpenLimitAdjuster.asi" on disk - and a plugin sitting in the ASI directory
+ * counts even though no profile installed it, because the game will load it.
+ */
+function satisfiedInProfile(profileId: number, game: GameInstall, name: string): boolean {
+  const needle = name.toLowerCase().replace(/[^a-z0-9+]/g, '')
+  if (!needle) return true
+  if (/^(modloader|modloader)$/.test(needle)) return game.hasModLoader
+  if (needle === 'cleo') return !!game.cleoVersion
+
+  const rows = getDb()
+    .prepare(
+      `SELECT f.relative_path p, m.title t FROM install_file f
+         JOIN install i ON i.id = f.install_id
+         JOIN mod_version mv ON mv.id = i.mod_version_id
+         JOIN mod m ON m.id = mv.mod_id
+        WHERE i.profile_id = ? AND i.enabled = 1`
+    )
+    .all(profileId) as { p: string; t: string }[]
+  const flat = (v: string): string => v.toLowerCase().replace(/[^a-z0-9+]/g, '')
+  if (rows.some((r) => flat(r.p).includes(needle) || flat(r.t).includes(needle))) return true
+
+  const asiDir = game.asiDirectory ?? game.path
+  if (exists(asiDir)) {
+    const loose: string[] = fs.readdirSync(asiDir)
+    if (loose.some((f) => /\.(asi|dll)$/i.test(f) && flat(f).includes(needle))) return true
+  }
+  return false
 }
