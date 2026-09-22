@@ -664,6 +664,19 @@ export interface UpdateStatus {
   notes: string | null
   checkedAt: string | null
   error: string | null
+  /** A download the user asked for is running. */
+  downloading?: boolean
+  /** A version already on disk, waiting for the restart. */
+  downloadedVersion?: string | null
+  canInstall?: boolean
+}
+
+/** Progress of an update download, as the app reports it. */
+export interface UpdateProgress {
+  percent: number
+  transferred: number
+  total: number
+  bytesPerSecond: number
 }
 
 /**

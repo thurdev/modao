@@ -97,3 +97,4 @@ jobs:
           files: |
             dist/Modao-Setup-${{ steps.bump.outputs.version }}.exe
             dist/Modao-Setup-${{ steps.bump.outputs.version }}.exe.blockmap
+            dist/latest.yml

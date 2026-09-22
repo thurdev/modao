@@ -30,6 +30,22 @@ const api = {
     ipcRenderer.on(EVENT_PROGRESS, handler)
     return () => ipcRenderer.removeListener(EVENT_PROGRESS, handler)
   },
+  /** Download progress, readiness and failure of an app update. */
+  onUpdateEvent(
+    cb: (event: { kind: 'progress' | 'ready' | 'error'; payload: unknown }) => void
+  ): () => void {
+    const channels: [string, 'progress' | 'ready' | 'error'][] = [
+      ['event:updateProgress', 'progress'],
+      ['event:updateReady', 'ready'],
+      ['event:updateError', 'error']
+    ]
+    const handlers = channels.map(([channel, kind]) => {
+      const handler = (_e: unknown, payload: unknown): void => cb({ kind, payload })
+      ipcRenderer.on(channel, handler)
+      return () => ipcRenderer.removeListener(channel, handler)
+    })
+    return () => handlers.forEach((off) => off())
+  },
   onToast(cb: (t: { kind: 'info' | 'error' | 'success'; message: string }) => void): () => void {
     const handler = (_e: unknown, t: { kind: 'info' | 'error' | 'success'; message: string }): void => cb(t)
     ipcRenderer.on(EVENT_TOAST, handler)

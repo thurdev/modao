@@ -20,6 +20,12 @@ extraResources:
 asarUnpack:
   - "**/*.node"
   - "**/7zip-bin/**"
+# Where the app looks for updates. electron-builder also writes latest.yml
+# beside the installer from this, which is the file electron-updater reads.
+publish:
+  provider: github
+  owner: thurdev
+  repo: modao
 win:
   target:
     - target: nsis

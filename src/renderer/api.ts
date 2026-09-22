@@ -35,6 +35,7 @@ interface Bridge {
   invoke(channel: IpcChannel, ...args: unknown[]): Promise<unknown>
   onProgress(cb: (p: Progress) => void): () => void
   onToast(cb: (t: { kind: 'info' | 'error' | 'success'; message: string }) => void): () => void
+  onUpdateEvent(cb: (event: { kind: 'progress' | 'ready' | 'error'; payload: unknown }) => void): () => void
 }
 
 /**
@@ -54,11 +55,15 @@ function call<T>(channel: IpcChannel, ...args: unknown[]): Promise<T> {
 
 export const api = {
   onProgress: (cb: (p: Progress) => void): (() => void) => bridge().onProgress(cb),
+  onUpdateEvent: (cb: (event: { kind: 'progress' | 'ready' | 'error'; payload: unknown }) => void) =>
+    bridge().onUpdateEvent(cb),
   onToast: (cb: (t: { kind: 'info' | 'error' | 'success'; message: string }) => void): (() => void) =>
     bridge().onToast(cb),
 
   checkUpdate: (force?: boolean) => call<UpdateStatus>('app:checkUpdate', force),
   dismissUpdate: (version: string) => call<void>('app:dismissUpdate', version),
+  downloadUpdate: () => call<{ started: boolean; message: string }>('app:downloadUpdate'),
+  installUpdate: () => call<void>('app:installUpdate'),
   knowledge: () => call<KnowledgeReport>('app:knowledge'),
   forgetRule: (id: number) => call<void>('app:forgetRule', id),
   settings: () => call<AppSettings>('app:settings'),

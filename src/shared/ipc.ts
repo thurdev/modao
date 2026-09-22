@@ -38,6 +38,10 @@ export interface ModãoApi {
     checkUpdate(force?: boolean): Promise<UpdateStatus>
     /** Stop offering this exact version. */
     dismissUpdate(version: string): Promise<void>
+    /** Download the update the user asked for. Progress arrives as events. */
+    downloadUpdate(): Promise<{ started: boolean; message: string }>
+    /** Replace the app with the downloaded version and start it again. */
+    installUpdate(): Promise<void>
     /** Everything the app has learned, with its evidence. */
     knowledge(): Promise<KnowledgeReport>
     /** Forget one learned rule. */
@@ -184,6 +188,8 @@ export const IPC_CHANNELS = [
   'app:settings',
   'app:checkUpdate',
   'app:dismissUpdate',
+  'app:downloadUpdate',
+  'app:installUpdate',
   'app:knowledge',
   'app:forgetRule',
   'app:setSetting',

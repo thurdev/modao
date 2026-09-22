@@ -4,7 +4,7 @@ import fsp from 'node:fs/promises'
 import { execFile } from 'node:child_process'
 import crypto from 'node:crypto'
 import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron'
-import type { AppSettings, CacheKind, DestinationClass, Progress, StorageReport } from '@shared/types'
+import type { AppSettings, CacheKind, DestinationClass, InstallPlan, Progress, StorageReport } from '@shared/types'
 import { EVENT_PROGRESS, EVENT_TOAST, type IpcChannel } from '@shared/ipc'
 import { classifyDownload, githubRepo, looksLikeArchive } from '@shared/download'
 import { fetchThroughBrowser } from './install/fetcher'
@@ -265,8 +265,20 @@ export function registerIpc(): void {
   // --- app ------------------------------------------------------------------
   ipcMain.handle('app:settings', () => settings())
   ipcMain.handle('app:checkUpdate', async (_e, force?: boolean) => {
-    const { checkForUpdate } = await import('./util/updates')
-    return checkForUpdate(force === true)
+    void force
+    // The packaged app asks the release feed through electron-updater, which is
+    // the same source it downloads from; a dev build falls back to the HTTP
+    // check so the screen can still be worked on.
+    const { checkForUpdate } = await import('./util/autoUpdate')
+    return checkForUpdate()
+  })
+  ipcMain.handle('app:downloadUpdate', async () => {
+    const { downloadUpdate } = await import('./util/autoUpdate')
+    return downloadUpdate()
+  })
+  ipcMain.handle('app:installUpdate', async () => {
+    const { installUpdateAndRestart } = await import('./util/autoUpdate')
+    await installUpdateAndRestart()
   })
   ipcMain.handle('app:knowledge', async () => {
     const { knowledgeSummary, recentRules } = await import('./knowledge/store')
@@ -278,7 +290,7 @@ export function registerIpc(): void {
     unlearn(id)
   })
   ipcMain.handle('app:dismissUpdate', async (_e, version: string) => {
-    const { dismissUpdate } = await import('./util/updates')
+    const { dismissUpdate } = await import('./util/autoUpdate')
     dismissUpdate(version)
   })
   ipcMain.handle('app:setSetting', (_e, key: keyof AppSettings, value: unknown) => {
@@ -551,12 +563,8 @@ export function registerIpc(): void {
   })
 
   // --- install --------------------------------------------------------------
-  /**
-   * The newest version recorded for a slug. A requirement named in a readme is
-   * a name, not an id, so this is how "install this too" reaches the same code
-   * path the catalogue screen uses.
-   */
-  ipcMain.handle('install:planFromSlug', async (e, slug: string, profileId: number) => {
+  ipcMain.handle('install:planFromSlug', async (_e, slug: string, profileId: number) => {
+    // A requirement named in a readme is a name, not an id.
     const row = getDb()
       .prepare(
         `SELECT mv.id FROM mod_version mv JOIN mod m ON m.id = mv.mod_id
@@ -564,53 +572,11 @@ export function registerIpc(): void {
       )
       .get(slug) as { id: number } | undefined
     if (!row) throw new Error(t('messages.installDeps.notInCatalog', { slug }))
-    const handler = ipcMain.listeners('install:planFromCatalog')[0] as (
-      ev: unknown,
-      versionId: number,
-      profile: number
-    ) => Promise<unknown>
-    return handler(e, row.id, requireProfile(profileId))
+    return planFromCatalogVersion(row.id, requireProfile(profileId))
   })
-  ipcMain.handle('install:planFromCatalog', async (_e, modVersionId: number, profileId: number) => {
-    const db = getDb()
-    const row = db
-      .prepare(
-        `SELECT mv.id, mv.download_url, mv.version_label, m.id AS mod_id, m.title, m.author, m.source_url, m.paywalled
-           FROM mod_version mv JOIN mod m ON m.id = mv.mod_id WHERE mv.id = ?`
-      )
-      .get(modVersionId) as
-      | { id: number; download_url: string | null; version_label: string; mod_id: number; title: string; author: string; source_url: string; paywalled: number }
-      | undefined
-    if (!row) throw new Error(t('messages.install.versionGone'))
-    if (row.paywalled) {
-      throw new Error(t('messages.install.paywalled', { title: row.title }))
-    }
-    if (!row.download_url) {
-      throw new Error(t('messages.install.noDownloadLink', { title: row.title }))
-    }
-    const expected = (getDb().prepare('SELECT sha256 FROM mod_version WHERE id = ?').get(modVersionId) as { sha256: string | null })
-      .sha256
-    const task = newTask(`Installing ${row.title}`)
-    try {
-      const archivePath = await downloadArchive(row.download_url!, task.id, row.title, task.signal, expected, modVersionId, row.source_url)
-      const plan = await createPlan({
-        archivePath,
-        profileId,
-        modId: row.mod_id,
-        modVersionId: row.id,
-        title: row.title,
-        author: row.author,
-        sourceUrl: row.source_url,
-        signal: task.signal,
-        onProgress: (phase, c, t) => progress(task.id, `Installing ${row.title}`, phase, c, t)
-      })
-      task.end()
-      return plan
-    } catch (e) {
-      task.end((e as Error).message)
-      throw e
-    }
-  })
+  ipcMain.handle('install:planFromCatalog', (_e, modVersionId: number, profileId: number) =>
+    planFromCatalogVersion(modVersionId, requireProfile(profileId))
+  )
 
   ipcMain.handle('install:planFromFile', async (_e, profileId: number) => {
     const res = await dialog.showOpenDialog({
@@ -1001,4 +967,68 @@ export async function bootstrap(): Promise<void> {
   getDb()
   setMainLanguage(getSetting('ui.language', DEFAULT_LANGUAGE))
   await loadSeedCatalog()
+}
+
+/**
+ * Downloads a catalogue release and turns it into an install plan.
+ *
+ * Two channels reach this: the catalogue screen, which has a version id, and a
+ * requirement named in a readme, which has a slug. Calling one IPC handler from
+ * another does not work - ipcMain keeps handlers in a map of its own, not as
+ * listeners - which is how "handler is not a function" happened.
+ */
+async function planFromCatalogVersion(modVersionId: number, profileId: number): Promise<InstallPlan> {
+  const db = getDb()
+  const row = db
+    .prepare(
+      `SELECT mv.id, mv.download_url, mv.version_label, m.id AS mod_id, m.title, m.author, m.source_url, m.paywalled
+         FROM mod_version mv JOIN mod m ON m.id = mv.mod_id WHERE mv.id = ?`
+    )
+    .get(modVersionId) as
+    | {
+        id: number
+        download_url: string | null
+        version_label: string
+        mod_id: number
+        title: string
+        author: string
+        source_url: string
+        paywalled: number
+      }
+    | undefined
+  if (!row) throw new Error(t('messages.install.versionGone'))
+  if (row.paywalled) throw new Error(t('messages.install.paywalled', { title: row.title }))
+  if (!row.download_url) throw new Error(t('messages.install.noDownloadLink', { title: row.title }))
+
+  const expected = (db.prepare('SELECT sha256 FROM mod_version WHERE id = ?').get(modVersionId) as {
+    sha256: string | null
+  }).sha256
+  const task = newTask(`Installing ${row.title}`)
+  try {
+    const archivePath = await downloadArchive(
+      row.download_url,
+      task.id,
+      row.title,
+      task.signal,
+      expected,
+      modVersionId,
+      row.source_url
+    )
+    const plan = await createPlan({
+      archivePath,
+      profileId,
+      modId: row.mod_id,
+      modVersionId: row.id,
+      title: row.title,
+      author: row.author,
+      sourceUrl: row.source_url,
+      signal: task.signal,
+      onProgress: (phase, c, total) => progress(task.id, `Installing ${row.title}`, phase, c, total)
+    })
+    task.end()
+    return plan
+  } catch (e) {
+    task.end((e as Error).message)
+    throw e
+  }
 }

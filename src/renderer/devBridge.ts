@@ -340,6 +340,10 @@ export function installDevBridge(): void {
     onProgress(_cb: (p: Progress) => void): () => void {
       return () => undefined
     },
+    onUpdateEvent(): () => void {
+      // The dev bridge never downloads anything; there is nothing to report.
+      return () => undefined
+    },
     onToast(): () => void {
       return () => undefined
     }

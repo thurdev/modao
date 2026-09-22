@@ -1621,3 +1621,19 @@ tr:focus-within .row-actions {
   font-size: 11px;
   color: var(--text-faint);
 }
+
+/* ── update download ─────────────────────────────────────────────────────── */
+.progress {
+  height: 6px;
+  width: 100%;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.progress-bar {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
