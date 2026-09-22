@@ -97,6 +97,32 @@ export const ptBR = {
     faultLocation: 'Local da falha',
     notLookedUpTitle: 'Não consultado'
   },
+  access: {
+    theGameFolder: 'a pasta do jogo',
+    notAllowed: 'O Modão não tem permissão para alterar {path}.',
+    fixProgramFiles:
+      'Esse caminho está dentro do Program Files, onde o Windows bloqueia escrita de processo comum. Abra o Modão como administrador, ou mova o jogo para fora do Program Files.',
+    fixReadOnly: 'Confira se a pasta não está somente leitura e se nenhum antivírus está segurando ela.',
+    busy: '{path} está em uso por outro processo — feche o GTA e qualquer janela do explorador nessa pasta, e tente de novo.',
+    diskFull: 'O disco que tem {path} está cheio.',
+    missing: '{path} não existe. Pode ter sido movida ou apagada fora do Modão.'
+  },
+  time: {
+    never: 'nunca',
+    justNow: 'agora',
+    minutes: '{count} min atrás',
+    hours: '{count} h atrás',
+    days: '{count} d atrás'
+  },
+  destinations: {
+    modloaderFolder: 'Pasta do Mod Loader',
+    asiPlugin: 'Plugin .asi',
+    cleoPlugin: 'Plugin CLEO',
+    cleoScript: 'Script CLEO',
+    rootFile: 'Arquivo na raiz do jogo',
+    overlay: 'Sobreposição (altera outro mod)',
+    unknown: 'Não classificado'
+  },
   download: {
     noLink: 'Nenhum link de download registrado para esta versão.',
     invalidLink: 'O link de download registrado não é uma URL válida.',

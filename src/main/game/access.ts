@@ -1,3 +1,4 @@
+import { t } from '../util/i18n'
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
@@ -86,18 +87,14 @@ export function describeFsError(error: unknown, gamePath?: string): string {
   const err = error as NodeJS.ErrnoException
   const code = err?.code
   if (!code) return err?.message ?? String(error)
-  const where = err.path ?? gamePath ?? 'the game folder'
+  const where = err.path ?? gamePath ?? t('access.theGameFolder')
 
   if (code === 'EPERM' || code === 'EACCES') {
-    const elevation = isProtectedLocation(where)
-      ? 'That path is inside Program Files, where Windows blocks writes from a normal process. Restart Modão as administrator, or move the game outside Program Files.'
-      : 'Check that the folder is not read-only and that no antivirus is holding it.'
-    return `Modão is not allowed to change ${where}. ${elevation} (${code}: ${err.message})`
+    const fix = isProtectedLocation(where) ? t('access.fixProgramFiles') : t('access.fixReadOnly')
+    return `${t('access.notAllowed', { path: where })} ${fix} (${code}: ${err.message})`
   }
-  if (code === 'EBUSY') {
-    return `${where} is in use by another process - close GTA: San Andreas and any file explorer window on that folder, then try again. (${code})`
-  }
-  if (code === 'ENOSPC') return `The disk holding ${where} is full. (${code})`
-  if (code === 'ENOENT') return `${where} is missing. It may have been moved or deleted outside Modão. (${code})`
+  if (code === 'EBUSY') return `${t('access.busy', { path: where })} (${code})`
+  if (code === 'ENOSPC') return `${t('access.diskFull', { path: where })} (${code})`
+  if (code === 'ENOENT') return `${t('access.missing', { path: where })} (${code})`
   return err.message
 }

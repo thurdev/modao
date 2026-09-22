@@ -12,6 +12,13 @@ San Andreas, III, Vice City e a Definitive Edition, num app só. Windows.
 > e coberto por teste. Leia [Problemas conhecidos](#problemas-conhecidos) antes
 > de confiar nele com a sua pasta do jogo.
 
+![Biblioteca do perfil ativo](docs/screenshots/biblioteca.png)
+
+<p align="center">
+  <img src="docs/screenshots/conflitos.png" width="49%" alt="Tela de conflitos: quem ganha cada arquivo duplicado" />
+  <img src="docs/screenshots/explorar.png" width="49%" alt="Catálogo do MixMods dentro do app" />
+</p>
+
 ---
 
 ## Por que existe

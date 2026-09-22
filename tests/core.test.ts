@@ -21,6 +21,8 @@ import type { CrashReport } from '../src/shared/types'
 import { decodeReadme, parseReadmeText } from '../src/main/install/readme'
 import { classifyTree } from '../src/main/install/classify'
 import { describeFsError, isProtectedLocation } from '../src/main/game/access'
+import { setMainLanguage } from '../src/main/util/i18n'
+import { translate } from '../src/shared/i18n'
 import { classifyDownload, looksLikeArchive, normalizeForFetch } from '../src/shared/download'
 
 let failures = 0
@@ -317,10 +319,33 @@ const eperm = Object.assign(new Error(`EPERM: operation not permitted, unlink '$
 })
 const epermText = describeFsError(eperm)
 check('access: Program Files is recognised as protected', isProtectedLocation(epermPath))
-check('access: EPERM names the path and the fix, not the syscall', epermText.includes('administrator') && epermText.includes('Program Files'), epermText)
+// The default language is pt-BR, so this is what a Brazilian user actually reads.
+check(
+  'access: EPERM names the path and the fix, not the syscall',
+  epermText.includes('administrador') && epermText.includes('Program Files') && epermText.includes(epermPath),
+  epermText
+)
 check('access: the original errno is kept for bug reports', epermText.includes('EPERM'), epermText)
 const busy = Object.assign(new Error('EBUSY'), { code: 'EBUSY', path: String.raw`D:\Games\GTA\gta_sa.exe` })
-check('access: EBUSY tells the user to close the game', describeFsError(busy).includes('close GTA'), describeFsError(busy))
+check('access: EBUSY tells the user to close the game', describeFsError(busy).includes('feche o GTA'), describeFsError(busy))
+
+setMainLanguage('en')
+check(
+  'access: the same error reads in English once the language is switched',
+  describeFsError(busy).includes('close the game'),
+  describeFsError(busy)
+)
+check(
+  'i18n: an English key that has no translation falls back to Portuguese',
+  translate('en', 'profiles.dryRunHint').length > 0 && translate('en', 'app.done') === 'Done'
+)
+check('i18n: a missing key never shows the user a raw path', translate('pt-BR', 'nope.not.here') === 'here')
+check(
+  'i18n: placeholders are filled and plurals pick a form',
+  translate('pt-BR', 'library.untrackedTitle', { count: 1, profile: 'Meu perfil' }).includes('não é rastreado') &&
+    translate('pt-BR', 'library.untrackedTitle', { count: 4, profile: 'Meu perfil' }).includes('não são rastreados')
+)
+setMainLanguage('pt-BR')
 check('access: a folder outside Program Files is not flagged', !isProtectedLocation(String.raw`D:\Games\GTA San Andreas`))
 
 // --- download links ----------------------------------------------------------

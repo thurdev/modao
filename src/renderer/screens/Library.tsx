@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { InstalledMod } from '@shared/types'
-import { DESTINATION_LABELS } from '@shared/types'
+import { DESTINATION_KEYS, DESTINATION_LABELS } from '@shared/types'
 import { api, formatBytes, relativeTime } from '../api'
 import { useApp } from '../state/store'
 import { useT } from '../lib/i18n'
@@ -278,14 +278,14 @@ export function LibraryScreen(): JSX.Element {
                     onChange={(v) => setSelected(v ? new Set(rows.map((r) => r.installId)) : new Set())}
                   />
                 </th>
-                <th style={{ width: 46 }}>On</th>
-                <Th id="title" label="Mod" />
-                <th>Kind</th>
-                <Th id="priority" label="Priority" style={{ width: 92 }} />
-                <Th id="size" label="Size" style={{ width: 84 }} />
-                <th style={{ width: 130 }}>Version</th>
-                <Th id="conflicts" label="Conflicts" style={{ width: 92 }} />
-                <Th id="installedAt" label="Installed" style={{ width: 104 }} />
+                <th style={{ width: 46 }}>{t('library.colOn')}</th>
+                <Th id="title" label={t('library.colMod')} />
+                <th>{t('library.colKind')}</th>
+                <Th id="priority" label={t('library.colPriority')} style={{ width: 92 }} />
+                <Th id="size" label={t('library.colSize')} style={{ width: 84 }} />
+                <th style={{ width: 130 }}>{t('library.colVersion')}</th>
+                <Th id="conflicts" label={t('library.colConflicts')} style={{ width: 92 }} />
+                <Th id="installedAt" label={t('library.colInstalled')} style={{ width: 104 }} />
                 <th style={{ width: 118 }} />
               </tr>
             </thead>
@@ -326,7 +326,7 @@ export function LibraryScreen(): JSX.Element {
                   </td>
                   <td>
                     <Badge tone={m.destinationClass === 'overlay' ? 'warn' : 'neutral'}>
-                      {DESTINATION_LABELS[m.destinationClass]}
+                      {t(DESTINATION_KEYS[m.destinationClass])}
                     </Badge>
                   </td>
                   <td>
@@ -339,12 +339,12 @@ export function LibraryScreen(): JSX.Element {
                     </span>
                     {m.updateAvailable ? (
                       <Badge tone="warn" title={`Catalog has ${m.latestVersionLabel}`}>
-                        update
+                        {t('library.updateBadge')}
                       </Badge>
                     ) : null}
                   </td>
-                  <td>{m.conflictCount ? <Badge tone="warn">{m.conflictCount}</Badge> : <span className="faint">none</span>}</td>
-                  <td className="faint">{relativeTime(m.installedAt)}</td>
+                  <td>{m.conflictCount ? <Badge tone="warn">{m.conflictCount}</Badge> : <span className="faint">{t('app.none')}</span>}</td>
+                  <td className="faint">{relativeTime(m.installedAt, t)}</td>
                   <td>
                     <div className="row-actions">
                       {m.sourceUrl ? (
@@ -440,7 +440,7 @@ function DetailModal(props: { mod: InstalledMod; onClose: () => void; onChanged:
     >
       <dl className="kv">
         <dt>Destination class</dt>
-        <dd>{DESTINATION_LABELS[m.destinationClass]}</dd>
+        <dd>{t(DESTINATION_KEYS[m.destinationClass])}</dd>
         <dt>Priority</dt>
         <dd className="num">
           {m.priority}
@@ -449,14 +449,14 @@ function DetailModal(props: { mod: InstalledMod; onClose: () => void; onChanged:
         <dt>Version</dt>
         <dd>
           {m.versionLabel}
-          {m.updateAvailable ? ` · catalog has ${m.latestVersionLabel}` : ''}
+          {m.updateAvailable ? t('library.catalogHas', { version: m.latestVersionLabel ?? '' }) : ''}
         </dd>
         <dt>Variant</dt>
-        <dd>{m.variantChoice ?? 'none'}</dd>
+        <dd>{m.variantChoice ?? t('app.none')}</dd>
         <dt>Installed</dt>
-        <dd>{relativeTime(m.installedAt)}</dd>
+        <dd>{relativeTime(m.installedAt, t)}</dd>
         <dt>Conflicts</dt>
-        <dd>{m.conflictCount || 'none'}</dd>
+        <dd>{m.conflictCount || t('app.none')}</dd>
       </dl>
 
       {m.subMods.length > 0 ? (

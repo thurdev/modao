@@ -190,7 +190,7 @@ export function App(): JSX.Element {
 
           {state.profile ? (
             <label className="row" style={{ gap: 6 }}>
-              <span className="tiny-caps">Profile</span>
+              <span className="tiny-caps">{t('nav.profiles')}</span>
               <select
                 className="select"
                 style={{ width: 216 }}
@@ -207,7 +207,7 @@ export function App(): JSX.Element {
           ) : null}
 
           <Button variant="primary" onClick={launch} disabled={launching} icon={<Icon.play width={12} height={12} />}>
-            {launching ? 'Starting…' : 'Play'}
+            {launching ? t('shell.launching') : t('shell.launch')}
           </Button>
         </header>
 

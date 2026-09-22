@@ -53,6 +53,7 @@ import { listCrashes, listIncidents, scanCrashes, setCrashResolved } from './dia
 import { listJournals, planSwitch, verifySwitch } from './profiles/switchTx'
 import { gameDefinition, type GameKind } from '@shared/games'
 import { DEFAULT_LANGUAGE, isLanguage } from '@shared/i18n'
+import { setMainLanguage } from './util/i18n'
 import { lookup } from './diagnostics/crashlist'
 import { collectLogs } from './diagnostics/logs'
 import { abortBisect, applyBisectStep, currentBisect, recordResult, startBisect } from './diagnostics/bisect'
@@ -277,6 +278,8 @@ export function registerIpc(): void {
     }
     const dbKey = map[key]
     if (dbKey) setSetting(dbKey, typeof value === 'boolean' ? (value ? '1' : '0') : String(value))
+    // The main process writes messages too, so it follows the same setting.
+    if (key === 'language') setMainLanguage(String(value))
     return settings()
   })
   ipcMain.handle('app:openExternal', async (_e, url: string) => {
@@ -939,5 +942,6 @@ function hostOf(url: string): string {
 
 export async function bootstrap(): Promise<void> {
   getDb()
+  setMainLanguage(getSetting('ui.language', DEFAULT_LANGUAGE))
   await loadSeedCatalog()
 }

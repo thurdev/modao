@@ -100,6 +100,32 @@ export const en: DeepPartial<typeof ptBR> = {
     faultLocation: 'Fault location',
     notLookedUpTitle: 'Not looked up'
   },
+  access: {
+    theGameFolder: 'the game folder',
+    notAllowed: 'Modão is not allowed to change {path}.',
+    fixProgramFiles:
+      'That path is inside Program Files, where Windows blocks writes from a normal process. Restart Modão as administrator, or move the game outside Program Files.',
+    fixReadOnly: 'Check that the folder is not read-only and that no antivirus is holding it.',
+    busy: '{path} is in use by another process — close the game and any file explorer window on that folder, then try again.',
+    diskFull: 'The disk holding {path} is full.',
+    missing: '{path} is missing. It may have been moved or deleted outside Modão.'
+  },
+  time: {
+    never: 'never',
+    justNow: 'just now',
+    minutes: '{count} min ago',
+    hours: '{count} h ago',
+    days: '{count} d ago'
+  },
+  destinations: {
+    modloaderFolder: 'Mod Loader folder',
+    asiPlugin: 'ASI plugin',
+    cleoPlugin: 'CLEO plugin',
+    cleoScript: 'CLEO script',
+    rootFile: 'Game root file',
+    overlay: 'Overlay (patches another mod)',
+    unknown: 'Unclassified'
+  },
   download: {
     noLink: 'No download link is recorded for this release.',
     invalidLink: 'The recorded download link is not a valid URL.',

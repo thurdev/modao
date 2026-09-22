@@ -107,7 +107,7 @@ function PreLaunch(props: { profileId: number }): JSX.Element {
               {r.gamePath}
             </span>
             <span>·</span>
-            <span>checked {relativeTime(r.generatedAt)}</span>
+            <span>checked {relativeTime(r.generatedAt, t)}</span>
           </div>
         </div>
       </div>
@@ -253,7 +253,7 @@ function Crashes(props: { profileId: number; pushToast: ToastFn }): JSX.Element 
                 const c = incident.primary
                 return (
                   <tr key={incident.key} className={c.resolved ? 'off' : ''}>
-                    <td className="faint">{relativeTime(incident.occurredAt)}</td>
+                    <td className="faint">{relativeTime(incident.occurredAt, t)}</td>
                     <td>
                       <Badge tone={c.kind === 'hang' ? 'warn' : 'danger'}>{c.kind}</Badge>
                       {incident.related.length ? (

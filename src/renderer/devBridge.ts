@@ -130,7 +130,8 @@ const RESPONSES: Partial<Record<IpcChannel, unknown>> = {
         probedPath: 'D:\Games\GTA San Andreas\modloader',
         code: 'EPERM',
         reason:
-          'Windows denies writes to D:\Games\GTA San Andreas\modloader because it sits inside Program Files. Restart Modão as administrator, or move the game to a folder outside Program Files.',
+          'O Windows recusa escrita em D:\Games\GTA San Andreas\modloader porque está dentro do Program Files. ' +
+          'Abra o Modão como administrador, ou mova o jogo para uma pasta fora do Program Files.',
         needsElevation: true
       }
     }

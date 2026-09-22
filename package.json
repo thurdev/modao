@@ -13,7 +13,7 @@
     "dist": "electron-vite build && electron-builder --win --config electron-builder.yml && node scripts/verify-package.mjs",
     "rebuild": "electron-builder install-app-deps",
     "test": "npm run test:units && npm run test:e2e",
-    "test:units": "esbuild tests/core.test.ts --bundle --platform=node --format=esm --outfile=out/tests/core.test.mjs --external:electron --external:iconv-lite --log-level=error && node out/tests/core.test.mjs",
+    "test:units": "esbuild tests/core.test.ts --bundle --platform=node --format=esm --outfile=out/tests/core.test.mjs --external:electron --external:iconv-lite --alias:@shared=./src/shared --log-level=error && node out/tests/core.test.mjs",
     "test:e2e": "node scripts/e2e.mjs",
     "ui": "vite --config vite.renderer.config.ts",
     "icons": "node scripts/make-icons.mjs",

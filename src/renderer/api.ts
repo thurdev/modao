@@ -188,16 +188,31 @@ export function formatDate(iso: string | null): string {
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-export function relativeTime(iso: string | null): string {
-  if (!iso) return 'never'
+/**
+ * "3 d atrás". Takes the translator so the renderer can say it in the user's
+ * language; without one it falls back to English, which is what logs want.
+ */
+export function relativeTime(iso: string | null, t?: (key: string, vars?: Record<string, string | number>) => string): string {
+  const say = (key: string, vars?: Record<string, string | number>): string =>
+    t ? t(key, vars) : EN_RELATIVE[key](vars ?? {})
+  if (!iso) return say('time.never')
   const diff = Date.now() - new Date(iso).getTime()
   if (!Number.isFinite(diff)) return iso
   const mins = Math.round(diff / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins} min ago`
+  if (mins < 1) return say('time.justNow')
+  if (mins < 60) return say('time.minutes', { count: mins })
   const hours = Math.round(mins / 60)
-  if (hours < 24) return `${hours} h ago`
+  if (hours < 24) return say('time.hours', { count: hours })
   const days = Math.round(hours / 24)
-  if (days < 30) return `${days} d ago`
+  if (days < 30) return say('time.days', { count: days })
   return formatDate(iso)
 }
+
+const EN_RELATIVE: Record<string, (v: Record<string, string | number>) => string> = {
+  'time.never': () => 'never',
+  'time.justNow': () => 'just now',
+  'time.minutes': (v) => `${v['count']} min ago`,
+  'time.hours': (v) => `${v['count']} h ago`,
+  'time.days': (v) => `${v['count']} d ago`
+}
+

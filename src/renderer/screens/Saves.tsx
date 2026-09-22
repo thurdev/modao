@@ -153,7 +153,7 @@ export function SavesScreen(): JSX.Element {
                   <td className="num">{s.index}</td>
                   <td className="mono">{s.file}</td>
                   <td className="faint num">{formatBytes(s.size)}</td>
-                  <td className="faint">{relativeTime(s.modifiedAt)}</td>
+                  <td className="faint">{relativeTime(s.modifiedAt, t)}</td>
                 </motion.tr>
               ))}
             </motion.tbody>
@@ -205,7 +205,7 @@ export function SavesScreen(): JSX.Element {
             <motion.tbody variants={listVariants} initial="initial" animate="animate">
               {snapshots.data!.map((s) => (
                 <motion.tr key={s.id} variants={itemVariants}>
-                  <td className="faint">{relativeTime(s.takenAt)}</td>
+                  <td className="faint">{relativeTime(s.takenAt, t)}</td>
                   <td className="cell-title">
                     <strong>{s.label}</strong>
                   </td>

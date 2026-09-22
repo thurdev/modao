@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { DestinationClass, PlannedFile } from '@shared/types'
-import { DESTINATION_LABELS } from '@shared/types'
+import { DESTINATION_KEYS, DESTINATION_LABELS } from '@shared/types'
 import { api, formatBytes } from '../api'
 import { useApp } from '../state/store'
 import { useT } from '../lib/i18n'
@@ -205,7 +205,7 @@ export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | 
               ) : (
                 plan.readmes[0].instructions.map((ins, idx) => (
                   <div key={idx} className="row top" style={{ gap: 9 }}>
-                    <Badge tone="accent">{DESTINATION_LABELS[ins.destination]}</Badge>
+                    <Badge tone="accent">{t(DESTINATION_KEYS[ins.destination])}</Badge>
                     <div style={{ minWidth: 0 }}>
                       <div className="mono">“{ins.line}”</div>
                       {ins.folder ? <div className="faint">{t('install.plan.folderNamedInReadme', { folder: ins.folder })}</div> : null}
@@ -285,7 +285,7 @@ export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | 
             {grouped.map(([dest, files]) => (
               <div key={dest} className="row between">
                 <span className="row" style={{ gap: 8, minWidth: 0 }}>
-                  <Badge tone={dest === 'overlay' ? 'warn' : 'accent'}>{DESTINATION_LABELS[dest]}</Badge>
+                  <Badge tone={dest === 'overlay' ? 'warn' : 'accent'}>{t(DESTINATION_KEYS[dest])}</Badge>
                   <span className="mono ellipsis">{commonPrefix(files, t('install.plan.gameRoot'))}</span>
                 </span>
                 <span className="faint num">
@@ -327,7 +327,7 @@ export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | 
                     >
                       {DESTINATIONS.map((d) => (
                         <option key={d} value={d}>
-                          {DESTINATION_LABELS[d]}
+                          {t(DESTINATION_KEYS[d])}
                         </option>
                       ))}
                     </select>

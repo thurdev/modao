@@ -7,7 +7,7 @@ import { useT } from '../lib/i18n'
 import { Badge, Button, Empty, ErrorNote, Loading, Rank, Search, useAsync } from '../components/ui'
 import { ManualInstall, ModDetail } from './BrowseDetail'
 import { GameChip } from '../components/GamePicker'
-import { gameDefinition } from '@shared/games'
+import { gameDefinition, type GameKind } from '@shared/games'
 import { Icon } from '../components/icons'
 import { itemVariants, listVariants } from '../lib/motion'
 
@@ -143,9 +143,11 @@ export function BrowseScreen(): JSX.Element {
                   {m.installed ? <Badge tone="ok">{t('browse.installedBadge')}</Badge> : null}
                   {m.paywalled ? <Badge tone="warn">{t('browse.earlyAccessBadge')}</Badge> : null}
                   {m.installed?.updateAvailable ? <Badge tone="accent">{t('browse.updateBadge')}</Badge> : null}
-                  {m.games.length > 1 || (game && !m.games.includes(game.kind)) ? (
+                  {/* A catalogue row indexed before the games column existed carries
+                      none, so never assume the array is there. */}
+                  {games(m).length > 1 || (game && !games(m).includes(game.kind)) ? (
                     <span className="row wrap" style={{ gap: 3, justifyContent: 'flex-end' }}>
-                      {m.games.map((k) => (
+                      {games(m).map((k) => (
                         <GameChip key={k} kind={k} title={t('browse.gameChipTitle', { game: gameDefinition(k).name })} />
                       ))}
                     </span>
@@ -206,4 +208,9 @@ export function BrowseScreen(): JSX.Element {
       </AnimatePresence>
     </>
   )
+}
+
+/** The games a catalogue row is for, tolerating a row that has none recorded. */
+function games(mod: CatalogMod): GameKind[] {
+  return Array.isArray(mod.games) ? mod.games : []
 }

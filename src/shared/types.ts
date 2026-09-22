@@ -11,6 +11,21 @@ export type DestinationClass =
   | 'overlay'
   | 'unknown'
 
+/**
+ * The i18n key for each destination class. The English text lives in the
+ * catalogue like every other string; this map only says which key to ask for.
+ */
+export const DESTINATION_KEYS: Record<DestinationClass, string> = {
+  'modloader-folder': 'destinations.modloaderFolder',
+  'asi-plugin': 'destinations.asiPlugin',
+  'cleo-plugin': 'destinations.cleoPlugin',
+  'cleo-script': 'destinations.cleoScript',
+  'root-file': 'destinations.rootFile',
+  overlay: 'destinations.overlay',
+  unknown: 'destinations.unknown'
+}
+
+/** English fallbacks, for logs and for anything outside the renderer. */
 export const DESTINATION_LABELS: Record<DestinationClass, string> = {
   'modloader-folder': 'Mod Loader folder',
   'asi-plugin': 'ASI plugin',

@@ -9,6 +9,16 @@ export const library = {
   pt: {
     intro:
       'Tudo que está instalado no perfil ativo. Ligar e desligar um mod, mudar a prioridade dele e desinstalar mexem só neste perfil e no bloco dele no modloader.ini.',
+    updateBadge: 'nova versão',
+    catalogHas: ' · o catálogo tem {version}',
+    colOn: 'Lig',
+    colMod: 'Mod',
+    colKind: 'Tipo',
+    colPriority: 'Prioridade',
+    colSize: 'Tamanho',
+    colVersion: 'Versão',
+    colConflicts: 'Conflitos',
+    colInstalled: 'Instalado',
     introBefore: 'Tudo que está instalado em ',
     introAfter:
       '. A prioridade decide quem ganha quando dois mods têm o mesmo arquivo: 1–100, uma instalação nova entra em 50, maior ganha, e 0 significa que o Mod Loader ignora o mod. Mudar aqui reescreve o bloco deste perfil no modloader.ini.',
@@ -53,6 +63,16 @@ export const library = {
   en: {
     intro:
       "Everything installed in the active profile. Enabling, disabling, changing a mod's priority and uninstalling touch this profile and its block in modloader.ini, nothing else.",
+    updateBadge: 'update',
+    catalogHas: ' · catalogue has {version}',
+    colOn: 'On',
+    colMod: 'Mod',
+    colKind: 'Kind',
+    colPriority: 'Priority',
+    colSize: 'Size',
+    colVersion: 'Version',
+    colConflicts: 'Conflicts',
+    colInstalled: 'Installed',
     introBefore: 'Everything installed in ',
     introAfter:
       '. Priority decides who wins a duplicated filename: 1–100, a fresh install sits at 50, higher wins, and 0 means Mod Loader ignores the mod. Editing it here rewrites this profile’s block in modloader.ini.',

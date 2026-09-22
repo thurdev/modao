@@ -85,7 +85,7 @@ export function ProfilesScreen(): JSX.Element {
         <div className="notice" data-kind="warn">
           <span className="notice-mark" />
           <div>
-            <strong>The mod store and the game are on different volumes</strong>
+            <strong>{t('profiles.differentVolumes')}</strong>
             <div className="faint">
               Junctions still work across volumes, but anything that needs a per-file link falls back to copying. The
               first switch will be slower and will use more disk.
@@ -98,7 +98,7 @@ export function ProfilesScreen(): JSX.Element {
         <div className="notice" data-kind="warn">
           <span className="notice-mark" />
           <div>
-            <strong>{orphanSaves.slots} save slot(s) on this machine belong to no profile yet</strong>
+            <strong>{t('profiles.orphanSaves', { count: orphanSaves.slots })}</strong>
             <div className="faint">
               Found in <span className="mono">{orphanSaves.path}</span>. Claim them from the Saves screen before
               switching profiles.
@@ -109,7 +109,7 @@ export function ProfilesScreen(): JSX.Element {
 
       <div className="row wrap">
         <Button variant="primary" icon={<Icon.plus width={13} height={13} />} onClick={() => setCreating(true)}>
-          New profile
+          {t('profiles.newProfile')}
         </Button>
         <Button
           icon={<Icon.upload width={13} height={13} />}
@@ -129,10 +129,10 @@ export function ProfilesScreen(): JSX.Element {
             }
           }}
         >
-          Import profile…
+          {t('profiles.importProfile')}
         </Button>
         <span className="spacer" />
-        <span className="faint num">{profiles.length} profile(s)</span>
+        <span className="faint num">{t('profiles.profileCount', { count: profiles.length })}</span>
       </div>
 
       {profiles.length === 0 ? (
@@ -141,7 +141,7 @@ export function ProfilesScreen(): JSX.Element {
           hint="Create one, or adopt an existing install from setup."
           action={
             <Button variant="primary" onClick={() => setCreating(true)}>
-              New profile
+              {t('profiles.newProfile')}
             </Button>
           }
         />
@@ -155,11 +155,11 @@ export function ProfilesScreen(): JSX.Element {
                   <div style={{ minWidth: 0 }}>
                     <strong className="ellipsis">{p.name}</strong>
                     <div className="faint">
-                      {p.isActive ? 'Active now' : `Played ${relativeTime(p.lastPlayedAt)}`}
+                      {p.isActive ? t('profiles.activeNow') : t('profiles.played', { when: relativeTime(p.lastPlayedAt, t) })}
                     </div>
                   </div>
                 </div>
-                {p.isActive ? <span className="badge ok">active</span> : null}
+                {p.isActive ? <span className="badge ok">{t('profiles.activeBadge')}</span> : null}
               </div>
 
               {p.notes ? <div className="faint">{p.notes}</div> : null}
@@ -173,19 +173,19 @@ export function ProfilesScreen(): JSX.Element {
                       / {p.modCount}
                     </span>
                   </b>
-                  <span>mods on</span>
+                  <span>{t('profiles.modsOn')}</span>
                 </span>
                 <span className="stat">
                   <b className="num">{formatBytes(p.totalSize)}</b>
-                  <span>tracked</span>
+                  <span>{t('profiles.tracked')}</span>
                 </span>
                 <span className="stat">
                   <b className="num">{p.saveCount}</b>
-                  <span>save slots</span>
+                  <span>{t('profiles.saveSlots')}</span>
                 </span>
                 <span className="stat">
-                  <b className="num">{relativeTime(p.createdAt)}</b>
-                  <span>created</span>
+                  <b className="num">{relativeTime(p.createdAt, t)}</b>
+                  <span>{t('profiles.created')}</span>
                 </span>
               </div>
 
@@ -231,7 +231,7 @@ export function ProfilesScreen(): JSX.Element {
                     if (file) pushToast('success', `Manifest written to ${file}`)
                   }}
                 >
-                  Export
+                  {t('profiles.export')}
                 </Button>
                 <span className="spacer" />
                 <Button size="sm" variant="quiet" iconOnly aria-label="Edit" onClick={() => setEditing(p)} icon={<Icon.settings />} />
@@ -254,7 +254,7 @@ export function ProfilesScreen(): JSX.Element {
         {creating ? (
           <ProfileEditor
             key="create"
-            title="New profile"
+            title={t('profiles.newProfile')}
             initial={{ name: '', color: COLORS[profiles.length % COLORS.length], notes: '' }}
             copyFromOptions={profiles}
             onClose={() => setCreating(false)}
