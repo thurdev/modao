@@ -1,0 +1,203 @@
+import type { IpcChannel } from '@shared/ipc'
+import type {
+  AppSettings,
+  CacheKind,
+  ExistingSavesReport,
+  StorageReport,
+  UnmanagedReport,
+  WriteAccess,
+  BisectSession,
+  CatalogMod,
+  CrashIncident,
+  CrashReport,
+  FileConflict,
+  GameInstall,
+  HealthReport,
+  ImgAnalysis,
+  IfpAnalysis,
+  InstallPlan,
+  InstalledMod,
+  LogEntry,
+  PeInfo,
+  Profile,
+  SwitchJournal,
+  SwitchPlan,
+  SwitchVerification,
+  Progress,
+  SaveSnapshot,
+  TxdAnalysis
+} from '@shared/types'
+
+interface Bridge {
+  invoke(channel: IpcChannel, ...args: unknown[]): Promise<unknown>
+  onProgress(cb: (p: Progress) => void): () => void
+  onToast(cb: (t: { kind: 'info' | 'error' | 'success'; message: string }) => void): () => void
+}
+
+/**
+ * The bridge is read lazily, never at module load: the preload script and the
+ * dev-server mock are both installed on `window`, and binding at import time
+ * would capture whichever one happened to exist first.
+ */
+function bridge(): Bridge {
+  const b = (window as unknown as { modao?: Bridge }).modao
+  if (!b) throw new Error('The Modão IPC bridge is not available in this window.')
+  return b
+}
+
+function call<T>(channel: IpcChannel, ...args: unknown[]): Promise<T> {
+  return bridge().invoke(channel, ...args) as Promise<T>
+}
+
+export const api = {
+  onProgress: (cb: (p: Progress) => void): (() => void) => bridge().onProgress(cb),
+  onToast: (cb: (t: { kind: 'info' | 'error' | 'success'; message: string }) => void): (() => void) =>
+    bridge().onToast(cb),
+
+  settings: () => call<AppSettings>('app:settings'),
+  setSetting: (key: keyof AppSettings, value: unknown) => call<AppSettings>('app:setSetting', key, value),
+  openExternal: (url: string) => call<void>('app:openExternal', url),
+  revealPath: (p: string) => call<void>('app:revealPath', p),
+  versions: () => call<{ app: string; electron: string; node: string }>('app:version'),
+  storage: () => call<StorageReport>('app:storage'),
+  clearCache: (kind: CacheKind) => call<{ freed: number }>('app:clearCache', kind),
+  elevation: () =>
+    call<{ running: boolean; needed: boolean; remembered: boolean; reason: string | null; protectedPath: boolean }>(
+      'app:elevation'
+    ),
+  relaunchElevated: (remember: boolean) => call<void>('app:relaunchElevated', remember),
+  recheckAccess: () => call<WriteAccess>('app:recheckAccess'),
+
+  games: () => call<GameInstall[]>('game:list'),
+  detectGames: () => call<string[]>('game:detect'),
+  addGame: (p: string) => call<GameInstall>('game:add', p),
+  pickGameFolder: () => call<string | null>('game:pickFolder'),
+  setActiveGame: (id: number) => call<GameInstall>('game:setActive', id),
+  activeGame: () => call<GameInstall | null>('game:active'),
+  adopt: (gameId: number, profileName: string) =>
+    call<{ profileId: number; adopted: number; report: string[] }>('game:adopt', gameId, profileName),
+  adoptInto: (profileId: number) =>
+    call<{ profileId: number; adopted: number; report: string[] }>('game:adoptInto', profileId),
+  unmanaged: (profileId: number) => call<UnmanagedReport>('game:unmanaged', profileId),
+  removeGame: (id: number) => call<void>('game:remove', id),
+  launch: () => call<{ launched: boolean; message: string }>('game:launch'),
+
+  profiles: () => call<Profile[]>('profiles:list'),
+  activeProfile: () => call<Profile | null>('profiles:active'),
+  createProfile: (input: { name: string; color?: string; notes?: string; copyFrom?: number }) =>
+    call<Profile>('profiles:create', input),
+  updateProfile: (id: number, patch: { name?: string; color?: string; notes?: string }) =>
+    call<Profile>('profiles:update', id, patch),
+  removeProfile: (id: number) => call<void>('profiles:remove', id),
+  activateProfile: (id: number) =>
+    call<{
+      profile: Profile
+      elapsedMs: number
+      log: string[]
+      journalId: number | null
+      verification: SwitchVerification | null
+    }>('profiles:activate', id),
+  /** What a switch would do, file by file. Changes nothing. */
+  switchPlan: (id: number) => call<SwitchPlan>('profiles:switchPlan', id),
+  verifyProfile: (id: number) => call<SwitchVerification>('profiles:verify', id),
+  restorePreviousSwitch: (journalId?: number) =>
+    call<{ log: string[]; restored: number }>('profiles:restorePrevious', journalId),
+  switchHistory: () => call<SwitchJournal[]>('profiles:switchHistory'),
+  duplicateProfile: (id: number, name: string) => call<Profile>('profiles:duplicate', id, name),
+  exportProfile: (id: number) => call<string | null>('profiles:exportArchive', id),
+  importProfile: () =>
+    call<{ profileId: number; resolved: number; unresolved: string[]; needsDownload: string[] } | null>(
+      'profiles:importArchive'
+    ),
+
+  library: (profileId: number) => call<InstalledMod[]>('library:list', profileId),
+  setEnabled: (installId: number, enabled: boolean) => call<void>('library:setEnabled', installId, enabled),
+  setPriority: (installId: number, priority: number) => call<void>('library:setPriority', installId, priority),
+  uninstall: (installId: number) => call<{ restored: number; quarantined: string[] }>('library:uninstall', installId),
+  rollbackPreview: (installId: number) => call<{ relativePath: string; action: string }[]>('library:rollbackPreview', installId),
+  readme: (installId: number) => call<string | null>('library:readme', installId),
+  setSubModEnabled: (installId: number, rel: string, enabled: boolean) =>
+    call<void>('library:subModSetEnabled', installId, rel, enabled),
+
+  catalog: (query: { search?: string; category?: string; sort?: string; installedOnly?: boolean; limit?: number }) =>
+    call<{ mods: CatalogMod[]; categories: string[]; total: number }>('catalog:list', query),
+  catalogMod: (modId: number) => call<CatalogMod | null>('catalog:get', modId),
+  refreshMod: (modId: number) => call<CatalogMod | null>('catalog:refresh', modId),
+  crawl: () => call<{ started: boolean; taskId: string; message: string }>('catalog:crawl'),
+  seedInfo: () => call<{ count: number; lastCrawl: string | null; crawlEnabled: boolean }>('catalog:seedInfo'),
+  reseed: () => call<{ count: number }>('catalog:reseed'),
+
+  planFromCatalog: (modVersionId: number, profileId: number) => call<InstallPlan>('install:planFromCatalog', modVersionId, profileId),
+  planFromFile: (profileId: number) => call<InstallPlan | null>('install:planFromFile', profileId),
+  choose: (planId: string, groupId: string, optionId: string) => call<InstallPlan>('install:choose', planId, groupId, optionId),
+  setDestination: (planId: string, sourcePath: string, destination: string) =>
+    call<InstallPlan>('install:setDestination', planId, sourcePath, destination),
+  applyPlan: (planId: string, profileId: number) =>
+    call<{ installId: number; written: number; backedUp: number }>('install:apply', planId, profileId),
+  discardPlan: (planId: string) => call<void>('install:discard', planId),
+
+  conflicts: (profileId: number) => call<FileConflict[]>('conflicts:list', profileId),
+  previewConflicts: (profileId: number, changes: { installId: number; priority: number }[]) =>
+    call<FileConflict[]>('conflicts:preview', profileId, changes),
+  applyPriorities: (profileId: number, changes: { installId: number; priority: number }[]) =>
+    call<void>('conflicts:applyPriorities', profileId, changes),
+
+  analyzeTxd: (p: string) => call<TxdAnalysis>('analyze:txd', p),
+  analyzeIfp: (p: string) => call<IfpAnalysis>('analyze:ifp', p),
+  analyzeImg: (p: string) => call<ImgAnalysis>('analyze:img', p),
+  analyzePe: (p: string) => call<PeInfo>('analyze:pe', p),
+  profileTextures: (profileId: number) => call<TxdAnalysis[]>('analyze:profileTextures', profileId),
+
+  saves: (profileId: number) => call<SaveSnapshot[]>('saves:list', profileId),
+  snapshot: (profileId: number, label: string) => call<SaveSnapshot>('saves:snapshot', profileId, label),
+  restoreSnapshot: (id: number) => call<void>('saves:restore', id),
+  currentSlots: (profileId: number) => call<SaveSnapshot | null>('saves:currentSlots', profileId),
+  detectExistingSaves: () => call<ExistingSavesReport>('saves:detectExisting'),
+  importExistingSaves: (profileId: number, label: string) =>
+    call<{ snapshotId: number; slots: number }>('saves:importExisting', profileId, label),
+
+  health: (profileId: number) => call<HealthReport>('health:run', profileId),
+  crashes: (profileId: number) => call<CrashReport[]>('health:crashes', profileId),
+  /** The same records grouped into one entry per dead process. */
+  crashIncidents: (profileId: number) => call<CrashIncident[]>('health:incidents', profileId),
+  scanCrashes: (profileId: number) =>
+    call<{ found: number; added: number; hangSuspected: boolean; message: string }>('health:scanCrashes', profileId),
+  resolveCrash: (id: number, resolved: boolean) => call<void>('health:resolveCrash', id, resolved),
+  lookupAddress: (address: string) =>
+    call<{ address: string; cause: string | null; solution: string | null }>('health:lookupAddress', address),
+  logs: (profileId: number) => call<LogEntry[]>('health:logs', profileId),
+  bisectStart: (profileId: number) => call<BisectSession>('health:bisectStart', profileId),
+  bisectResult: (sessionId: string, result: 'good' | 'bad') => call<BisectSession>('health:bisectResult', sessionId, result),
+  bisectAbort: (sessionId: string) => call<void>('health:bisectAbort', sessionId),
+  bisectCurrent: (profileId: number) => call<BisectSession | null>('health:bisectCurrent', profileId),
+
+  cancelTask: (taskId: string) => call<void>('tasks:cancel', taskId)
+}
+
+export function formatBytes(n: number): string {
+  if (!n) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.min(units.length - 1, Math.floor(Math.log(n) / Math.log(1024)))
+  return `${(n / 1024 ** i).toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+}
+
+export function formatDate(iso: string | null): string {
+  if (!iso) return 'never'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
+export function relativeTime(iso: string | null): string {
+  if (!iso) return 'never'
+  const diff = Date.now() - new Date(iso).getTime()
+  if (!Number.isFinite(diff)) return iso
+  const mins = Math.round(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins} min ago`
+  const hours = Math.round(mins / 60)
+  if (hours < 24) return `${hours} h ago`
+  const days = Math.round(hours / 24)
+  if (days < 30) return `${days} d ago`
+  return formatDate(iso)
+}

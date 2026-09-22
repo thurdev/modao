@@ -1,0 +1,296 @@
+[
+ {
+  "id": 1,
+  "slug": "ecg-enhanced-classic-graphics",
+  "title": "ECG – Enhanced Classic Graphics",
+  "author": "Junior_Djjr",
+  "category": "Gráficos",
+  "sourceUrl": "https://www.mixmods.com.br/2019/10/ecg-enhanced-classic-graphics/",
+  "description": "ECG é um projeto meu (Junior_Djjr) para criar um pack de gráficos sem exageros e que se encaixe na atmosfera do GTA SA, como uma remasterização. Melhora as texturas sem causar lag e também inclui um script (Enhance ParticleTXD) para ajudar em trazer melhores resultados.",
+  "blocks": [],
+  "images": [
+   "https://www.mixmods.com.br/wp-content/uploads/2019/10/mod-2-1867634.jpg",
+   "https://www.mixmods.com.br/wp-content/uploads/2019/10/gta_sa2B2016-01-142B00-09-24-369-6940759.jpg",
+   "https://www.mixmods.com.br/wp-content/uploads/2019/10/jpg1-3673811.jpg"
+  ],
+  "videos": [
+   "https://www.youtube.com/embed/ORYfqXKyawY?si=a5ezf8IvYsT32tY7"
+  ],
+  "requirementsText": [
+   "editar"
+  ],
+  "incompatibleText": [],
+  "readme": null,
+  "paywalled": false,
+  "publishedAt": "2019-10-16T04:30:00+00:00",
+  "updatedAt": "2026-05-05T15:03:52+00:00",
+  "firstSeenAt": "2019-10-16T04:30:00+00:00",
+  "lastIndexedAt": "2026-05-05T15:03:52+00:00",
+  "ratingInputs": {
+   "recency": 0.8,
+   "authorReputation": 1,
+   "inEssentials": true,
+   "requiredByCount": 0,
+   "installCount": 0,
+   "earlyDisableCount": 0
+  },
+  "rating": 0.92,
+  "versions": [
+   {
+    "id": 1,
+    "modId": 1,
+    "versionLabel": "2026-05-05",
+    "releaseDate": "2026-05-05T15:03:52+00:00",
+    "downloadUrl": "https://sharemods.com/5o9kl05ilj10/Enhanced_Classic_Graphics.7z.html",
+    "fileSize": null,
+    "sha256": null,
+    "changelog": null
+   }
+  ],
+  "installed": null
+ },
+ {
+  "id": 2,
+  "slug": "sa-proper-shaders",
+  "title": "[SA] Proper Shaders (gráficos HD para GTA SA)",
+  "author": "Junior_Djjr",
+  "category": "Gráficos",
+  "sourceUrl": "https://www.mixmods.com.br/2026/09/sa-proper-shaders/",
+  "description": "Atualizado 01/09/26 Nova versão: Setembro (09-26) lançada para apoiadores alpha! E versão de 1 mês atrás agora disponível para apoiadores beta, e 2 meses atrás disponível para o público. Agora a cor ambiente do jogo é um degradê similar à engines modernas, e foi implementado o “Skylight” (sky occlusion) que cria uma oclusão ambiente world-space por todo o cenário, com base na visibilidade do céu,…",
+  "blocks": [],
+  "images": [
+   "https://www.mixmods.com.br/wp-content/uploads/2026/05/gta-san-andreas-mod-pc-proper-shaders-logo-1.png",
+   "https://www.mixmods.com.br/wp-content/uploads/2026/07/gta-sa-mod-proper-shaders-hd-graphics-realistic-remaster-remake-ssgi-global-indirect-lighting-gtao-500x209.jpg",
+   "https://www.mixmods.com.br/wp-content/uploads/2026/08/gta-sa-mod-proper-shaders-hd-graphics-realistic-remaster-remake-per-pixel-lighting-deferred-500x209.jpg"
+  ],
+  "videos": [
+   "https://www.youtube.com/embed/UgzOdg73qeU?si=l7QZ02Pejmv4fqNU",
+   "https://www.youtube.com/embed/iY71eFh8plE?si=czl7ksopFn8gl1P8"
+  ],
+  "requirementsText": [
+   "monitor HDR, isto foi implementado na engine)",
+   "mínimos do jogo, e os requisitos recomendados (para sombras, luzes dinâmicas) não são altos, sem lag em PCs medianos ou relativamente fracos"
+  ],
+  "incompatibleText": [],
+  "readme": null,
+  "paywalled": true,
+  "publishedAt": "2026-09-01T18:40:23+00:00",
+  "updatedAt": "2026-09-10T01:14:39+00:00",
+  "firstSeenAt": "2026-09-01T18:40:23+00:00",
+  "lastIndexedAt": "2026-09-10T01:14:39+00:00",
+  "ratingInputs": {
+   "recency": 0.8,
+   "authorReputation": 1,
+   "inEssentials": true,
+   "requiredByCount": 1,
+   "installCount": 0,
+   "earlyDisableCount": 0
+  },
+  "rating": 0.8600000000000001,
+  "versions": [
+   {
+    "id": 2,
+    "modId": 2,
+    "versionLabel": "2026-09-10",
+    "releaseDate": "2026-09-10T01:14:39+00:00",
+    "downloadUrl": "https://sharemods.com/7bqlzhg6m5vt/SA_-_Proper_Shaders_07-26___40_pv5w9vtw3__41_.zip.html",
+    "fileSize": null,
+    "sha256": null,
+    "changelog": null
+   }
+  ],
+  "installed": null
+ },
+ {
+  "id": 3,
+  "slug": "sa-vehfuncs",
+  "title": "[SA] VehFuncs v2.5.5",
+  "author": "Junior_Djjr",
+  "category": "Carros",
+  "sourceUrl": "https://www.mixmods.com.br/2025/12/sa-vehfuncs/",
+  "description": "Português English Atualizado – 03/09/26 Adicionado f_an5 (inverso da f_an2, para quando não há ocupante). Adicionado mais informações no log para identificar conflitos com mods. Atualizado – 01/09/26 Código revisado corrigindo várias pequenas coisas, para melhor estabilidade.",
+  "blocks": [],
+  "images": [
+   "https://www.mixmods.com.br/wp-content/uploads/2020/12/gta-sa-mod-vehfuncs-9195431.png",
+   "https://www.mixmods.com.br/wp-content/uploads/2020/12/gta-sa-san-mod-vehfuncs-tractor-trator-valtra-8893400.jpg",
+   "https://www.mixmods.com.br/wp-content/uploads/2020/12/gta-sa-san-carreta-trator-6523348.jpg"
+  ],
+  "videos": [],
+  "requirementsText": [
+   "ter o VehFuncs instalado no seu GTA SA para poder usar carros adaptados à ele",
+   "d",
+   "d to have VehFuncs installed on your GTA SA in order to use cars adapted to it"
+  ],
+  "incompatibleText": [
+   "mods"
+  ],
+  "readme": null,
+  "paywalled": false,
+  "publishedAt": "2025-12-06T22:10:00+00:00",
+  "updatedAt": "2026-09-03T03:57:42+00:00",
+  "firstSeenAt": "2025-12-06T22:10:00+00:00",
+  "lastIndexedAt": "2026-09-03T03:57:42+00:00",
+  "ratingInputs": {
+   "recency": 0.8,
+   "authorReputation": 1,
+   "inEssentials": false,
+   "requiredByCount": 2,
+   "installCount": 0,
+   "earlyDisableCount": 0
+  },
+  "rating": 0.8,
+  "versions": [
+   {
+    "id": 3,
+    "modId": 3,
+    "versionLabel": "2.5.5",
+    "releaseDate": "2026-09-03T03:57:42+00:00",
+    "downloadUrl": "https://sharemods.com/zuym13s774r6/VehFuncs.zip.html",
+    "fileSize": null,
+    "sha256": null,
+    "changelog": null
+   }
+  ],
+  "installed": null
+ },
+ {
+  "id": 4,
+  "slug": "crashinfo",
+  "title": "[III|VC|SA] CrashInfo v1.2.1 (mostrar solução de crash)",
+  "author": "Junior_Djjr",
+  "category": "Ferramentas",
+  "sourceUrl": "https://www.mixmods.com.br/2022/09/crashinfo/",
+  "description": "Atualizado 30/01/25 Adicionado lista em espanhol. Atualizado 13/09/22 Adaptado para GTA III e GTA Vice City! Ainda sem documentações, mas em breve começarei a colocar. Adicionado um botão “Force Quit” para fechar o jogo de maneira forçada, e textos melhorados. Um mod que irá revolucionar o modding do GTA III/VC/SA!",
+  "blocks": [],
+  "images": [
+   "https://www.mixmods.com.br/wp-content/uploads/2022/01/gta-iii-vc-sa-mod-crashinfo-crash-info-error-solution-list-500x506.jpg",
+   "https://www.mixmods.com.br/wp-content/uploads/2021/11/download-baixar-4532137.png",
+   "https://www.mixmods.com.br/wp-content/uploads/2022/10/urbanize-logo-catarse-150x150.png"
+  ],
+  "videos": [],
+  "requirementsText": [],
+  "incompatibleText": [],
+  "readme": null,
+  "paywalled": false,
+  "publishedAt": "2022-09-13T09:36:00+00:00",
+  "updatedAt": "2025-01-30T23:02:45+00:00",
+  "firstSeenAt": "2022-09-13T09:36:00+00:00",
+  "lastIndexedAt": "2025-01-30T23:02:45+00:00",
+  "ratingInputs": {
+   "recency": 0.8,
+   "authorReputation": 1,
+   "inEssentials": false,
+   "requiredByCount": 3,
+   "installCount": 0,
+   "earlyDisableCount": 0
+  },
+  "rating": 0.74,
+  "versions": [
+   {
+    "id": 4,
+    "modId": 4,
+    "versionLabel": "1.2.1",
+    "releaseDate": "2025-01-30T23:02:45+00:00",
+    "downloadUrl": "https://sharemods.com/g2boidmk6atl/CrashInfo.zip.html",
+    "fileSize": null,
+    "sha256": null,
+    "changelog": null
+   }
+  ],
+  "installed": null
+ },
+ {
+  "id": 5,
+  "slug": "discord-mixmods",
+  "title": "Discord MixMods",
+  "author": "Junior_Djjr",
+  "category": "Novidades",
+  "sourceUrl": "https://www.mixmods.com.br/2021/01/discord-mixmods/",
+  "description": "Finalmente agora a MixMods tem um servidor público no Discord! Nós abrimos o servidor para trabalhar em um sub-projeto, o SAxVCxLC Connected (GTA Mixed), que é uma versão alternativa do SAxVCxLC que visa aproximar Vice City e Liberty City de San Andreas. Está indo muito bem e lançaremos ainda hoje.",
+  "blocks": [],
+  "images": [
+   "https://www.mixmods.com.br/wp-content/uploads/2021/01/mixmods-logo-discord-1373826.png",
+   "https://www.mixmods.com.br/wp-content/uploads/2023/02/jogo-gta-brasileiro-impunes-2nibble-devlog-bicicleta-empinando-150x150.jpg",
+   "https://www.mixmods.com.br/wp-content/uploads/2024/03/unreal-nanite-150x150.jpg"
+  ],
+  "videos": [],
+  "requirementsText": [],
+  "incompatibleText": [],
+  "readme": null,
+  "paywalled": false,
+  "publishedAt": "2021-01-29T19:47:00+00:00",
+  "updatedAt": null,
+  "firstSeenAt": "2021-01-29T19:47:00+00:00",
+  "lastIndexedAt": null,
+  "ratingInputs": {
+   "recency": 0.8,
+   "authorReputation": 1,
+   "inEssentials": false,
+   "requiredByCount": 4,
+   "installCount": 0,
+   "earlyDisableCount": 0
+  },
+  "rating": 0.68,
+  "versions": [
+   {
+    "id": 5,
+    "modId": 5,
+    "versionLabel": "2021-01-29",
+    "releaseDate": "2021-01-29T19:47:00+00:00",
+    "downloadUrl": null,
+    "fileSize": null,
+    "sha256": null,
+    "changelog": null
+   }
+  ],
+  "installed": null
+ },
+ {
+  "id": 6,
+  "slug": "tuning-mod",
+  "title": "Tuning Mod v3.0.1",
+  "author": "Junior_Djjr",
+  "category": "Carros",
+  "sourceUrl": "https://www.mixmods.com.br/2019/06/tuning-mod/",
+  "description": "Veja aqui as principais novidades do TMv3! TMv3 é um mod cleo de tuning sandbox onde o limite é a sua criatividade. Se trata do meu (Junior_Djjr) atual maior projeto, algo que iniciei em 2012 e se tornou o maior mod cleo do mundo. Você pode adicionar literalmente qualquer modelo em qualquer veículo!",
+  "blocks": [],
+  "images": [
+   "https://www.mixmods.com.br/wp-content/uploads/2019/06/logo-tm3-min-9193996.png",
+   "https://www.mixmods.com.br/wp-content/uploads/2019/06/gta-sa-san-tuning-mod-3770658.jpg",
+   "https://www.mixmods.com.br/wp-content/uploads/2019/06/gta-sa-tuning-mod-tmv3-v3-san-5299058.jpg"
+  ],
+  "videos": [],
+  "requirementsText": [
+   "For Speed? Há algo semelhante (em certos aspectos, até mais avançado)"
+  ],
+  "incompatibleText": [],
+  "readme": null,
+  "paywalled": false,
+  "publishedAt": "2019-06-23T13:30:00+00:00",
+  "updatedAt": null,
+  "firstSeenAt": "2019-06-23T13:30:00+00:00",
+  "lastIndexedAt": null,
+  "ratingInputs": {
+   "recency": 0.8,
+   "authorReputation": 1,
+   "inEssentials": false,
+   "requiredByCount": 5,
+   "installCount": 0,
+   "earlyDisableCount": 0
+  },
+  "rating": 0.6200000000000001,
+  "versions": [
+   {
+    "id": 6,
+    "modId": 6,
+    "versionLabel": "3.0.1",
+    "releaseDate": "2019-06-23T13:30:00+00:00",
+    "downloadUrl": "https://sharemods.com/dh3hh64cs3wg/Tuning_Mod_v3.7z.html",
+    "fileSize": null,
+    "sha256": null,
+    "changelog": null
+   }
+  ],
+  "installed": null
+ }
+]
