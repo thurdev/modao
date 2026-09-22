@@ -83,7 +83,10 @@ jobs:
           git push origin HEAD:main --follow-tags
 
       - name: Build the installer
-        run: npm run dist
+        # --publish never: electron-builder sees CI and would try to create the
+        # release itself, which needs a token it is not given. Publishing is the
+        # next step's job.
+        run: npm run dist:ci
 
       - name: Publish the release
         uses: softprops/action-gh-release@v2

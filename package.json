@@ -21,7 +21,8 @@
     "verify:package": "node scripts/verify-package.mjs",
     "try:fetch": "esbuild scripts/try-fetch.ts --bundle --platform=node --format=cjs --packages=external --alias:@shared=./src/shared --log-level=error --outfile=out/scripts/try-fetch.cjs && electron out/scripts/try-fetch.cjs",
     "try:hosts": "esbuild scripts/try-hosts.ts --bundle --platform=node --format=cjs --packages=external --alias:@shared=./src/shared --log-level=error --outfile=out/scripts/try-hosts.cjs && electron out/scripts/try-hosts.cjs",
-    "index:export": "esbuild scripts/export-index.ts --bundle --platform=node --format=cjs --packages=external --alias:@shared=./src/shared --log-level=error --outfile=out/scripts/export-index.cjs && electron out/scripts/export-index.cjs"
+    "index:export": "esbuild scripts/export-index.ts --bundle --platform=node --format=cjs --packages=external --alias:@shared=./src/shared --log-level=error --outfile=out/scripts/export-index.cjs && electron out/scripts/export-index.cjs",
+    "dist:ci": "electron-vite build && electron-builder --win --publish never --config electron-builder.yml && node scripts/verify-package.mjs"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.1",

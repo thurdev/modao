@@ -26,6 +26,7 @@ import { translate } from '../src/shared/i18n'
 import { classifyDownload, looksLikeArchive, normalizeForFetch } from '../src/shared/download'
 import { parseCrashDump, parseModLoaderLog } from '../src/main/diagnostics/modloaderLog'
 import { limitAdjusterNames, parseStreamIni, SAFE_STREAMING_MEMORY_MB } from '../src/main/game/streamIni'
+import { pluginEvidence } from '../src/main/formats/strings'
 
 let failures = 0
 function check(name: string, cond: boolean, extra?: unknown): void {
@@ -542,6 +543,46 @@ check(
   ['OpenLimitAdjuster.asi', 'III.VC.SA.LimitAdjuster.asi', 'fastman92limitAdjuster.asi'].every((n) =>
     limitAdjusterNames().test(n)
   )
+)
+
+// --- what a plugin says about itself -----------------------------------------
+// Guessing an .asi's layout from the archive is what put VHud.asi in scripts\
+// with its files elsewhere. The binary settles it.
+function pe(strings: string[], wide: string[] = []): Buffer {
+  const parts: Buffer[] = [Buffer.from('MZ\x90\x00', 'latin1')]
+  for (const s of strings) parts.push(Buffer.from(s + '\0', 'latin1'))
+  for (const s of wide) parts.push(Buffer.from(s + '\0', 'utf16le'))
+  return Buffer.concat(parts)
+}
+
+// A backslash written literally here is one escape away from being a backspace,
+// so the separator is built rather than typed.
+const BS = String.fromCharCode(92)
+const vhud = pluginEvidence(
+  pe(
+    [`VHud${BS}blips`, `VHud${BS}data`, `VHud${BS}map`, 'VHud.ini', 'kernel32.dll', 'd3d9.dll'],
+    [`VHud${BS}fonts`, 'SilentPatch is installed.']
+  )
+)
+check('strings: the folder the plugin expects to own is derived from its own paths', vhud.rootFolder === 'VHud', vhud.rootFolder)
+check(
+  'strings: the paths it opens are listed',
+  vhud.paths.includes(`VHud${BS}blips`) && vhud.paths.includes(`VHud${BS}fonts`),
+  vhud.paths
+)
+check('strings: UTF-16 strings are read too, not just ASCII', vhud.paths.includes(`VHud${BS}fonts`), vhud.paths)
+check('strings: its own config is picked out', vhud.configs.includes('VHud.ini'), vhud.configs)
+check('strings: Windows DLLs every PE mentions are ignored', !vhud.modules.some((m) => /kernel32/i.test(m)), vhud.modules)
+check('strings: a plugin it probes for is reported as a dependency candidate', vhud.probes.includes('SilentPatch'), vhud.probes)
+
+const bare = pluginEvidence(pe(['SilentPatchSA.ini', 'kernel32.dll', 'CreateFileA']))
+check('strings: a plugin with no folder of its own claims none', bare.rootFolder === null, bare.rootFolder)
+
+const shaders = pluginEvidence(pe(['SilentPatch is installed.', 'Open Limit Adjuster is installed.', 'ProperShaders.ini']))
+check(
+  'strings: both runtime probes Proper Shaders prints are found',
+  shaders.probes.includes('SilentPatch') && shaders.probes.includes('Open Limit Adjuster'),
+  shaders.probes
 )
 
 // --- download links ----------------------------------------------------------
