@@ -17,6 +17,7 @@ import { archiveOrDirectory, effectiveRoot } from './archive'
 import { findReadmes, parseReadme } from './readme'
 import { classifyTree, type OverlayMatch } from './classify'
 import { providesKey } from '../conflicts'
+import { flattenName, requirementMet } from '@shared/requirements'
 import { resolveDependencies } from '../deps/resolver'
 import {
   knownAbout,
@@ -693,11 +694,13 @@ async function statedRequirements(
  * counts even though no profile installed it, because the game will load it.
  */
 function satisfiedInProfile(profileId: number, game: GameInstall, name: string): boolean {
-  const needle = name.toLowerCase().replace(/[^a-z0-9+]/g, '')
+  const needle = flattenName(name)
   if (!needle) return true
-  if (/^(modloader|modloader)$/.test(needle)) return game.hasModLoader
+  if (needle === 'modloader') return game.hasModLoader
   if (needle === 'cleo') return !!game.cleoVersion
 
+  // Everything the profile holds, by path and by mod name - a pack answers a
+  // requirement with the file it ships, whatever the pack itself is called.
   const rows = getDb()
     .prepare(
       `SELECT f.relative_path p, m.title t FROM install_file f
@@ -707,15 +710,25 @@ function satisfiedInProfile(profileId: number, game: GameInstall, name: string):
         WHERE i.profile_id = ? AND i.enabled = 1`
     )
     .all(profileId) as { p: string; t: string }[]
-  const flat = (v: string): string => v.toLowerCase().replace(/[^a-z0-9+]/g, '')
-  if (rows.some((r) => flat(r.p).includes(needle) || flat(r.t).includes(needle))) return true
 
+  const haves: string[] = []
+  for (const r of rows) {
+    haves.push(r.p, r.t)
+    // The folder a pack installs into names what is inside it:
+    // "modloader/_ESSENTIALS/SilentPatch/SilentPatchSA.asi".
+    for (const segment of r.p.split(/[\\/]/)) haves.push(segment)
+  }
+
+  // A plugin loose in the ASI directory counts: the game will load it whether
+  // or not a profile claims it.
   const asiDir = game.asiDirectory ?? game.path
   if (exists(asiDir)) {
-    const loose: string[] = fs.readdirSync(asiDir)
-    if (loose.some((f) => /\.(asi|dll)$/i.test(f) && flat(f).includes(needle))) return true
+    for (const f of fs.readdirSync(asiDir)) {
+      if (/\.(asi|dll)$/i.test(f)) haves.push(f)
+    }
   }
-  return false
+
+  return requirementMet(name, haves)
 }
 
 /** The catalogue entry for a requirement named in prose, if there is one. */

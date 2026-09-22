@@ -32,6 +32,8 @@ export function BrowseScreen(): JSX.Element {
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('All')
   const [sort, setSort] = useState<Sort>('rating')
+  // MixMods is a blog too: its news and articles have nothing to install.
+  const [includeArticles, setIncludeArticles] = useState(false)
   const [detail, setDetail] = useState<CatalogMod | null>(null)
   const [manual, setManual] = useState<CatalogMod | null>(null)
 
@@ -53,12 +55,12 @@ export function BrowseScreen(): JSX.Element {
 
   const loadPage = useCallback(
     async (offset: number) => {
-      const page = await api.catalog({ search: query, category, sort, limit: PAGE_SIZE, offset })
+      const page = await api.catalog({ search: query, category, sort, includeArticles, limit: PAGE_SIZE, offset })
       setCategories(page.categories)
       setTotal(page.total)
       setMods((current) => (offset === 0 ? page.mods : [...current, ...page.mods]))
     },
-    [query, category, sort]
+    [query, category, sort, includeArticles]
   )
 
   useEffect(() => {
@@ -171,6 +173,14 @@ export function BrowseScreen(): JSX.Element {
           <option value="title">{t('browse.sortTitle')}</option>
           <option value="author">{t('browse.sortAuthor')}</option>
         </select>
+        <Button
+          size="sm"
+          variant={includeArticles ? 'accent' : 'default'}
+          onClick={() => setIncludeArticles((v) => !v)}
+          title={t('browse.articlesHint')}
+        >
+          {t('browse.articlesToggle')}
+        </Button>
         <span className="spacer" />
         <span className="faint">
           {seed.data ? t('browse.indexedCount', { count: seed.data.count }) : ''}

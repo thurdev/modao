@@ -32,6 +32,8 @@ import { setMainLanguage } from '../src/main/util/i18n'
 import { translate } from '../src/shared/i18n'
 import { classifyDownload, looksLikeArchive, normalizeForFetch } from '../src/shared/download'
 import { foldText, relevance } from '../src/shared/search'
+import { requirementMet } from '../src/shared/requirements'
+import { catalogKind } from '../src/shared/catalogKind'
 import { parseCrashDump, parseModLoaderLog } from '../src/main/diagnostics/modloaderLog'
 import { limitAdjusterNames, parseStreamIni, SAFE_STREAMING_MEMORY_MB } from '../src/main/game/streamIni'
 import { pluginEvidence } from '../src/main/formats/strings'
@@ -811,6 +813,50 @@ check('search: an author name finds their mods', ranked('junior_djjr').length ==
 check('search: a word that appears nowhere finds nothing', ranked('helicoptero').length === 0, ranked('helicoptero'))
 check('search: an empty query keeps everything', relevance(catalogRows[0], '') > 0)
 check('search: folding strips case, accents and punctuation', foldText('Animações (v2.5)!') === 'animacoes v2 5', foldText('Animações (v2.5)!'))
+
+// --- a pack answers for what it ships ----------------------------------------
+// The Essentials pack installs SilentPatch, a limit adjuster, the Widescreen
+// Fix and CLEO. Asking the user to go and find those again sends them hunting
+// for mods they already have.
+const essentialsHas = [
+  'modloader/_ESSENTIALS/SilentPatch/SilentPatchSA.asi',
+  'modloader/_ESSENTIALS/Widescreen Fix by ThirteenAG/GTASA.WidescreenFix.asi',
+  'modloader/$fastman92 limit adjuster/fastman92limitAdjuster.asi',
+  'scripts/CLEO.asi',
+  'vorbisFile.dll',
+  '[SA] Essentials (pack de mods que não podem faltar no GTA SA)'
+]
+check('requirements: SilentPatch inside a pack counts', requirementMet('SilentPatch', essentialsHas))
+check('requirements: the Widescreen Fix inside a pack counts', requirementMet('Widescreen Fix', essentialsHas))
+check(
+  'requirements: a different limit adjuster answers the one the readme names',
+  requirementMet('Open Limit Adjuster', essentialsHas),
+  essentialsHas
+)
+check('requirements: any ASI loader answers "ASI Loader"', requirementMet('ASI Loader', essentialsHas))
+check('requirements: CLEO is answered by cleo.asi', requirementMet('CLEO', essentialsHas))
+check('requirements: CLEO+ is NOT answered by plain CLEO', !requirementMet('CLEO+', ['scripts/CLEO.asi']), 'CLEO+ needs CLEO+')
+check('requirements: CLEO+ is answered by its own plugin', requirementMet('CLEO+', ['modloader/Essentials/CLEO/CLEO+.cleo']))
+check('requirements: something nobody ships is still missing', !requirementMet('Proper Shaders', essentialsHas))
+check('requirements: an empty name is not a requirement', requirementMet('', []))
+
+// --- a mod, or a post about mods ---------------------------------------------
+// MixMods is a blog as well as a catalogue: indexing it whole filled the browse
+// screen with news and articles that cannot be installed.
+const kindOf = (title: string, category: string, hasDownload: boolean, paywalled = false): string =>
+  catalogKind({ title, category, hasDownload, paywalled })
+
+check('catalogue: a post with a file is a mod, whatever it is filed under', kindOf('[SA] VehFuncs', 'Curiosidades', true) === 'mod')
+check('catalogue: a paywalled release is still a mod', kindOf('[SA] Proper Shaders', 'Gráficos', false, true) === 'mod')
+check('catalogue: a news post with nothing to download is an article', kindOf('Novidades de Janeiro', 'Novidades', false) === 'article')
+check('catalogue: a myth-hunting post is an article', kindOf('O mito do Bigfoot', 'Mitos e Lendas', false) === 'article')
+check('catalogue: a treasure hunt is an article', kindOf('Caça ao Tesouro #4', 'Caça ao Tesouro', false) === 'article')
+check('catalogue: a Top 10 is an article even in a mod category', kindOf('Top 10 carros de 2024', 'Carros', false) === 'article')
+check('catalogue: the app own adopted entries never show', kindOf('HD Ped Pack', 'Adopted', false) === 'internal')
+check(
+  'catalogue: a mod whose link the crawler missed is still shown, because hiding a real mod is worse',
+  kindOf('[SA] Some Car Pack', 'Carros', false) === 'mod'
+)
 
 // --- download links ----------------------------------------------------------
 // Which links Modão can fetch on its own decides whether "Install" installs

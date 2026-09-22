@@ -7,6 +7,7 @@ import { exists } from '../util/fsx'
 import { computeRating, ratingInputsFor } from './rating'
 import { gamesOfMod, type GameKind } from '@shared/games'
 import { relevance } from '@shared/search'
+import { catalogKind } from '@shared/catalogKind'
 import { activeGame } from '../game/detect'
 
 interface SeedMod {
@@ -205,6 +206,8 @@ export interface CatalogQuery {
   offset?: number
   /** Only posts for this game. Defaults to the active install's game. */
   game?: GameKind | 'all'
+  /** Include the site's articles and news, which carry nothing to install. */
+  includeArticles?: boolean
 }
 
 
@@ -223,20 +226,32 @@ export function gamesOfRow(row: { title: string; category: string; games_json?: 
   return gamesOfMod(row.title, row.category ? [row.category] : []).games
 }
 
+
+/** Does any recorded version of this mod carry a link? Cached per query batch. */
+const downloadCache = new Map<number, boolean>()
+function hasDownload(modId: number): boolean {
+  const cached = downloadCache.get(modId)
+  if (cached !== undefined) return cached
+  const row = getDb()
+    .prepare("SELECT 1 FROM mod_version WHERE mod_id = ? AND download_url IS NOT NULL AND download_url <> '' LIMIT 1")
+    .get(modId)
+  const value = !!row
+  downloadCache.set(modId, value)
+  return value
+}
+
+/** Called when the catalogue changes, so the cache cannot go stale. */
+export function forgetDownloadCache(): void {
+  downloadCache.clear()
+}
+
 export function listCatalog(q: CatalogQuery): { mods: CatalogMod[]; categories: string[]; total: number } {
   const db = getDb()
-  const where: string[] = []
-  const params: unknown[] = []
-  // Filtering happens in JS: SQL LIKE cannot ignore accents, and "animacoes"
-  // has to find "Animações" in a catalogue written in Portuguese.
-
-  if (q.category && q.category !== 'All') {
-    where.push('category = ?')
-    params.push(q.category)
-  }
-  const rows = db
-    .prepare(`SELECT * FROM mod ${where.length ? `WHERE ${where.join(' AND ')}` : ''}`)
-    .all(...params) as ModRow[]
+  // Everything for this game is read once. Filtering in SQL by category was
+  // what emptied the category picker: the list of categories was built from
+  // rows that had already been narrowed to one, so choosing a category left the
+  // dropdown with a single option and the screen looking unfiltered.
+  const rows = db.prepare('SELECT * FROM mod').all() as ModRow[]
 
   // A mod for Vice City has no business in a San Andreas library, so the game
   // filter is applied in JS rather than SQL: rows indexed before the games
@@ -247,12 +262,31 @@ export function listCatalog(q: CatalogQuery): { mods: CatalogMod[]; categories: 
     return gamesOfRow(r).includes(wanted)
   }
 
-  const categories = [...new Set(rows.filter(forThisGame).map((r) => r.category).filter(Boolean))].sort((a, b) =>
-    a.localeCompare(b)
+  const forThisGameRows = rows.filter(forThisGame)
+
+  // MixMods is a blog as well as a catalogue. Its news and articles have
+  // nothing to install, so they stay out of the way unless asked for - and the
+  // app's own adopted-mod bookkeeping never belongs here at all.
+  const installable = (r: ModRow): boolean => {
+    const kind = catalogKind({
+      title: r.title,
+      category: r.category,
+      hasDownload: hasDownload(r.id),
+      paywalled: !!r.paywalled
+    })
+    if (kind === 'internal') return false
+    return q.includeArticles ? true : kind === 'mod'
+  }
+
+  // Built before the category filter, so every category stays pickable.
+  const categories = [...new Set(forThisGameRows.filter(installable).map((r) => r.category).filter(Boolean))].sort(
+    (a, b) => a.localeCompare(b)
   )
 
-  const scored = rows
-    .filter(forThisGame)
+  const wantedCategory = q.category && q.category !== 'All' ? q.category : null
+  const scored = forThisGameRows
+    .filter(installable)
+    .filter((r) => !wantedCategory || r.category === wantedCategory)
     .map((r) => ({ row: r, score: q.search ? relevance(r, q.search) : 1 }))
     .filter((entry) => entry.score > 0)
 

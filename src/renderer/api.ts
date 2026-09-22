@@ -138,6 +138,7 @@ export const api = {
     installedOnly?: boolean
     limit?: number
     offset?: number
+    includeArticles?: boolean
   }) =>
     call<{ mods: CatalogMod[]; categories: string[]; total: number }>('catalog:list', query),
   catalogMod: (modId: number) => call<CatalogMod | null>('catalog:get', modId),

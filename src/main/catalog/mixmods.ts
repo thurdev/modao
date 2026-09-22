@@ -1,4 +1,5 @@
 import { getDb } from '../db'
+import { forgetDownloadCache } from './service'
 import { fetchPage } from './http'
 import {
   MIXMODS_ORIGIN,
@@ -90,6 +91,7 @@ export async function crawl(
   return report
 }
 
+/** Anything that writes a version changes what counts as installable. */
 export function upsertScraped(mod: ScrapedMod): { modId: number; created: boolean } {
   const db = getDb()
   const now = new Date().toISOString()

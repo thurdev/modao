@@ -7,6 +7,9 @@
  */
 export const browse = {
   pt: {
+    articlesToggle: 'Incluir posts',
+    articlesHint:
+      'O MixMods também é blog: notícia, artigo, curiosidade e desabafo não têm nada para instalar. Por padrão eles ficam fora da lista.',
     loadingMore: 'Carregando mais…',
     allShown: '{count} mods · tudo carregado',
     showingSome: 'mostrando {shown} de {total}',
@@ -81,6 +84,9 @@ export const browse = {
     gameChipTitle: 'Também para {game}'
   },
   en: {
+    articlesToggle: 'Include posts',
+    articlesHint:
+      'MixMods is a blog too: news, articles and opinion pieces have nothing to install. They stay out of the list by default.',
     loadingMore: 'Loading more…',
     allShown: '{count} mods · all loaded',
     showingSome: 'showing {shown} of {total}',
