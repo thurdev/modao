@@ -66,42 +66,38 @@ export function AccessBanner(): JSX.Element | null {
     >
       <span className="notice-mark" />
       <div className="col" style={{ gap: 9, minWidth: 0 }}>
-        <strong>Modão cannot write to the game folder</strong>
+        <strong>{t('install.access.title')}</strong>
         <span className="mono ellipsis" title={game.path}>
           {game.path}
         </span>
-        <span className="muted">{reason ?? 'Windows denied the write.'}</span>
-        <span className="faint">
-          Until this is fixed every action that changes the game — switching profiles, installing, enabling a mod,
-          writing modloader.ini — will refuse rather than half-apply. Nothing has been changed.
-        </span>
+        <span className="muted">{reason ?? t('install.access.deniedFallback')}</span>
+        <span className="faint">{t('install.access.consequence')}</span>
 
         <div className="row wrap">
           {canElevate ? (
             <Button variant="primary" size="sm" disabled={busy} onClick={restartElevated} icon={<Icon.bolt width={13} height={13} />}>
-              {busy ? 'Asking Windows…' : 'Restart as administrator'}
+              {busy ? t('install.access.askingWindows') : t('install.access.restartAdmin')}
             </Button>
           ) : null}
           <Button size="sm" variant="quiet" disabled={busy} onClick={recheck} icon={<Icon.refresh width={13} height={13} />}>
-            Check again
+            {t('install.access.checkAgain')}
           </Button>
           <Button size="sm" variant="quiet" onClick={() => void api.revealPath(game.path)} icon={<Icon.folder width={13} height={13} />}>
-            Show the folder
+            {t('install.access.showFolder')}
           </Button>
         </div>
 
         {canElevate ? (
           <label className="row faint" style={{ gap: 7 }}>
-            <Checkbox on={remember} onChange={setRemember} label="Always start elevated for this install" />
-            Ask for administrator rights automatically next time
+            <Checkbox on={remember} onChange={setRemember} label={t('install.access.rememberLabel')} />
+            {t('install.access.rememberHint')}
           </label>
         ) : null}
 
         {elevation.data?.protectedPath ? (
           <span className="faint">
-            Better long-term fix: move the game somewhere like <span className="mono">D:\Games\GTA San Andreas</span>.
-            Program Files also breaks a lot of mods that write next to the exe, and running elevated means every archive
-            Modão extracts is handled with full privileges.
+            {t('install.access.betterFixLead')} <span className="mono">D:\Games\GTA San Andreas</span>
+            {t('install.access.betterFixTail')}
           </span>
         ) : null}
       </div>

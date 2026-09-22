@@ -147,9 +147,9 @@ export function LibraryScreen(): JSX.Element {
     <>
       <div className="page-head">
         <p>
-          Everything installed in <strong>{profile.name}</strong>. Priority decides who wins a duplicated filename: 1–100,
-          a fresh install sits at 50, higher wins, and 0 means Mod Loader ignores the mod. Editing it here rewrites this
-          profile&apos;s block in modloader.ini.
+          {t('library.introBefore')}
+          <strong>{profile.name}</strong>
+          {t('library.introAfter')}
         </p>
       </div>
 

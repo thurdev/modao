@@ -9,6 +9,9 @@ export const library = {
   pt: {
     intro:
       'Tudo que está instalado no perfil ativo. Ligar e desligar um mod, mudar a prioridade dele e desinstalar mexem só neste perfil e no bloco dele no modloader.ini.',
+    introBefore: 'Tudo que está instalado em ',
+    introAfter:
+      '. A prioridade decide quem ganha quando dois mods têm o mesmo arquivo: 1–100, uma instalação nova entra em 50, maior ganha, e 0 significa que o Mod Loader ignora o mod. Mudar aqui reescreve o bloco deste perfil no modloader.ini.',
     untrackedTitle_one: '{count} mod na pasta do jogo não é rastreado por {profile}',
     untrackedTitle_other: '{count} mods na pasta do jogo não são rastreados por {profile}',
     untrackedFolders: '{count} pasta(s) do Mod Loader',
@@ -50,6 +53,9 @@ export const library = {
   en: {
     intro:
       "Everything installed in the active profile. Enabling, disabling, changing a mod's priority and uninstalling touch this profile and its block in modloader.ini, nothing else.",
+    introBefore: 'Everything installed in ',
+    introAfter:
+      '. Priority decides who wins a duplicated filename: 1–100, a fresh install sits at 50, higher wins, and 0 means Mod Loader ignores the mod. Editing it here rewrites this profile’s block in modloader.ini.',
     untrackedTitle_one: '{count} mod in the game folder is not tracked by {profile}',
     untrackedTitle_other: '{count} mods in the game folder are not tracked by {profile}',
     untrackedFolders: '{count} Mod Loader folder(s)',
