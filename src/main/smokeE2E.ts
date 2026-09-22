@@ -1,0 +1,583 @@
+import fs from 'node:fs'
+import fsp from 'node:fs/promises'
+import path from 'node:path'
+import os from 'node:os'
+import { getDb } from './db'
+import { addGame, activeGame, setActiveGame } from './game/detect'
+import {
+  adoptInstall,
+  adoptIntoProfile,
+  activateProfile,
+  createProfile,
+  listProfiles,
+  restorePreviousState,
+  unmanagedContent
+} from './profiles/manager'
+import { listJournals, planSwitch, verifySnapshot } from './profiles/switchTx'
+import { storeDir } from './store/contentStore'
+import { detectExistingSaves, listSnapshots } from './profiles/saves'
+import { clearCache, storageReport } from './ipc'
+import { Paths } from './util/paths'
+import { applyPlan, createPlan, choose, uninstall } from './install/engine'
+import { listInstalled, setPriority, setSubModEnabled } from './library'
+import { listConflicts } from './conflicts'
+import { readIniFile, readKeys, getSection } from './game/modloaderIni'
+import { walk, sha256File } from './util/fsx'
+import { V1_US_SIZE, V1_US_TIMESTAMP } from './game/pe'
+import type { InstalledMod, SubMod } from '@shared/types'
+
+/**
+ * End-to-end self-check against a synthetic game folder. Run with
+ * MODAO_SMOKE=2 and a throwaway --user-data-dir. Covers adoption,
+ * installation with a variant, conflict resolution by priority, the import of
+ * save games that predate Modão, profile switching with isolated saves,
+ * storage accounting, and byte-for-byte uninstall.
+ */
+export async function runE2E(): Promise<number> {
+  let failures = 0
+  const check = (name: string, ok: boolean, extra?: unknown): void => {
+    if (ok) console.log(`  PASS  ${name}`)
+    else {
+      failures++
+      console.log(`  FAIL  ${name}`, extra ?? '')
+    }
+  }
+
+  const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'modao-e2e-'))
+  const game = path.join(tmp, 'GTA San Andreas')
+
+  // --- a believable v1.0 US install -----------------------------------------
+  await fsp.mkdir(path.join(game, 'scripts'), { recursive: true })
+  await fsp.mkdir(path.join(game, 'modloader', 'Old Cars', 'models'), { recursive: true })
+  await fsp.mkdir(path.join(game, 'cleo'), { recursive: true })
+  await fsp.writeFile(path.join(game, 'gta_sa.exe'), fakePe(V1_US_SIZE, V1_US_TIMESTAMP, 0x010e))
+  // Repack layout: the ASI loader reads from scripts\, not the game root.
+  await fsp.writeFile(path.join(game, 'scripts', 'modloader.asi'), fakePe(4096, 0x60000000, 0x2102))
+  await fsp.writeFile(path.join(game, 'vorbisFile.dll'), fakePe(4096, 0x60000000, 0x2102))
+  await fsp.writeFile(path.join(game, 'modloader', 'Old Cars', 'models', 'infernus.dff'), 'vanilla-ish car')
+  await fsp.writeFile(path.join(game, 'modloader', 'Old Cars', 'models', 'LOADSCS.txd'), 'old loadscreen')
+  await fsp.writeFile(
+    path.join(game, 'modloader', 'modloader.ini'),
+    '; hand written by the user\r\n[Config]\r\nIgnoreAllFiles=0\r\n\r\n[Profiles.Default.Priority]\r\nOld Cars=60\r\n'
+  )
+
+  const before = await snapshotDir(game)
+
+  const installed = await addGame(game, 'E2E install')
+  setActiveGame(installed.id)
+  check('game adopted', activeGame()?.path === game)
+  check('exe recognised as stock v1.0 US', installed.isV1UsOriginal, { size: installed.exeSize, ts: installed.exeTimestamp })
+  check('LARGE_ADDRESS_AWARE reported as not set', installed.largeAddressAware === false)
+  check(
+    'ASI directory detected as scripts\\, not assumed to be the root',
+    installed.asiDirectory === path.join(game, 'scripts'),
+    installed.asiDirectory
+  )
+  check('ASI loader found', !!installed.asiLoader)
+
+  // --- save games that were on this machine before Modão -----------------
+  const saves = process.env['MODAO_USER_FILES']!
+  await fsp.mkdir(saves, { recursive: true })
+  await fsp.writeFile(path.join(saves, 'GTASAsf3.b'), 'campaign from before Modão existed')
+  await fsp.writeFile(path.join(saves, 'gta_sa.set'), 'the user own settings')
+  const savesBefore = await snapshotDir(saves)
+
+  const detectedBefore = await detectExistingSaves()
+  check('saves already in the user files folder are detected', detectedBefore.found && detectedBefore.slots.length === 1, detectedBefore.slots)
+  check('gta_sa.set noticed alongside the slots', detectedBefore.hasSettings)
+  check('those saves belong to no profile yet', detectedBefore.importedIntoProfileId === null)
+
+  const adopted = await adoptInstall('Adopted')
+  check('existing mod folder indexed', adopted.adopted === 1, adopted.report)
+  const afterAdopt = await snapshotDir(game)
+  check('adoption moved and changed nothing', sameTree(before, afterAdopt), diff(before, afterAdopt))
+
+  const adoptedLib = listInstalled(adopted.profileId)
+  check('existing priority read from modloader.ini', adoptedLib[0]?.priority === 60, adoptedLib[0])
+
+  const savesAfterAdopt = await snapshotDir(saves)
+  check('adoption left the live save folder byte-for-byte intact', sameTree(savesBefore, savesAfterAdopt), diff(savesBefore, savesAfterAdopt))
+  check(
+    'adoption reports exactly what it copied and where',
+    adopted.report.some((line) => line.startsWith('Saves: copied') && line.includes(saves) && line.includes('1 save slot(s)')),
+    adopted.report
+  )
+  check(
+    'existing saves copied into the profile store',
+    fs.existsSync(path.join(Paths.profileSaves(adopted.profileId), 'GTASAsf3.b')),
+    Paths.profileSaves(adopted.profileId)
+  )
+
+  const importedSnap = (await listSnapshots(adopted.profileId)).find((snap) => snap.label === 'Imported from your existing install')
+  check('the import snapshot exists and is kept forever (not an auto snapshot)', !!importedSnap && importedSnap.auto === false, importedSnap?.label)
+  check(
+    'the import snapshot holds the same slots that were in the folder',
+    importedSnap?.slots.map((slot) => slot.file).join(',') === detectedBefore.slots.map((slot) => slot.file).join(','),
+    importedSnap?.slots
+  )
+  check(
+    'the snapshot content matches the original save byte-for-byte',
+    !!importedSnap && (await fsp.readFile(path.join(importedSnap.path, 'GTASAsf3.b'), 'utf8')) === 'campaign from before Modão existed'
+  )
+  const detectedAfter = await detectExistingSaves()
+  check('a second detection recognises the import instead of offering it again', detectedAfter.importedIntoProfileId === adopted.profileId, detectedAfter)
+
+  // --- install a mod with a variant -----------------------------------------
+  const source = path.join(tmp, 'Loadscreens')
+  await fsp.mkdir(path.join(source, 'Loadscreens 2K Definitive', 'models'), { recursive: true })
+  await fsp.mkdir(path.join(source, 'Loadscreens 4K Definitive', 'models'), { recursive: true })
+  await fsp.writeFile(path.join(source, 'Loadscreens 2K Definitive', 'models', 'LOADSCS.txd'), '2k loadscreen')
+  await fsp.writeFile(path.join(source, 'Loadscreens 4K Definitive', 'models', 'LOADSCS.txd'), '4k loadscreen')
+  await fsp.writeFile(
+    path.join(source, 'Leiame (ou morra).txt'),
+    // Windows-1252, as MixMods readmes actually ship - accented bytes included.
+    Buffer.from(
+      'Instala\u00e7\u00e3o:\r\nExtraia a pasta "Loadscreens" para a pasta do ModLoader.\r\nA vers\u00e3o 2K \u00e9 recomendada para 1920x1080.\r\n',
+      'latin1'
+    )
+  )
+
+  const plan = await createPlan({
+    archivePath: source,
+    profileId: adopted.profileId,
+    modId: null,
+    modVersionId: null,
+    title: 'Loadscreens Definitive',
+    author: 'Junior_Djjr',
+    sourceUrl: 'https://www.mixmods.com.br/2020/09/loadscreens-definitive/'
+  })
+  check('variant detected and blocks the install until chosen', plan.requiresVariantChoice && plan.variants.length === 1, plan.variants)
+  check('readme parsed from Windows-1252', plan.readmes[0]?.encoding === 'windows-1252', plan.readmes[0]?.encoding)
+  check(
+    'readme instruction recognised',
+    plan.readmes[0]?.instructions[0]?.destination === 'modloader-folder',
+    plan.readmes[0]?.instructions
+  )
+
+  const option2k = plan.variants[0].options.find((o) => o.label.includes('2K'))!
+  const chosen = await choose(plan.planId, plan.variants[0].id, option2k.id)
+  check('choosing a variant unblocks the plan', !chosen.requiresVariantChoice)
+  check(
+    'plan places the chosen variant into modloader\\',
+    chosen.files.every((f) => f.targetRelative.startsWith('modloader/Loadscreens 2K Definitive/')),
+    chosen.files.map((f) => f.targetRelative)
+  )
+  check(
+    'plan warns that it will displace an existing file',
+    chosen.files.some((f) => f.targetRelative.endsWith('LOADSCS.txd')),
+    chosen.files.map((f) => f.targetRelative)
+  )
+
+  const applied = await applyPlan(chosen.planId, adopted.profileId)
+  check('install wrote the files', applied.written === 1, applied)
+  const installedFile = path.join(game, 'modloader', 'Loadscreens 2K Definitive', 'models', 'LOADSCS.txd')
+  check('file materialised into the game folder', fs.existsSync(installedFile))
+  check('file content is the chosen variant', (await fsp.readFile(installedFile, 'utf8')) === '2k loadscreen')
+
+  // --- conflicts and priority ------------------------------------------------
+  const conflicts = listConflicts(adopted.profileId)
+  const loadscs = conflicts.find((c) => c.relativePath === 'models/loadscs.txd')
+  check('duplicated relative path detected across mods', !!loadscs, conflicts.map((c) => c.relativePath))
+  check('winner decided by priority (60 beats the default 50)', loadscs?.winner?.title === 'Old Cars', loadscs?.winner)
+
+  const newMod = listInstalled(adopted.profileId).find((m) => m.title === 'Loadscreens Definitive')!
+  await setPriority(newMod.installId, 80)
+  const afterPriority = listConflicts(adopted.profileId).find((c) => c.relativePath === 'models/loadscs.txd')
+  check('raising priority changes the winner', afterPriority?.winner?.title === 'Loadscreens Definitive', afterPriority?.winner)
+
+  const ini = await readIniFile(path.join(game, 'modloader', 'modloader.ini'))
+  const block = readKeys(getSection(ini, 'Profiles.Adopted.Priority'))
+  check('priority written into the profile block in modloader.ini', block['Loadscreens 2K Definitive'] === '80', block)
+  check('Mod Loader profile pointer written', readKeys(getSection(ini, 'Folder.Config'))['Profile'] === 'Adopted')
+  check('user comment in modloader.ini preserved', (await fsp.readFile(path.join(game, 'modloader', 'modloader.ini'), 'latin1')).includes('; hand written by the user'))
+
+  // --- profiles and saves -----------------------------------------------------
+  await fsp.writeFile(path.join(saves, 'GTASAsf1.b'), 'adopted profile save')
+
+  // The user edits an installed file by hand. A profile switch vacates the game
+  // folder, and this file no longer matches what Modão wrote: it is theirs now.
+  const userEdited = 'the user own hand-tuned loadscreen'
+  await fsp.writeFile(installedFile, userEdited)
+
+  const second = await createProfile({ name: 'Clean', notes: 'vanilla-ish' })
+  const t0 = Date.now()
+  const switchOut = await activateProfile(second.id)
+  const switchMs = Date.now() - t0
+  check('profile switch completes quickly', switchMs < 5000, `${switchMs} ms`)
+  check('game folder vacated on switch', !fs.existsSync(path.join(game, 'modloader', 'Loadscreens 2K Definitive')))
+  check('outgoing saves stored, live folder reset', !fs.existsSync(path.join(saves, 'GTASAsf1.b')))
+
+  const rescued = (await walk(path.join(Paths.quarantine(), 'profile-switch'))).filter((f) =>
+    f.rel.toLowerCase().endsWith('loadscs.txd')
+  )
+  check(
+    'a file edited after installing is quarantined when the profile is switched away, not deleted',
+    rescued.length === 1,
+    rescued.map((f) => f.rel)
+  )
+  check(
+    'the quarantined copy holds exactly the bytes the user wrote',
+    rescued.length === 1 && (await fsp.readFile(rescued[0].abs, 'utf8')) === userEdited
+  )
+  check(
+    'the switch log says a file was rescued rather than staying silent',
+    switchOut.log.some((line) => line.includes('quarantine')),
+    switchOut.log
+  )
+
+  await fsp.writeFile(path.join(saves, 'GTASAsf2.b'), 'clean profile save')
+  await activateProfile(adopted.profileId)
+  check('switching back restores the profile mods', fs.existsSync(installedFile))
+  check('switching back restores that profile saves', fs.existsSync(path.join(saves, 'GTASAsf1.b')))
+  check('the other profile saves are not visible', !fs.existsSync(path.join(saves, 'GTASAsf2.b')))
+  check(
+    'the imported pre-Modão save survived the round trip unchanged',
+    fs.existsSync(path.join(saves, 'GTASAsf3.b')) &&
+      (await fsp.readFile(path.join(saves, 'GTASAsf3.b'), 'utf8')) === 'campaign from before Modão existed'
+  )
+  check(
+    'the other profile saves are kept in its own store, not lost',
+    fs.existsSync(path.join(Paths.profileSaves(second.id), 'GTASAsf2.b')),
+    Paths.profileSaves(second.id)
+  )
+  check('both profiles exist', (await listProfiles()).length >= 2)
+
+  // --- storage accounting and cache clearing ----------------------------------
+  const cachedPage = path.join(Paths.httpCache(), 'e2e-cached-page.json')
+  await fsp.writeFile(cachedPage, JSON.stringify({ url: 'https://example.invalid/', body: 'x'.repeat(8192) }))
+  const quarantined = path.join(Paths.quarantine(), 'e2e-irreplaceable.bin')
+  await fsp.writeFile(quarantined, 'a user file that must survive a cache clear')
+
+  const storage = await storageReport()
+  const totals = [storage.dbBytes, storage.storeBytes, storage.archivesBytes, storage.cacheBytes, storage.quarantineBytes, storage.snapshotBytes]
+  check('every storage total is a non-negative number', totals.every((n) => Number.isFinite(n) && n >= 0), storage)
+  check('storage report names a userData folder that exists', fs.existsSync(storage.userData), storage.userData)
+  check('the snapshots taken during this run are accounted for', storage.snapshotBytes > 0, storage.snapshotBytes)
+  check('the cached page is accounted for', storage.cacheBytes >= 8192, storage.cacheBytes)
+
+  const cleared = await clearCache('http')
+  check('clearing the HTTP cache frees at least the bytes it held', cleared.freed >= 8192, cleared)
+  check('the HTTP cache is empty afterwards', (await walk(Paths.httpCache())).length === 0)
+  const afterClear = await storageReport()
+  check('clearing the HTTP cache did not touch quarantine', fs.existsSync(quarantined) && afterClear.quarantineBytes >= storage.quarantineBytes, {
+    before: storage.quarantineBytes,
+    after: afterClear.quarantineBytes
+  })
+
+  // --- uninstall restores the prior state -------------------------------------
+  const uninstalled = await uninstall(newMod.installId)
+  check(
+    'uninstall keeps the file the user edited instead of deleting it',
+    uninstalled.quarantined.length === 1,
+    uninstalled.quarantined
+  )
+  const afterUninstall = await snapshotDir(game)
+  check('uninstall restores the game folder byte-for-byte', sameTree(afterAdopt, afterUninstall), diff(afterAdopt, afterUninstall))
+  check('displaced file restored with its original bytes', (await fsp.readFile(path.join(game, 'modloader', 'Old Cars', 'models', 'LOADSCS.txd'), 'utf8')) === 'old loadscreen')
+
+  // --- sub-mods can be turned off and back on ---------------------------------
+  // Nested folders inside a Mod Loader mod are units of their own. This mod also
+  // ships an .asi, so it is materialised as per-file links rather than one
+  // junction - exactly the case where a sub-mod folder can be removed on its own.
+  const pack = path.join(tmp, 'Pack archive')
+  const packRoot = path.join(pack, 'modloader', 'Sub Mod Pack')
+  await fsp.mkdir(path.join(packRoot, 'models'), { recursive: true })
+  await fsp.mkdir(path.join(packRoot, 'data'), { recursive: true })
+  await fsp.writeFile(path.join(packRoot, 'models', 'wheel.dff'), 'a wheel model')
+  await fsp.writeFile(path.join(packRoot, 'data', 'handling.dat'), 'handling lines')
+  await fsp.writeFile(path.join(pack, 'pack.asi'), fakePe(2048, 0x60000000, 0x2102))
+
+  const packPlan = await createPlan({
+    archivePath: pack,
+    profileId: adopted.profileId,
+    modId: null,
+    modVersionId: null,
+    title: 'Sub Mod Pack',
+    author: 'Unknown',
+    sourceUrl: null
+  })
+  check(
+    'the pack is materialised as per-file links, not one junction',
+    packPlan.files.some((f) => f.destination === 'asi-plugin') && packPlan.files.some((f) => f.destination === 'modloader-folder'),
+    packPlan.files.map((f) => `${f.destination} ${f.targetRelative}`)
+  )
+  const packApplied = await applyPlan(packPlan.planId, adopted.profileId)
+  const packInstall = listInstalled(adopted.profileId).find((m) => m.installId === packApplied.installId)!
+  const subOf = (mod: InstalledMod, rel: string): SubMod | undefined => mod.subMods.find((s) => s.relativePath === rel)
+  check(
+    'nested folders are reported as sub-mods',
+    packInstall.subMods.map((s) => s.relativePath).join(',') === 'data,models',
+    packInstall.subMods
+  )
+  check('a freshly installed sub-mod reports enabled', packInstall.subMods.every((s) => s.enabled === true), packInstall.subMods)
+
+  const subFile = path.join(game, 'modloader', 'Sub Mod Pack', 'data', 'handling.dat')
+  await setSubModEnabled(packApplied.installId, 'data', false)
+  const afterDisable = listInstalled(adopted.profileId).find((m) => m.installId === packApplied.installId)!
+  check('a disabled sub-mod reports enabled: false', subOf(afterDisable, 'data')?.enabled === false, afterDisable.subMods)
+  check('its sibling is untouched', subOf(afterDisable, 'models')?.enabled === true, afterDisable.subMods)
+  check('disabling a sub-mod removes only that folder from the game', !fs.existsSync(subFile))
+  check('the rest of the mod stays materialised', fs.existsSync(path.join(game, 'modloader', 'Sub Mod Pack', 'models', 'wheel.dff')))
+
+  await setSubModEnabled(packApplied.installId, 'data', true)
+  const afterReEnable = listInstalled(adopted.profileId).find((m) => m.installId === packApplied.installId)!
+  check('a disabled sub-mod can be re-enabled', subOf(afterReEnable, 'data')?.enabled === true, afterReEnable.subMods)
+  check(
+    're-enabling puts the files back with their own bytes',
+    fs.existsSync(subFile) && (await fsp.readFile(subFile, 'utf8')) === 'handling lines',
+    (await walk(path.join(game, 'modloader', 'Sub Mod Pack'))).map((f) => f.rel)
+  )
+
+  await uninstall(packApplied.installId)
+  check(
+    'uninstalling the per-file install restores the tree too',
+    sameTree(afterAdopt, await snapshotDir(game)),
+    diff(afterAdopt, await snapshotDir(game))
+  )
+
+  // --- a profile made by hand still finds what is already in the game folder ---
+  // The first run adopts, but a user who adds the game later, creates a profile
+  // themselves, or installs a mod outside Modão ends up with a full game
+  // folder and an empty library. That gap is what this covers.
+  await fsp.mkdir(path.join(game, 'modloader', 'Hand Installed Pack', 'models'), { recursive: true })
+  await fsp.writeFile(path.join(game, 'modloader', 'Hand Installed Pack', 'models', 'sweet.dff'), 'installed outside Modão')
+  await fsp.writeFile(path.join(game, 'scripts', 'HandDropped.asi'), fakePe(2048, 0x60000000, 0x2102))
+
+  const byHand = await createProfile({ name: 'Made by hand' })
+  const beforeAdopt = listInstalled(byHand.id)
+  check('a profile created by hand starts empty', beforeAdopt.length === 0, beforeAdopt.length)
+
+  const unmanaged = await unmanagedContent(byHand.id)
+  check(
+    'the mod folder dropped in by hand is reported as untracked',
+    unmanaged.folders.includes('Hand Installed Pack'),
+    unmanaged
+  )
+  check('the loose .asi is reported as untracked too', unmanaged.asi.includes('HandDropped.asi'), unmanaged.asi)
+  check('the untracked total counts every kind', unmanaged.total === unmanaged.folders.length + unmanaged.asi.length + unmanaged.cleo.length)
+
+  const gameBeforeScan = await snapshotDir(game)
+  const scan = await adoptIntoProfile(byHand.id)
+  check('scanning an existing profile adopts what it found', scan.adopted >= 1, scan.report)
+  const afterScan = listInstalled(byHand.id)
+  check(
+    'the hand-installed mod now appears in that profile library',
+    afterScan.some((m) => m.title === 'Hand Installed Pack'),
+    afterScan.map((m) => m.title)
+  )
+  check(
+    'scanning moved and changed nothing in the game folder',
+    sameTree(gameBeforeScan, await snapshotDir(game)),
+    diff(gameBeforeScan, await snapshotDir(game))
+  )
+  const afterUnmanaged = await unmanagedContent(byHand.id)
+  check('nothing is reported as untracked after the scan', afterUnmanaged.total === 0, afterUnmanaged)
+  const rescan = await adoptIntoProfile(byHand.id)
+  check('a second scan adopts nothing twice', rescan.adopted === 0, rescan.report)
+  check(
+    'the active profile is untouched by scanning another one',
+    (await listProfiles()).find((p) => p.isActive)?.id === adopted.profileId
+  )
+
+  // --- a switch must never lose a file it did not put there -----------------
+  // The bug this covers: loose .asi and CLEO files adopted from the user's own
+  // install had no store copy and no recorded hash, so a profile switch deleted
+  // them outright and the quarantine folder caught almost none of them. The
+  // install below is deliberately the shape that broke: plugins outside
+  // modloader\, adopted rather than installed, with an accented folder name and
+  // a hand-set priority, plus one file Modão was never told about.
+  await fsp.writeFile(path.join(game, 'scripts', 'MixSets.asi'), fakePe(3000, 0x60000000, 0x2102))
+  await fsp.writeFile(path.join(game, 'scripts', 'SALodLights.asi'), fakePe(3100, 0x60000000, 0x2102))
+  await fsp.writeFile(path.join(game, 'cleo', 'CLEO+.cleo'), 'cleo plugin bytes')
+  await fsp.writeFile(path.join(game, 'cleo', 'radar.cs'), 'cleo script bytes')
+  await fsp.mkdir(path.join(game, 'modloader', 'Animações de Kung Fu melhoradas'), { recursive: true })
+  await fsp.writeFile(path.join(game, 'modloader', 'Animações de Kung Fu melhoradas', 'kungfu.ifp'), 'animation bytes')
+
+  const risky = await createProfile({ name: 'Real install' })
+  await adoptIntoProfile(risky.id)
+  const riskyLib = listInstalled(risky.id)
+  const kungFu = riskyLib.find((m) => m.title.startsWith('Anima'))
+  check('an accented mod folder is adopted under its real name', !!kungFu, riskyLib.map((m) => m.title))
+  if (kungFu) setPriority(kungFu.installId, 70)
+
+  // Added AFTER adoption, so no profile knows about it: the switch must leave it alone.
+  await fsp.writeFile(path.join(game, 'scripts', 'Unmanaged.asi'), fakePe(1500, 0x60000000, 0x2102))
+
+  const riskyFiles = ['scripts/MixSets.asi', 'scripts/SALodLights.asi', 'cleo/CLEO+.cleo', 'cleo/radar.cs']
+  const riskyBytes = new Map<string, string>()
+  for (const rel of riskyFiles) riskyBytes.set(rel, await sha256File(path.join(game, ...rel.split('/'))))
+  const unmanagedHash = await sha256File(path.join(game, 'scripts', 'Unmanaged.asi'))
+
+  await activateProfile(risky.id)
+  check(
+    'the adopted plugins are in the game folder while their profile is active',
+    riskyFiles.every((rel) => fs.existsSync(path.join(game, ...rel.split('/')))),
+    riskyFiles.filter((rel) => !fs.existsSync(path.join(game, ...rel.split('/'))))
+  )
+
+  // A dry run answers before anything moves.
+  const empty = await createProfile({ name: 'Clean slate' })
+  const beforeDryRun = await snapshotDir(game)
+  const dry = await planSwitch(empty.id)
+  check(
+    'a dry run changes nothing at all',
+    sameTree(beforeDryRun, await snapshotDir(game)),
+    diff(beforeDryRun, await snapshotDir(game))
+  )
+  check(
+    'the dry run names every file it would take out',
+    riskyFiles.every((rel) => dry.outgoing.some((o) => o.relativePath === rel && o.action === 'snapshot-and-remove')),
+    dry.outgoing.map((o) => `${o.action} ${o.relativePath}`)
+  )
+  check(
+    'the dry run lists the unmanaged file as untouched',
+    dry.unmanaged.includes('scripts/Unmanaged.asi'),
+    dry.unmanaged
+  )
+  check('the dry run reports nothing unresolvable for an empty profile', dry.unresolved.length === 0, dry.unresolved)
+
+  const switched = await activateProfile(empty.id)
+  check('the switch verified', switched.verification?.ok === true, switched.verification?.problems)
+  check('the switch was journalled', typeof switched.journalId === 'number', switched.journalId)
+
+  check(
+    'the unmanaged .asi was left exactly where it was',
+    fs.existsSync(path.join(game, 'scripts', 'Unmanaged.asi')) &&
+      (await sha256File(path.join(game, 'scripts', 'Unmanaged.asi'))) === unmanagedHash
+  )
+
+  const journal = (await listJournals()).find((j) => j.id === switched.journalId)!
+  check('the journal holds a manifest entry per removed file', journal.manifest.length >= riskyFiles.length, journal.manifest.length)
+  for (const rel of riskyFiles) {
+    const entry = journal.manifest.find((m) => m.relativePath === rel)
+    check(`the pre-switch backup holds ${rel}`, !!entry && fs.existsSync(entry.backupPath), entry)
+    check(
+      `the backup of ${rel} is byte-for-byte the file that was removed`,
+      !!entry && (await sha256File(entry.backupPath)) === riskyBytes.get(rel),
+      entry?.backupPath
+    )
+  }
+  const verified = await verifySnapshot(journal.manifest)
+  check('the whole snapshot re-verifies by hash', verified.ok, verified.problems)
+
+  // Switching back has to bring every one of them home unchanged.
+  await activateProfile(risky.id)
+  for (const rel of riskyFiles) {
+    const abs = path.join(game, ...rel.split('/'))
+    check(
+      `${rel} came back after switching to the profile and away again`,
+      fs.existsSync(abs) && (await sha256File(abs)) === riskyBytes.get(rel),
+      abs
+    )
+  }
+
+  // modloader.ini: cp1252 on disk, the accented name intact, the priority kept,
+  // and no line for a mod this profile does not have.
+  const iniBytes = await fsp.readFile(path.join(game, 'modloader', 'modloader.ini'))
+  check(
+    'modloader.ini is written as Windows-1252, not UTF-8',
+    iniBytes.includes(Buffer.from([0xe7, 0xf5])) && !iniBytes.includes(Buffer.from([0xc3, 0xa7])),
+    iniBytes.toString('latin1').slice(0, 200)
+  )
+  const liveIni = await readIniFile(path.join(game, 'modloader', 'modloader.ini'))
+  const liveBlock = readKeys(getSection(liveIni, 'Profiles.Real install.Priority'))
+  check(
+    'the accented folder name survives the round trip',
+    'Animações de Kung Fu melhoradas' in liveBlock,
+    Object.keys(liveBlock)
+  )
+  check(
+    'the hand-set priority survived a switch away and back',
+    liveBlock['Animações de Kung Fu melhoradas'] === '70',
+    liveBlock
+  )
+  check(
+    'no priority line is written for a mod that is not in this profile',
+    !('Loadscreens 2K Definitive' in liveBlock),
+    Object.keys(liveBlock)
+  )
+  check(
+    'a strict read of the block sees only this profile, not the inherited defaults',
+    !('Old Cars' in liveBlock),
+    Object.keys(liveBlock)
+  )
+
+  // Restore previous state: roll the last switch back completely.
+  const beforeRestore = await snapshotDir(game)
+  await activateProfile(empty.id)
+  const restore = await restorePreviousState()
+  check('restoring reports what it put back', restore.restored >= riskyFiles.length, restore)
+  check(
+    'restoring rolls the switch back to the tree it found',
+    sameTree(beforeRestore, await snapshotDir(game)),
+    diff(beforeRestore, await snapshotDir(game))
+  )
+  check(
+    'the profile that was active before is active again',
+    (await listProfiles()).find((p) => p.isActive)?.id === risky.id
+  )
+
+  // A mod whose payload has gone must block the switch rather than vanish.
+  const orphan = await createProfile({ name: 'Broken payload', copyFrom: risky.id })
+  const orphanInstall = listInstalled(orphan.id).find((m) => m.title.startsWith('Anima'))!
+  const orphanKey = (getDb().prepare('SELECT store_key FROM install WHERE id = ?').get(orphanInstall.installId) as {
+    store_key: string | null
+  }).store_key
+  if (orphanKey) await fsp.rm(storeDir(orphanKey), { recursive: true, force: true })
+  const orphanPlan = await planSwitch(orphan.id)
+  check('a mod with no payload is reported as unresolved', orphanPlan.unresolved.length >= 1, orphanPlan.unresolved)
+  let blocked = false
+  await activateProfile(orphan.id).catch(() => {
+    blocked = true
+  })
+  check('a switch that would lose a mod refuses to run', blocked)
+  check(
+    'the refusal left the previous profile active and its files in place',
+    (await listProfiles()).find((p) => p.isActive)?.id === risky.id &&
+      riskyFiles.every((rel) => fs.existsSync(path.join(game, ...rel.split('/'))))
+  )
+
+  getDb().prepare('DELETE FROM profile').run()
+  await fsp.rm(tmp, { recursive: true, force: true }).catch(() => undefined)
+
+  console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`)
+  return failures
+}
+
+/** A minimal but structurally valid PE image, so the real header reader can parse it. */
+function fakePe(size: number, timestamp: number, characteristics: number): Buffer {
+  const buf = Buffer.alloc(Math.max(size, 0x200))
+  buf.writeUInt16LE(0x5a4d, 0) // MZ
+  const peOff = 0x80
+  buf.writeUInt32LE(peOff, 0x3c)
+  buf.writeUInt32LE(0x00004550, peOff) // PE\0\0
+  buf.writeUInt16LE(0x014c, peOff + 4) // i386
+  buf.writeUInt32LE(timestamp, peOff + 8)
+  buf.writeUInt16LE(characteristics, peOff + 22)
+  return buf.subarray(0, size)
+}
+
+async function snapshotDir(dir: string): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  for (const f of await walk(dir)) {
+    if (f.rel.toLowerCase().endsWith('modloader.ini')) continue // Modão owns this file by design
+    out.set(f.rel.toLowerCase(), await sha256File(f.abs))
+  }
+  return out
+}
+
+function sameTree(a: Map<string, string>, b: Map<string, string>): boolean {
+  if (a.size !== b.size) return false
+  for (const [k, v] of a) if (b.get(k) !== v) return false
+  return true
+}
+
+function diff(a: Map<string, string>, b: Map<string, string>): string[] {
+  const out: string[] = []
+  for (const [k, v] of a) {
+    if (!b.has(k)) out.push(`missing after: ${k}`)
+    else if (b.get(k) !== v) out.push(`changed: ${k}`)
+  }
+  for (const k of b.keys()) if (!a.has(k)) out.push(`added: ${k}`)
+  return out
+}

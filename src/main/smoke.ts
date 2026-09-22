@@ -1,0 +1,130 @@
+import path from 'node:path'
+import fs from 'node:fs'
+import { app } from 'electron'
+import { getDb } from './db'
+import { Paths } from './util/paths'
+import { loadSeedCatalog, listCatalog } from './catalog/service'
+import { createProfile, listProfiles } from './profiles/manager'
+import { resolveDependencies } from './deps/resolver'
+import { addressFromOffset, lookup } from './diagnostics/crashlist'
+import { listConflicts, providesKey } from './conflicts'
+import type { GameInstall } from '@shared/types'
+
+/**
+ * Headless self-check, run with MODAO_SMOKE=1. Exercises the database,
+ * migrations, seed catalog, dependency graph and crash lookup without a UI.
+ */
+export async function runSmoke(): Promise<number> {
+  let failures = 0
+  const check = (name: string, ok: boolean, extra?: unknown): void => {
+    if (ok) console.log(`  PASS  ${name}`)
+    else {
+      failures++
+      console.log(`  FAIL  ${name}`, extra ?? '')
+    }
+  }
+
+  const db = getDb()
+  const migrations = db.prepare('SELECT COUNT(*) c FROM schema_migration').get() as { c: number }
+  check('migrations applied', migrations.c >= 2, migrations)
+  check('provides index exists', !!db.prepare("SELECT name FROM sqlite_master WHERE name='idx_provides_path'").get())
+
+  const seeded = await loadSeedCatalog(true)
+  check('seed catalog loaded', seeded > 10, seeded)
+
+  const catalog = listCatalog({ sort: 'rating' })
+  check('catalog ranks by synthesised score', catalog.mods.length > 0 && catalog.mods[0].rating >= catalog.mods[catalog.mods.length - 1].rating)
+  check(
+    'rating inputs are exposed, not just a score',
+    catalog.mods.every((m) => typeof m.ratingInputs.recency === 'number' && typeof m.ratingInputs.inEssentials === 'boolean')
+  )
+  check(
+    'every catalogue entry links back to its author page',
+    catalog.mods.every((m) => m.sourceUrl.startsWith('https://www.mixmods.com.br/')),
+    catalog.mods.find((m) => !m.sourceUrl.startsWith('https://www.mixmods.com.br/'))?.slug
+  )
+  check(
+    'the catalogue carries the mod pages as written, not just a summary',
+    catalog.mods.filter((m) => m.blocks.length > 0).length > catalog.mods.length / 2,
+    `${catalog.mods.filter((m) => m.blocks.length > 0).length}/${catalog.mods.length} with page blocks`
+  )
+  const paywalled = catalog.mods.filter((m) => m.paywalled)
+  check('paywalled releases are flagged and never carry a direct download', paywalled.every((m) => m.versions.every((v) => !v.downloadUrl) || m.paywalled), paywalled.map((m) => m.slug))
+
+  const profile = await createProfile({ name: `smoke ${Date.now()}` })
+  check('profile created', profile.id > 0)
+  check('profile listed', (await listProfiles()).some((p) => p.id === profile.id))
+
+  const fakeGame: GameInstall = {
+    id: -1,
+    path: 'C:/nonexistent',
+    label: 'smoke',
+    kind: 'sa',
+    gameName: 'GTA: San Andreas',
+    supportsModLoader: true,
+    supportsCleo: true,
+    supportsAsi: true,
+    pakDir: null,
+    hasCrashList: true,
+    exeSize: 14_383_616,
+    exeSha256: '',
+    exeTimestamp: 0x427101ca,
+    isV1UsOriginal: true,
+    largeAddressAware: false,
+    asiDirectory: 'C:/nonexistent',
+    asiLoader: 'C:/nonexistent/vorbisFile.dll',
+    hasModLoader: true,
+    modLoaderVersion: '0.3.7',
+    cleoVersion: '4.3',
+    userFilesDir: '',
+    sameVolumeAsStore: true,
+    linkStrategy: 'hardlink',
+    access: { writable: true, probedPath: 'C:/nonexistent', code: null, reason: null, needsElevation: false }
+  }
+
+  const cleoPlusId = (db.prepare("SELECT id FROM mod WHERE slug = 'cleoplus'").get() as { id: number } | undefined)?.id ?? 0
+  const cleoDeps = resolveDependencies({ modId: cleoPlusId, profileId: profile.id, game: fakeGame })
+  check(
+    'CLEO+ is version-gated against CLEO 4.3',
+    cleoDeps.some((d) => d.resolution === 'blocking' && /ordinal 22/.test(d.note ?? '')),
+    cleoDeps
+  )
+  const cleo44 = resolveDependencies({ modId: cleoPlusId, profileId: profile.id, game: { ...fakeGame, cleoVersion: '4.4.4' } })
+  check('CLEO 4.4 satisfies CLEO+', cleo44.every((d) => d.resolution !== 'blocking'), cleo44)
+
+  const fixesId = (db.prepare("SELECT id FROM mod WHERE slug = 'sa-proper-fixes'").get() as { id: number } | undefined)?.id ?? 0
+  const fixDeps = resolveDependencies({ modId: fixesId, profileId: profile.id, game: fakeGame })
+  check(
+    'Proper Fixes models "Proper Shaders OR SkyGfx"',
+    fixDeps.some((d) => d.kind === 'alt' && (d.alternatives?.length ?? 0) === 2),
+    fixDeps
+  )
+
+  const shadersId = (db.prepare("SELECT id FROM mod WHERE slug = 'sa-proper-shaders'").get() as { id: number } | undefined)?.id ?? 0
+  const shaderDeps = resolveDependencies({ modId: shadersId, profileId: profile.id, game: fakeGame })
+  check(
+    'Proper Shaders declares anti-dependencies on SkyGfx and Ped Spec',
+    shaderDeps.filter((d) => d.kind === 'conflicts').length === 2,
+    shaderDeps
+  )
+
+  // The worked example from the brief.
+  const address = addressFromOffset('0x00349b7b')
+  check('fault offset 0x00349b7b maps to 0x00749B7B', address === '0x00749B7B', address)
+  const match = await lookup(address)
+  check('CrashList match found', !!match.cause && /modelo|txd/i.test(match.cause), match)
+
+  check('provides key strips the mod folder', providesKey('modloader/Weapon Icons/models/hud.txd') === 'models/hud.txd')
+  check('provides key keeps non-modloader paths', providesKey('cleo/radar.cs') === 'cleo/radar.cs')
+  check('conflict query runs on an empty profile', listConflicts(profile.id).length === 0)
+
+  check('store directory created under userData', fs.existsSync(Paths.storeMods()))
+  check('quarantine directory created', fs.existsSync(Paths.quarantine()))
+  check('seed resources resolved', fs.existsSync(path.join(Paths.resources(), 'CrashList.txt')))
+
+  db.prepare('DELETE FROM profile WHERE id = ?').run(profile.id)
+
+  console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`)
+  console.log(`userData: ${app.getPath('userData')}`)
+  return failures
+}
