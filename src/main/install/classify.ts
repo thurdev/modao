@@ -285,35 +285,35 @@ const SPRITE_TXD_NAMES =
  * Data files a mod either replaces whole or line-installs into - never both.
  *
  * Mod Loader offers two ways to change a data file: ship the complete file, or
- * ship a .txt holding just the lines to add. They do not compose. The full file
- * wins and the .txt is never read, so an archive doing both is shipping a .txt
- * whose every line is dead - and the author, having written the lines, believes
- * they are live. The usual result is a car that handles like the stock one
- * however often the .txt is edited.
+ * ship a .txt (or readme) holding just the lines to add, which Mod Loader
+ * merges in at load time. They do not compose. The full file wins and the
+ * .txt is never read, so an archive doing both is shipping a .txt whose every
+ * line is dead - and the author, having written the lines, believes they are
+ * live. The usual result is a car that handles like the stock one however
+ * often the .txt is edited.
+ *
+ * This is the "Readme" column of `std.data`'s own support table - the ONLY
+ * files Mod Loader documents reading a data line from a .txt for - not the
+ * larger "Merge" column, which is a different feature (combining several
+ * mods' whole-file replacements of the same name) that has nothing to do with
+ * a line-install .txt. Restricted to what that table actually states, per
+ * https://github.com/thelink2012/modloader/blob/master/doc/plugins/gta3/std.data.md:
+ * gta.dat and handling.cfg, carcols.dat, carmods.dat and weapon.dat have
+ * "Readme: X" outright; the .ide row's footnote (¹) names exactly
+ * vehicles.ide, peds.ide and veh_mods.ide. Every other data file in that table
+ * - default.ide, ped.dat, object.dat, timecyc.dat and the rest - has no
+ * documented .txt line-install at all, so shipping one beside them is not
+ * this mistake and is left unflagged rather than guessed at.
  */
 const FULL_DATA_FILES = new Set([
+  'gta.dat',
   'handling.cfg',
   'vehicles.ide',
-  'default.ide',
   'peds.ide',
+  'veh_mods.ide',
   'carcols.dat',
   'carmods.dat',
-  'water.dat',
-  'weapon.dat',
-  'melee.dat',
-  'object.dat',
-  'surface.dat',
-  'ped.dat',
-  'pedgrp.dat',
-  'animgrp.dat',
-  'timecyc.dat',
-  'popcycle.dat',
-  'procobj.dat',
-  'statdisp.dat',
-  'furnitur.dat',
-  'plants.dat',
-  'shopping.dat',
-  'clothes.dat'
+  'weapon.dat'
 ])
 
 /**
@@ -338,16 +338,22 @@ function lineInstallFor(files: { sourcePath: string }[], dataName: string): stri
 }
 
 /**
- * Path nodes live inside an .img, so they need a folder named after it.
+ * Path nodes live inside gta3.img specifically, so they need a folder named
+ * after THAT archive, not any archive.
  *
- * nodes0.dat … nodes63.dat are members of gta3.img, not loose files in data\.
- * Mod Loader replaces a file inside an archive when the mod folder holding it
- * is named after that archive - the same mechanism that makes "player.img"
- * work for clothes. Left loose, a nodes file is copied nowhere the game reads
- * and the paths stay vanilla, which looks like traffic simply ignoring the new
- * roads.
+ * nodes0.dat … nodes63.dat are members of gta3.img, not loose files in data\,
+ * and not members of any other .img either - vehicles.img or gta_int.img do
+ * not hold path nodes, so a folder named after one of those is exactly as
+ * useless to this file as no folder at all. The check names the archive
+ * exactly, the same way the clothes rule below matches "player.img" itself
+ * rather than any "*.img" segment. Mod Loader replaces a file inside an
+ * archive when the mod folder holding it is named after that archive; left
+ * loose - or filed under the wrong archive's name - a nodes file is copied
+ * nowhere the game reads and the paths stay vanilla, which looks like traffic
+ * simply ignoring the new roads.
  */
 const NODES_DAT = /^nodes\d+\.dat$/i
+const NODES_IMG_FOLDER = 'gta3.img'
 
 /**
  * A CLEO script inside a mod keeps its sidecar files only if it sits in that
@@ -975,22 +981,24 @@ export async function classifyTree(
     break
   }
 
-  // Path nodes belong inside an .img, so they need a folder named after it.
+  // Path nodes belong inside gta3.img specifically - not loose, and not filed
+  // under any other archive's name.
   const strandedNodes = files.filter(
     (f) =>
       NODES_DAT.test(path.basename(f.sourcePath)) &&
-      !f.targetRelative.toLowerCase().split('/').some((seg) => seg.endsWith('.img'))
+      !f.targetRelative.toLowerCase().split('/').some((seg) => seg === NODES_IMG_FOLDER)
   )
   if (strandedNodes.length > 0) {
     warnings.push({
       severity: 'warn',
       code: 'nodes-folder',
-      message: `${strandedNodes.length === 1 ? path.basename(strandedNodes[0].sourcePath) : `${strandedNodes.length} nodes files`} must sit in a folder named after the .img they belong to.`,
+      message: `${strandedNodes.length === 1 ? path.basename(strandedNodes[0].sourcePath) : `${strandedNodes.length} nodes files`} must sit in a folder named "${NODES_IMG_FOLDER}".`,
       detail:
-        'nodes0.dat to nodes63.dat are members of gta3.img, not loose files. Mod Loader replaces a file inside an ' +
-        'archive only when the folder holding it is named after that archive, the same way clothes need a folder ' +
-        'called "player.img". Put them in modloader\\<mod>\\gta3.img\\ - loose, they are copied somewhere the game ' +
-        'never reads and the paths stay vanilla.'
+        `nodes0.dat to nodes63.dat are members of gta3.img specifically, not loose files and not members of any ` +
+        `other .img. Mod Loader replaces a file inside an archive only when the folder holding it is named after ` +
+        `that exact archive, the same way clothes need a folder called "player.img" and no other name will do. Put ` +
+        `them in modloader\\<mod>\\${NODES_IMG_FOLDER}\\ - anywhere else, they are copied somewhere the game never ` +
+        `reads and the paths stay vanilla.`
     })
   }
 

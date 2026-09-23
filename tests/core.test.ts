@@ -3157,10 +3157,17 @@ const spriteLoose = await codesOf(mechTree('sprite-loose', ['Clean HUD/hud.txd',
 check('mechanics: a sprite .txd outside a folder named "txd" is flagged - Mod Loader never loads it', spriteLoose.includes('txd-sprite-missing-folder'), spriteLoose)
 const spriteRight = await codesOf(mechTree('sprite-right', ['Clean HUD/txd/hud.txd']), 'Clean HUD')
 check('mechanics: the same sprite inside a "txd" folder is not flagged', !spriteRight.includes('txd-sprite-missing-folder'), spriteRight)
+// The regression this guards against is SPRITE_TXD_NAMES widening to match an
+// ordinary vehicle texture's name: infernus.txd sits OUTSIDE a "txd" folder here,
+// same as any retexture ships it, so it only stays unflagged as long as "infernus"
+// is not read as a sprite name. A fixture already inside txd/ cannot exercise this -
+// it would pass no matter how broad the name list got, because the folder check
+// alone would keep it quiet.
+const vehicleTxdLoose = await codesOf(mechTree('vehicle-txd-loose', ['Infernus Retex/models/infernus.txd']), 'Infernus Retex')
 check(
-  'mechanics: a vehicle texture is not mistaken for a sprite by name',
-  !mechOut.warnings.some((w) => w.code === 'txd-sprite-missing-folder'),
-  mechOut.warnings.map((w) => w.code)
+  'mechanics: a vehicle texture outside a "txd" folder is not mistaken for an unloaded sprite',
+  !vehicleTxdLoose.includes('txd-sprite-missing-folder'),
+  vehicleTxdLoose
 )
 
 // Rule: a whole data file and a .txt line-installing into it never compose.
@@ -3168,12 +3175,23 @@ const dataMix = await codesOf(mechTree('data-mix', ['Fast Cars/data/handling.cfg
 check('mechanics: a full handling.cfg shipped with a handling.txt line-install is flagged', dataMix.includes('data-file-mixed'), dataMix)
 const dataWhole = await codesOf(mechTree('data-whole', ['Fast Cars/data/handling.cfg', 'Fast Cars/leiame.txt']), 'Fast Cars')
 check('mechanics: a full data file on its own is fine, and a readme is not a line-install', !dataWhole.includes('data-file-mixed'), dataWhole)
+// A .txt named after a DIFFERENT data file is not a line-install of this one -
+// the match is by name, so a handling.cfg beside a carcols.txt must not trip.
+const dataOtherFile = await codesOf(
+  mechTree('data-other-file', ['Fast Cars/data/handling.cfg', 'Fast Cars/data/carcols.txt']),
+  'Fast Cars'
+)
+check('mechanics: a full data file beside an unrelated .txt for a different file does not trip', !dataOtherFile.includes('data-file-mixed'), dataOtherFile)
 
 // Rule: nodes#.dat is a member of an .img, so it needs a folder named after it.
 const nodesLoose = await codesOf(mechTree('nodes-loose', ['New Roads/nodes12.dat']), 'New Roads')
 check('mechanics: a loose nodes#.dat is flagged as needing a folder named after its .img', nodesLoose.includes('nodes-folder'), nodesLoose)
 const nodesRight = await codesOf(mechTree('nodes-right', ['New Roads/gta3.img/nodes12.dat']), 'New Roads')
 check('mechanics: the same nodes file inside gta3.img/ is not flagged', !nodesRight.includes('nodes-folder'), nodesRight)
+// nodes#.dat is a member of gta3.img specifically - a folder named after ANY
+// OTHER .img is exactly as wrong as no folder at all, and has to still warn.
+const nodesWrongImg = await codesOf(mechTree('nodes-wrong-img', ['New Roads/vehicles.img/nodes12.dat']), 'New Roads')
+check('mechanics: a nodes#.dat filed under the wrong .img is still flagged', nodesWrongImg.includes('nodes-folder'), nodesWrongImg)
 
 // Rule: white or invisible cars and peds are a .dff and .txd won by different
 // mods. Distinct from a starved streaming budget, which is not a priority
@@ -3337,6 +3355,368 @@ check(
 check(
   'journal: a group a reinstall reshaped away is stood down on, not restored over',
   decideVariantRecovery(swapRecord, undefined) === 'stand-down' && decideVariantRecovery(swapRecord, null) === 'stand-down'
+)
+
+// --- item 18: the self-learning knowledge layer -----------------------------
+// The store itself is SQLite in the main process and cannot be loaded here, so
+// every decision it makes lives in `@shared/knowledgeRules` and is exercised
+// through a fake store that executes those same decisions in memory. What is
+// asserted is what the spec asks for: every rule kind round-trips, a repeat
+// strengthens rather than duplicates, a person's correction outranks the app's
+// own guess, and a rule that contradicts the author's readme is reported
+// instead of being applied behind their back.
+import {
+  confidenceOf,
+  crashCorrelationRule,
+  decideLearn,
+  isLegacyCrashRule,
+  layoutConflictWarning,
+  layoutConflictsByRule,
+  postInstallRecipes,
+  priorityOverrideRule,
+  rankRules,
+  readmeLayoutConflict,
+  redundancyFindings,
+  variantChoiceEvidence,
+  variantGroupEvidence,
+  variantGroupsForLearning,
+  variantGroupsFromArchive,
+  RULE_KINDS,
+  SOURCE_WEIGHT,
+  type KnowledgeRule,
+  type LayoutRule,
+  type LearnInput,
+  type RuleKind
+} from '../src/shared/knowledgeRules'
+import type { ReadmeParse } from '../src/shared/types'
+
+function fakeKnowledgeStore(): {
+  rows: KnowledgeRule<unknown>[]
+  learn: <T>(input: LearnInput<T>) => KnowledgeRule<T>
+  rulesFor: <T>(kind: RuleKind, subjects: string[]) => KnowledgeRule<T>[]
+} {
+  const rows: KnowledgeRule<unknown>[] = []
+  let nextId = 1
+  return {
+    rows,
+    learn<T>(input: LearnInput<T>): KnowledgeRule<T> {
+      const existing = rows.find(
+        (r) =>
+          r.kind === input.kind &&
+          r.subject === input.subject &&
+          r.subjectKind === input.subjectKind &&
+          r.source === input.source
+      ) as KnowledgeRule<T> | undefined
+      const decision = decideLearn<T>(existing ?? null, input, '2026-01-01T00:00:00.000Z')
+      if (decision.action === 'bump') {
+        rows[rows.indexOf(existing as KnowledgeRule<unknown>)] = decision.rule as KnowledgeRule<unknown>
+        return decision.rule
+      }
+      const rule = { ...decision.rule, id: nextId++ }
+      rows.push(rule as KnowledgeRule<unknown>)
+      return rule
+    },
+    rulesFor<T>(kind: RuleKind, subjects: string[]): KnowledgeRule<T>[] {
+      return rankRules(rows.filter((r) => r.kind === kind && subjects.includes(r.subject)) as KnowledgeRule<T>[])
+    }
+  }
+}
+
+const kindSamples: Record<RuleKind, unknown> = {
+  'install-layout': { placements: [{ source: 'infernus.dff', target: 'modloader/Cool Cars/infernus.dff' }], modFolder: 'Cool Cars' },
+  dependency: { kind: 'requires', name: 'CLEO 4', url: null },
+  'variant-group': {
+    groupId: 'variant:ProperShaders',
+    question: 'These are alternatives - pick the one to install:',
+    options: [{ id: 'ProperShaders/4K', label: '4K', note: null }],
+    chosenOptionId: 'ProperShaders/4K',
+    chosenLabel: 'Proper Shaders',
+    attachedTo: null
+  },
+  'post-install': { action: 'delete', target: 'antigo.asi', line: 'Depois de instalar, apague o antigo.asi' },
+  'priority-override': { folder: 'Loadscreens', priority: 90, defaultPriority: 50 },
+  redundancy: { obsoletes: ['Old Pack'], reason: 'the newer pack ships every file it did' },
+  'crash-correlation': { address: '0x004C0C3A', folders: ['Cool Cars'], profileId: 1 },
+  verdict: { verdict: 'active', explanation: 'Mod Loader loaded it' }
+}
+
+const kindStore = fakeKnowledgeStore()
+check(
+  'knowledge: every rule kind - the three that had no writer included - round-trips through the store',
+  RULE_KINDS.length === 8 &&
+    RULE_KINDS.every((kind) => {
+      const written = kindStore.learn({
+        kind,
+        subject: `subject:${kind}`,
+        subjectKind: 'exact',
+        source: 'seed',
+        evidence: `evidence for ${kind}`,
+        value: kindSamples[kind]
+      })
+      const read = kindStore.rulesFor(kind, [`subject:${kind}`])[0]
+      return (
+        !!read &&
+        read.id === written.id &&
+        read.weight === SOURCE_WEIGHT.seed &&
+        read.timesSeen === 1 &&
+        JSON.stringify(read.value) === JSON.stringify(kindSamples[kind])
+      )
+    })
+)
+check(
+  'knowledge: variant-group, post-install and priority-override are no longer names with nothing behind them',
+  (['variant-group', 'post-install', 'priority-override'] as RuleKind[]).every(
+    (k) => kindStore.rows.some((r) => r.kind === k) && RULE_KINDS.includes(k)
+  )
+)
+
+const seenAgain = kindStore.learn({
+  kind: 'verdict',
+  subject: 'subject:verdict',
+  subjectKind: 'exact',
+  source: 'seed',
+  evidence: 'Mod Loader loaded it again',
+  value: kindSamples.verdict
+})
+check(
+  'knowledge: the same rule observed twice is strengthened, not duplicated',
+  seenAgain.timesSeen === 2 &&
+    seenAgain.evidence === 'Mod Loader loaded it again' &&
+    kindStore.rows.filter((r) => r.kind === 'verdict').length === 1
+)
+
+// A user correction outranks an inference for the SAME signature.
+const layoutStore = fakeKnowledgeStore()
+const guessed = layoutStore.learn<LayoutRule>({
+  kind: 'install-layout',
+  subject: 'sig:exact',
+  subjectKind: 'exact',
+  source: 'inference',
+  evidence: '12 file(s) placed by the classifier and accepted',
+  value: { placements: [], modFolder: 'Guessed Folder' }
+})
+layoutStore.learn<LayoutRule>({
+  kind: 'install-layout',
+  subject: 'sig:exact',
+  subjectKind: 'exact',
+  source: 'user',
+  evidence: 'You placed 1 file(s) yourself, starting with cj.dff → modloader/Skins CJ/cj.dff',
+  value: { placements: [], modFolder: 'Skins CJ', correctedPaths: ['cj.dff'] }
+})
+const bestLayout = layoutStore.rulesFor<LayoutRule>('install-layout', ['sig:exact'])[0]
+check(
+  'knowledge: a correction the user made by hand outranks the app\u2019s own inference for the same signature',
+  bestLayout.source === 'user' &&
+    bestLayout.value.modFolder === 'Skins CJ' &&
+    bestLayout.weight === SOURCE_WEIGHT.user &&
+    SOURCE_WEIGHT.user > SOURCE_WEIGHT.inference &&
+    guessed.weight === SOURCE_WEIGHT.inference
+)
+check(
+  'knowledge: confidence rises with repetition but never turns a guess into the author\u2019s own words',
+  confidenceOf({ weight: SOURCE_WEIGHT.user, timesSeen: 1 }).level === 'high' &&
+    confidenceOf({ weight: SOURCE_WEIGHT.inference, timesSeen: 1 }).level === 'low' &&
+    confidenceOf({ weight: SOURCE_WEIGHT.inference, timesSeen: 9 }).score <
+      confidenceOf({ weight: SOURCE_WEIGHT.readme, timesSeen: 1 }).score
+)
+
+// A learned rule that contradicts the readme is REPORTED, not applied.
+const conflictStore = fakeKnowledgeStore()
+const readmeRule = conflictStore.learn<LayoutRule>({
+  kind: 'install-layout',
+  subject: 'sig:conflict',
+  subjectKind: 'exact',
+  source: 'readme',
+  evidence: 'Coloque a pasta em modloader/SkyGfx',
+  value: { placements: [], modFolder: 'SkyGfx' }
+})
+const inferredRule = conflictStore.learn<LayoutRule>({
+  kind: 'install-layout',
+  subject: 'sig:conflict',
+  subjectKind: 'exact',
+  source: 'inference',
+  evidence: '30 file(s) placed by the classifier and accepted',
+  value: { placements: [], modFolder: 'Meu Mod' }
+})
+const conflictRules = conflictStore.rulesFor<LayoutRule>('install-layout', ['sig:conflict'])
+const readmeVsLearned = readmeLayoutConflict(conflictRules)
+const conflictWarning = readmeVsLearned ? layoutConflictWarning(readmeVsLearned) : null
+check(
+  'knowledge: a learned rule that contradicts the readme is reported, and the readme still wins',
+  !!readmeVsLearned &&
+    readmeVsLearned.readmeFolder === 'SkyGfx' &&
+    readmeVsLearned.learnedFolder === 'Meu Mod' &&
+    conflictWarning?.severity === 'warn' &&
+    conflictWarning.code === 'readme-vs-learned' &&
+    (conflictWarning.detail ?? '').includes('Coloque a pasta em modloader/SkyGfx') &&
+    conflictRules[0].source === 'readme'
+)
+check(
+  'knowledge: the rules list can point at both rows of a disagreement',
+  (() => {
+    const marked = layoutConflictsByRule(conflictRules)
+    return marked.size === 2 && marked.has(readmeRule.id) && marked.has(inferredRule.id)
+  })()
+)
+const userOverReadme = fakeKnowledgeStore()
+userOverReadme.learn<LayoutRule>({
+  kind: 'install-layout',
+  subject: 'sig:user',
+  subjectKind: 'exact',
+  source: 'readme',
+  evidence: 'Coloque em modloader/SkyGfx',
+  value: { placements: [], modFolder: 'SkyGfx' }
+})
+userOverReadme.learn<LayoutRule>({
+  kind: 'install-layout',
+  subject: 'sig:user',
+  subjectKind: 'exact',
+  source: 'user',
+  evidence: 'You placed 2 file(s) yourself',
+  value: { placements: [], modFolder: 'SkyGfx Tweaked', correctedPaths: ['a.txd', 'b.txd'] }
+})
+const userRules = userOverReadme.rulesFor<LayoutRule>('install-layout', ['sig:user'])
+const userConflict = readmeLayoutConflict(userRules)
+check(
+  'knowledge: your own correction beats the readme, and is still said out loud rather than applied in silence',
+  userRules[0].source === 'user' &&
+    !!userConflict &&
+    layoutConflictWarning(userConflict).message.includes('you moved it to') &&
+    layoutConflictWarning(userConflict).severity === 'warn'
+)
+
+// post-install: grounded in a line the author actually wrote.
+const postInstall = postInstallRecipes([
+  {
+    raw:
+      'Instalação:\r\n' +
+      'Depois de instalar, apague o antigo.asi da pasta do jogo.\r\n' +
+      'Não apague o gta_sa.exe.\r\n' +
+      'Aproveite o mod e boa sorte.\r\n'
+  } as unknown as ReadmeParse
+])
+check(
+  'knowledge: a post-install recipe is learned only from a line that names a real file to remove',
+  postInstall.length === 1 &&
+    postInstall[0].value.action === 'delete' &&
+    postInstall[0].value.target.toLowerCase() === 'antigo.asi' &&
+    postInstall[0].evidence.includes('apague o antigo.asi')
+)
+check(
+  'knowledge: a readme saying NOT to delete something is never inverted into a delete recipe',
+  postInstallRecipes([{ raw: 'Não apague o gta_sa.exe em hipótese alguma.' } as unknown as ReadmeParse]).length === 0 &&
+    postInstallRecipes([{ raw: 'Este mod é muito legal.' } as unknown as ReadmeParse]).length === 0
+)
+
+// variant-group: the real detector's findings, never a second detector.
+const variantFiles = [
+  { rel: 'ProperShaders/1080p/ProperShaders.ini', size: 120 },
+  { rel: 'ProperShaders/1440p/ProperShaders.ini', size: 121 },
+  { rel: 'ProperShaders/4K/ProperShaders.ini', size: 122 }
+]
+const detected = variantGroupsFromArchive(variantFiles, '4K recomendado para placas modernas')
+check(
+  'knowledge: variant groups come from detectVariantGroups over the archive, not from a second detector',
+  detected.length === 1 &&
+    detected[0].options.length === 3 &&
+    detected[0].options.some((o) => o.label === '4K' && o.recommended) &&
+    variantGroupEvidence(variantFiles, detected[0]).toLowerCase().includes('propershaders.ini')
+)
+const learnedVariants = variantGroupsForLearning(
+  detected,
+  { [detected[0].id]: 'ProperShaders/4K' },
+  variantFiles.map((f) => ({ sourcePath: f.rel, targetRelative: `modloader/Proper Shaders/${f.rel.split('/').pop()}` })),
+  'Proper Shaders'
+)
+check(
+  'knowledge: the choice a person made is what gets learned, with the options they turned down as evidence',
+  learnedVariants.length === 1 &&
+    learnedVariants[0].value.chosenOptionId === 'ProperShaders/4K' &&
+    // "4K" says nothing on its own, so the mod's own name is used instead.
+    learnedVariants[0].value.chosenLabel === 'Proper Shaders' &&
+    learnedVariants[0].value.options.length === 3 &&
+    learnedVariants[0].evidence.includes('1080p') &&
+    learnedVariants[0].evidence.includes('1440p')
+)
+check(
+  'knowledge: a variant group nobody resolved is never learned',
+  variantGroupsForLearning(detected, {}, [], 'Proper Shaders').length === 0 &&
+    variantChoiceEvidence(
+      { id: 'g', question: 'Pick one:', chosenOptionId: 'a', targetRelatives: [], options: [{ id: 'a', label: 'HD', note: null }] },
+      'Some Mod'
+    ).includes('HD')
+)
+
+// priority-override and crash-correlation: grounded, or not written at all.
+const priorityRule = priorityOverrideRule('Loadscreens', 90)
+check(
+  'knowledge: a priority a person set by hand is learned against the mod folder, with the default it overrode',
+  priorityRule.value.folder === 'Loadscreens' &&
+    priorityRule.value.priority === 90 &&
+    priorityRule.value.defaultPriority === 50 &&
+    priorityRule.evidence.includes('90') &&
+    priorityOverrideRule('Tradução PT-BR', 10).evidence.includes('lose')
+)
+check(
+  'knowledge: a crash is correlated with the mod set that was enabled, and never invented from nothing',
+  crashCorrelationRule([], null, 1) === null &&
+    (() => {
+      const r = crashCorrelationRule(['Zebra Mod', 'Cool Cars', 'Cool Cars'], '0x004C0C3A', 7)
+      return (
+        !!r &&
+        r.value.folders.join(',') === 'Cool Cars,Zebra Mod' &&
+        r.value.address === '0x004C0C3A' &&
+        r.value.profileId === 7 &&
+        r.evidence.includes('0x004C0C3A')
+      )
+    })()
+)
+// redundancy: the kind crash correlation used to borrow, now with a writer of
+// its own that reads the profile rather than guessing about mods.
+const redundancyInstalls = [
+  { installId: 1, title: 'Mega Texture Pack', folder: 'Mega Texture Pack', provides: ['models/a.txd', 'models/b.txd'], enabled: true },
+  { installId: 2, title: 'Small Retex', folder: 'Small Retex', provides: ['models/a.txd', 'models/b.txd'], enabled: true },
+  { installId: 3, title: 'Own Thing', folder: 'Own Thing', provides: ['models/c.txd'], enabled: true }
+]
+const shadowed = redundancyFindings(
+  redundancyInstalls,
+  new Map([
+    ['models/a.txd', 1],
+    ['models/b.txd', 1]
+  ])
+)
+check(
+  'knowledge: a mod that loses every file it ships to one other mod is learned as redundant',
+  shadowed.length === 1 &&
+    shadowed[0].winnerFolder === 'Mega Texture Pack' &&
+    shadowed[0].obsoletes.join(',') === 'Small Retex' &&
+    shadowed[0].reason.includes('Mega Texture Pack')
+)
+check(
+  'knowledge: winning even one file, or being shadowed by two different mods, is never called redundant',
+  redundancyFindings(redundancyInstalls, new Map([['models/a.txd', 1]])).length === 0 &&
+    redundancyFindings(
+      redundancyInstalls,
+      new Map([
+        ['models/a.txd', 1],
+        ['models/b.txd', 3]
+      ])
+    ).length === 0 &&
+    redundancyFindings(
+      redundancyInstalls.map((i) => ({ ...i, enabled: false })),
+      new Map([
+        ['models/a.txd', 1],
+        ['models/b.txd', 1]
+      ])
+    ).length === 0
+)
+
+check(
+  'knowledge: an upgraded store moves the old crash rows filed as redundancy, and leaves real redundancies alone',
+  isLegacyCrashRule({ kind: 'redundancy', source: 'crash', subject: 'crash:0x004C0C3A' }) &&
+    !isLegacyCrashRule({ kind: 'redundancy', source: 'readme', subject: 'crash:0x004C0C3A' }) &&
+    !isLegacyCrashRule({ kind: 'redundancy', source: 'crash', subject: 'sig:abcdef' }) &&
+    !isLegacyCrashRule({ kind: 'crash-correlation', source: 'crash', subject: 'crash:0x004C0C3A' })
 )
 
 fs.rmSync(tmp, { recursive: true, force: true })

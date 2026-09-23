@@ -192,9 +192,16 @@ export async function runHealthCheck(profileId: number | null): Promise<HealthRe
         .map(
           (c) =>
             `${c.relativePath} -> ${
-              c.winner
-                ? t('checks.conflictsWinner', { title: c.winner.title, priority: c.winner.priority })
-                : t('checks.conflictsNoWinner')
+              // A split model has no winner BECAUSE each mod wins one half of it - the
+              // opposite of "every claimant is disabled or priority 0", which is what
+              // conflictsNoWinner says. Rendering that here would restate the exact
+              // conflation rule 4 exists to prevent, on the one screen that never
+              // reads @shared/splitModels's distinction from the streaming budget.
+              c.kind === 'split-model'
+                ? t('conflicts.splitModelHint')
+                : c.winner
+                  ? t('checks.conflictsWinner', { title: c.winner.title, priority: c.winner.priority })
+                  : t('checks.conflictsNoWinner')
             }`
         )
     })
