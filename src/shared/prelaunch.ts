@@ -60,6 +60,37 @@ export function reportKey(gamePath: string, profileId: number | null): string {
   return `${(gamePath ?? '').toLowerCase()}|${profileId ?? 'no-profile'}`
 }
 
+/** One `install` row, as far as a fingerprint needs to know about it. */
+export interface InstallFingerprintRow {
+  id: number
+  enabled: number | boolean | null
+  /** Which option is chosen in each variant group - what `switchVariant` writes. */
+  variantChoice: string | null
+}
+
+/**
+ * What a profile's installs contribute to the fingerprint.
+ *
+ * Count, the enabled sum and the max id catch an install, an uninstall or a
+ * plain on/off toggle. None of those three move when a variant is swapped:
+ * `switchVariant` only rewrites `variant_choice` (and `variant_groups_json`,
+ * which mirrors it) on the row's own id - so a swap that trades in a preset
+ * shipping a second limit adjuster, or a `.cleo` plugin the installed CLEO is
+ * too old for, would otherwise leave a clean cached report standing. So every
+ * row's own choice travels too, in id order.
+ */
+export function installFingerprint(rows: readonly InstallFingerprintRow[]): string {
+  const count = rows.length
+  const enabledSum = rows.reduce((sum, r) => sum + (r.enabled ? 1 : 0), 0)
+  const maxId = rows.reduce((max, r) => Math.max(max, r.id), 0)
+  const variants = rows
+    .slice()
+    .sort((a, b) => a.id - b.id)
+    .map((r) => `${r.id}:${r.variantChoice ?? ''}`)
+    .join(',')
+  return `i:${count}/${enabledSum}/${maxId};v:${variants}`
+}
+
 export interface LaunchInputs {
   /** The user has read the refusal and asked for the game anyway. */
   force: boolean

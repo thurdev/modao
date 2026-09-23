@@ -1,6 +1,12 @@
 import fs from 'node:fs'
 import type { HealthReport } from '@shared/types'
-import { reportIsReusable, reportKey, REPORT_MAX_AGE_MS, type CachedReportStamp } from '@shared/prelaunch'
+import {
+  installFingerprint,
+  reportIsReusable,
+  reportKey,
+  REPORT_MAX_AGE_MS,
+  type CachedReportStamp
+} from '@shared/prelaunch'
 import { getDb } from '../db'
 import { streamIniCandidates } from '../game/streamIni'
 import { runHealthCheck } from './health'
@@ -33,22 +39,24 @@ export function forgetHealthReport(): void {
 /**
  * What the report was computed from, as cheaply as it can be asked.
  *
- * Covers the two things that change under a user's hands between one Play and
- * the next: what the profile has installed and enabled, and stream.ini - the
- * file the whole gate exists for, which the offered fix rewrites. Everything
- * slower-moving is left to the age backstop.
+ * Covers the things that change under a user's hands between one Play and the
+ * next: what the profile has installed and enabled, which variant each install
+ * has chosen - `switchVariant` rewrites only `variant_choice` on a row already
+ * counted, so the count/enabled-sum/max-id alone would not see a preset swapped
+ * in after a clean report was cached - and stream.ini, the file the whole gate
+ * exists for, which the offered fix rewrites. Everything slower-moving is left
+ * to the age backstop.
  */
 function fingerprint(profileId: number | null, gamePath: string): string {
   const parts: string[] = []
 
   if (profileId !== null) {
-    const row = getDb()
-      .prepare(
-        `SELECT COUNT(*) c, COALESCE(SUM(enabled), 0) e, COALESCE(MAX(id), 0) m
-           FROM install WHERE profile_id = ?`
-      )
-      .get(profileId) as { c: number; e: number; m: number } | undefined
-    parts.push(`i:${row?.c ?? 0}/${row?.e ?? 0}/${row?.m ?? 0}`)
+    const rows = getDb()
+      .prepare(`SELECT id, enabled, variant_choice FROM install WHERE profile_id = ?`)
+      .all(profileId) as { id: number; enabled: number | null; variant_choice: string | null }[]
+    parts.push(
+      installFingerprint(rows.map((r) => ({ id: r.id, enabled: r.enabled, variantChoice: r.variant_choice })))
+    )
   } else {
     parts.push('i:none')
   }

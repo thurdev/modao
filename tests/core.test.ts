@@ -95,7 +95,13 @@ import {
   type GraphDependencyRow
 } from '../src/shared/dependencyGraph'
 import { blockersFromReport, describeBlockers, launchGate, type LaunchBlocker } from '../src/shared/launchGate'
-import { launchDecision, reportIsReusable, reportKey, REPORT_MAX_AGE_MS } from '../src/shared/prelaunch'
+import {
+  installFingerprint,
+  launchDecision,
+  reportIsReusable,
+  reportKey,
+  REPORT_MAX_AGE_MS
+} from '../src/shared/prelaunch'
 import { cleoPluginRequirements, cleoRequirementStatus } from '../src/shared/cleoPlugins'
 import { satisfiesRange } from '../src/shared/versionRange'
 import { gameRootPlacements } from '../src/shared/asiData'
@@ -3229,6 +3235,47 @@ check(
   ).length === 0
 )
 
+
+// --- the fingerprint sees a variant swap ------------------------------------
+// switchVariant rewrites only variant_choice (and variant_groups_json, which
+// mirrors it) on a row the count/enabled-sum/max-id above already counted -
+// so a preset swapped in right after a clean report was cached, one that ships
+// a second limit adjuster or a .cleo plugin the installed CLEO is too old for,
+// must still invalidate it. This is the regression: it fails the moment
+// variant_choice is dropped from what the fingerprint reads.
+check(
+  'fingerprint: swapping a variant changes the fingerprint although nothing else does',
+  installFingerprint([
+    { id: 3, enabled: 1, variantChoice: 'lite' },
+    { id: 7, enabled: 1, variantChoice: null }
+  ]) !==
+    installFingerprint([
+      { id: 3, enabled: 1, variantChoice: 'full-fat' },
+      { id: 7, enabled: 1, variantChoice: null }
+    ])
+)
+check(
+  'fingerprint: the same install rows, same choices, fingerprint the same',
+  installFingerprint([
+    { id: 3, enabled: 1, variantChoice: 'lite' },
+    { id: 7, enabled: 0, variantChoice: null }
+  ]) ===
+    installFingerprint([
+      { id: 3, enabled: 1, variantChoice: 'lite' },
+      { id: 7, enabled: 0, variantChoice: null }
+    ])
+)
+check(
+  'fingerprint: row order does not matter, only which id chose what',
+  installFingerprint([
+    { id: 3, enabled: 1, variantChoice: 'lite' },
+    { id: 7, enabled: 1, variantChoice: 'full-fat' }
+  ]) ===
+    installFingerprint([
+      { id: 7, enabled: 1, variantChoice: 'full-fat' },
+      { id: 3, enabled: 1, variantChoice: 'lite' }
+    ])
+)
 
 fs.rmSync(tmp, { recursive: true, force: true })
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`)
