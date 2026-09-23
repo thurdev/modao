@@ -486,11 +486,17 @@ export async function runE2E(): Promise<number> {
   // finds it and repairs the disagreement without ever needing to touch the
   // install row, which a kill never catches mid-write.
   const beforeIcons = await snapshotDir(game)
+  // Named "Icons 2K"/"Icons 4K", not "Small"/"Large": the resolution rule in
+  // @shared/variantGroups matches the folder NAME, and only the name - the
+  // files sit inside a "data\" subfolder (so the chosen option still
+  // materialises as a real modloader-folder junction), which means there is
+  // no direct file for `sameContentGroup`'s name-set fallback to compare, and
+  // without a rule match the two folders would never be grouped at all.
   const iconsSource = path.join(tmp, 'Icons Pack')
-  await fsp.mkdir(path.join(iconsSource, 'Icons Small', 'data'), { recursive: true })
-  await fsp.mkdir(path.join(iconsSource, 'Icons Large', 'data'), { recursive: true })
-  await fsp.writeFile(path.join(iconsSource, 'Icons Small', 'data', 'icon.dat'), 'small icons')
-  await fsp.writeFile(path.join(iconsSource, 'Icons Large', 'data', 'icon.dat'), 'large icons')
+  await fsp.mkdir(path.join(iconsSource, 'Icons 2K', 'data'), { recursive: true })
+  await fsp.mkdir(path.join(iconsSource, 'Icons 4K', 'data'), { recursive: true })
+  await fsp.writeFile(path.join(iconsSource, 'Icons 2K', 'data', 'icon.dat'), 'small icons')
+  await fsp.writeFile(path.join(iconsSource, 'Icons 4K', 'data', 'icon.dat'), 'large icons')
   const iconsPlan = await createPlan({
     archivePath: iconsSource,
     profileId: adopted.profileId,
@@ -501,8 +507,8 @@ export async function runE2E(): Promise<number> {
     sourceUrl: null
   })
   const iconsGroupPlan = iconsPlan.variants[0]
-  const iconsSmall = iconsGroupPlan.options.find((o) => o.label.includes('Small'))!
-  const iconsLarge = iconsGroupPlan.options.find((o) => o.label.includes('Large'))!
+  const iconsSmall = iconsGroupPlan.options.find((o) => o.label.includes('2K'))!
+  const iconsLarge = iconsGroupPlan.options.find((o) => o.label.includes('4K'))!
   const iconsApplied = await applyPlan(
     (await choose(iconsPlan.planId, iconsGroupPlan.id, iconsSmall.id)).planId,
     adopted.profileId,
@@ -517,7 +523,7 @@ export async function runE2E(): Promise<number> {
   const iconAbs = path.join(game, iconTarget)
   check(
     'field audit 09: the icon variant materialised as a junctioned folder',
-    isLink(path.join(game, 'modloader', 'Icons Small')),
+    isLink(path.join(game, 'modloader', 'Icons 2K')),
     iconTarget
   )
   check('field audit 09: the small icon is live', (await fsp.readFile(iconAbs, 'utf8')) === 'small icons')
