@@ -5,6 +5,12 @@ import { api, formatBytes, formatDate, relativeTime } from '../api'
 import { useApp } from '../state/store'
 import { LANGUAGES } from '@shared/i18n'
 import { useT } from '../lib/i18n'
+import {
+  confidenceOf,
+  layoutConflictsByRule,
+  type KnowledgeRule,
+  type LayoutRule
+} from '@shared/knowledgeRules'
 import { Badge, Button, Confirm, ErrorNote, Field, Loading, Switch, useAsync } from '../components/ui'
 import { Icon } from '../components/icons'
 import { itemVariants, listVariants } from '../lib/motion'
@@ -24,6 +30,13 @@ export function SettingsScreen(): JSX.Element {
   const versions = useAsync(() => api.versions(), [])
   const [removing, setRemoving] = useState<GameInstall | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+
+  // Rules that contradict the author's readme, by rule id. Computed from the
+  // same list the table shows: both sides of a disagreement are written at the
+  // same moment, so a fresh conflict is always in it.
+  const conflicts = layoutConflictsByRule(
+    (knowledge.data?.recent ?? []).filter((r) => r.kind === 'install-layout') as unknown as KnowledgeRule<LayoutRule>[]
+  )
 
   if (!settings) return <Loading label="Reading settings…" />
 
@@ -107,14 +120,48 @@ export function SettingsScreen(): JSX.Element {
             <div className="table-wrap" style={{ maxHeight: 280, overflow: 'auto' }}>
               <table className="table">
                 <tbody>
-                  {knowledge.data.recent.map((rule) => (
+                  {knowledge.data.recent.map((rule) => {
+                    // How sure the app is, from the two things it actually
+                    // knows: where the rule came from, and how often the same
+                    // thing has been seen.
+                    const confidence = confidenceOf(rule)
+                    const conflict = conflicts.get(rule.id)
+                    return (
                     <tr key={rule.id}>
                       <td style={{ width: 130 }}>
                         <Badge tone={rule.source === 'user' ? 'accent' : 'neutral'}>
                           {t(`settings.source${rule.source.charAt(0).toUpperCase()}${rule.source.slice(1)}`)}
                         </Badge>
                       </td>
-                      <td className="faint">{rule.evidence}</td>
+                      <td style={{ width: 150 }}>
+                        <span
+                          className="faint"
+                          title={t(
+                            confidence.level === 'high'
+                              ? 'settings.confidenceHigh'
+                              : confidence.level === 'medium'
+                                ? 'settings.confidenceMedium'
+                                : 'settings.confidenceLow'
+                          )}
+                        >
+                          {t('settings.confidencePercent', { percent: Math.round(confidence.score * 100) })}
+                          {rule.timesSeen > 1 ? ` · ${t('settings.seenTimes', { count: rule.timesSeen })}` : ''}
+                        </span>
+                      </td>
+                      <td className="faint">
+                        {rule.evidence}
+                        {/* A learned rule never silently wins an argument with
+                            the author's own readme: when the two disagree, the
+                            row says so and both sides are shown. */}
+                        {conflict ? (
+                          <div style={{ marginTop: 4 }}>
+                            <Badge tone="warn">{t('settings.ruleConflict')}</Badge>{' '}
+                            <span className="faint">
+                              {conflict.readmeFolder} ≠ {conflict.learnedFolder}
+                            </span>
+                          </div>
+                        ) : null}
+                      </td>
                       <td style={{ width: 96 }}>
                         <Button
                           size="sm"
@@ -128,7 +175,8 @@ export function SettingsScreen(): JSX.Element {
                         </Button>
                       </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

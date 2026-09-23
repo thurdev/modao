@@ -6,6 +6,7 @@ import { lookup } from './crashlist'
 import { groupIncidents, parseModuleName } from '@shared/crash'
 import { addressingForStorage, addressingFromStoredRow } from '@shared/crashRecord'
 import { activeGame } from '../game/detect'
+import { learnCrashCorrelation } from '../knowledge/learn'
 
 const execFileAsync = promisify(execFile)
 
@@ -97,6 +98,20 @@ export function parseCrashEvent(ev: RawCrashEvent): ParsedCrash | null {
   }
 }
 
+/**
+ * The mod folders enabled for a profile at the moment a crash is recorded -
+ * exactly the mod set that could have produced it. `null` (no profile named)
+ * yields nothing rather than guessing at every profile's folders at once.
+ */
+function enabledFoldersFor(profileId: number | null): string[] {
+  if (profileId === null) return []
+  return (
+    getDb()
+      .prepare("SELECT folder_name FROM install WHERE profile_id = ? AND enabled = 1 AND folder_name IS NOT NULL")
+      .all(profileId) as { folder_name: string }[]
+  ).map((r) => r.folder_name)
+}
+
 export interface ScanResult {
   found: number
   added: number
@@ -156,7 +171,12 @@ export async function scanCrashes(profileId: number | null): Promise<ScanResult>
         addressing.addressKind,
         addressing.addressNote
       )
-    if (info.changes > 0) added++
+    if (info.changes > 0) {
+      added++
+      // A crash correlated with the mod set that was enabled when it happened -
+      // grounded in the install table's own `enabled` column, never guessed.
+      learnCrashCorrelation(enabledFoldersFor(profileId), addressing.crashAddress || null, profileId)
+    }
   }
 
   added += fromModLoader.added
@@ -312,6 +332,10 @@ async function scanModLoaderCrash(profileId: number | null): Promise<{ added: nu
       addressing.addressKind,
       addressing.addressNote
     )
+
+  if (info.changes > 0) {
+    learnCrashCorrelation(enabledFoldersFor(profileId), addressing.crashAddress || null, profileId)
+  }
 
   return {
     added: info.changes > 0 ? 1 : 0,

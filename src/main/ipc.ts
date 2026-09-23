@@ -4,7 +4,7 @@ import fsp from 'node:fs/promises'
 import { execFile } from 'node:child_process'
 import crypto from 'node:crypto'
 import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron'
-import type { AppSettings, CacheKind, DestinationClass, InstallPlan, Progress, StorageReport } from '@shared/types'
+import type { AppSettings, CacheKind, DestinationClass, FileConflict, InstallPlan, Progress, StorageReport } from '@shared/types'
 import { EVENT_PROGRESS, EVENT_TOAST, type IpcChannel } from '@shared/ipc'
 import { classifyDownload, githubRepo, looksLikeArchive } from '@shared/download'
 import { fetchThroughBrowser } from './install/fetcher'
@@ -60,6 +60,16 @@ import {
 } from './library'
 import { annotateConflicts, listConflicts } from './conflicts'
 import { applyPlan, createPlan, choose, chooseAddOn, discardPlan, rollbackPreview, setDestination, uninstall } from './install/engine'
+import {
+  knownAbout,
+  learnLayout,
+  learnRedundancies,
+  learnVariantChoices,
+  learnVariantGroupsFromArchive,
+  signatureForArchive
+} from './knowledge/learn'
+import { redundancyFindings } from '@shared/knowledgeRules'
+import type { ModSignature } from './knowledge/signature'
 import { getCatalogMod, listCatalog, loadSeedCatalog, seedInfo } from './catalog/service'
 import { crawl, refreshMod } from './catalog/mixmods'
 import { analyzeTxd } from './formats/txd'
@@ -717,10 +727,10 @@ export function registerIpc(): void {
       )
       .get(slug) as { id: number } | undefined
     if (!row) throw new Error(t('messages.installDeps.notInCatalog', { slug }))
-    return planFromCatalogVersion(row.id, requireProfile(profileId))
+    return learnFromFreshPlan(await planFromCatalogVersion(row.id, requireProfile(profileId)))
   })
-  ipcMain.handle('install:planFromCatalog', (_e, modVersionId: number, profileId: number) =>
-    planFromCatalogVersion(modVersionId, requireProfile(profileId))
+  ipcMain.handle('install:planFromCatalog', async (_e, modVersionId: number, profileId: number) =>
+    learnFromFreshPlan(await planFromCatalogVersion(modVersionId, requireProfile(profileId)))
   )
 
   ipcMain.handle('install:planFromFile', async (_e, profileId: number) => {
@@ -745,17 +755,19 @@ export function registerIpc(): void {
         onProgress: (phase, c, t) => progress(task.id, `Reading ${path.basename(archivePath)}`, phase, c, t)
       })
       task.end()
-      return plan
+      return learnFromFreshPlan(plan)
     } catch (e) {
       task.end((e as Error).message)
       throw e
     }
   })
 
-  ipcMain.handle('install:choose', (_e, planId: string, groupId: string, optionId: string) => choose(planId, groupId, optionId))
+  ipcMain.handle('install:choose', async (_e, planId: string, groupId: string, optionId: string) =>
+    learnVariantPick(await choose(planId, groupId, optionId), groupId, optionId)
+  )
   ipcMain.handle('install:chooseAddOn', (_e, planId: string, addOnId: string, enabled: boolean) => chooseAddOn(planId, addOnId, enabled))
-  ipcMain.handle('install:setDestination', (_e, planId: string, sourcePath: string, destination: string) =>
-    setDestination(planId, sourcePath, destination as DestinationClass)
+  ipcMain.handle('install:setDestination', async (_e, planId: string, sourcePath: string, destination: string) =>
+    learnUserPlacement(await setDestination(planId, sourcePath, destination as DestinationClass), sourcePath)
   )
   // The third argument is the user's answer to the unparsed-readme warning, and
   // it is never assumed: a renderer that does not send one gets the refusal.
@@ -770,6 +782,7 @@ export function registerIpc(): void {
         (phase, c, tot) => progress(task.id, 'Applying install plan', phase, c, tot)
       )
       task.end()
+      forgetPlan(planId)
       const modeLabel = t(`messages.install.mode.${result.mode}`)
       toast(
         'success',
@@ -781,10 +794,17 @@ export function registerIpc(): void {
       throw e
     }
   })
-  ipcMain.handle('install:discard', (_e, planId: string) => discardPlan(planId))
+  ipcMain.handle('install:discard', (_e, planId: string) => {
+    forgetPlan(planId)
+    return discardPlan(planId)
+  })
 
   // --- conflicts ------------------------------------------------------------
-  ipcMain.handle('conflicts:list', async (_e, profileId: number) => annotateConflicts(listConflicts(requireProfile(profileId))))
+  ipcMain.handle('conflicts:list', async (_e, profileId: number) => {
+    const conflicts = listConflicts(requireProfile(profileId))
+    learnRedundanciesFor(profileId, conflicts)
+    return annotateConflicts(conflicts)
+  })
   ipcMain.handle('conflicts:preview', (_e, profileId: number, changes: { installId: number; priority: number }[]) => {
     requireProfile(profileId)
     // A preview may only move the priorities of installs inside the profile it
@@ -1176,6 +1196,171 @@ export async function bootstrap(): Promise<void> {
  * another does not work - ipcMain keeps handlers in a map of its own, not as
  * listeners - which is how "handler is not a function" happened.
  */
+// --- what a plan teaches, and what the store already knows about it ---------
+//
+// The knowledge store is written from the install flow, and the install flow
+// reaches the user through these handlers. Two things happen here and nowhere
+// else: a correction the USER makes by hand - retargeting a file, picking a
+// variant - is learned at the moment they state it, at the highest weight there
+// is; and whatever the store already knows that CONTRADICTS the author's readme
+// is attached to the plan as a warning, so a learned rule can never quietly
+// win an argument with the readme.
+//
+// Nothing here can fail an install: every call is wrapped, and a store that
+// throws costs a warning, not the user's mod.
+
+/**
+ * The archive identity a plan is keyed by.
+ *
+ * `buildPlan` keys everything it looks up on the signature of the WHOLE
+ * extracted archive, so anything learned afterwards has to use that same key or
+ * the rule is written where nothing will ever read it. The walk is the one
+ * `buildPlan` already did, repeated once per plan and then remembered.
+ */
+const planSignatures = new Map<string, ModSignature>()
+/** Files the user retargeted by hand, per plan: the corrections worth learning. */
+const planCorrections = new Map<string, Set<string>>()
+/** Variant options the user picked in the dialog, per plan. */
+const planSelections = new Map<string, Record<string, string>>()
+
+async function planIdentity(plan: InstallPlan): Promise<{ signature: ModSignature; files: { rel: string; size: number }[] }> {
+  const files = (await walk(plan.extractRoot)).map((f) => ({ rel: f.rel, size: f.size }))
+  const signature =
+    planSignatures.get(plan.planId) ?? signatureForArchive(files.map((f) => f.rel), plan.readmes[0]?.raw ?? null)
+  planSignatures.set(plan.planId, signature)
+  return { signature, files }
+}
+
+/** The identity alone, without re-walking the archive once it is known. */
+async function planSignature(plan: InstallPlan): Promise<ModSignature> {
+  const cached = planSignatures.get(plan.planId)
+  return cached ?? (await planIdentity(plan)).signature
+}
+
+function forgetPlan(planId: string): void {
+  planSignatures.delete(planId)
+  planCorrections.delete(planId)
+  planSelections.delete(planId)
+}
+
+/**
+ * Puts every disagreement between the author's readme and something the app
+ * learned onto the plan the user is about to confirm. Deduplicated by code and
+ * message, because a rebuild re-runs the engine's own layout check.
+ */
+function attachKnownConflicts(plan: InstallPlan, signature: ModSignature): InstallPlan {
+  try {
+    const seen = new Set(plan.warnings.map((w) => `${w.code}|${w.message}`))
+    for (const c of knownAbout(signature).conflicts) {
+      if (seen.has(`${c.code}|${c.message}`)) continue
+      seen.add(`${c.code}|${c.message}`)
+      plan.warnings.push(c)
+    }
+  } catch (e) {
+    logError('knowledge: reading what is known about this archive failed', e)
+  }
+  return plan
+}
+
+/**
+ * A freshly built plan: the variant groups the detector found in this archive
+ * are recorded against its SHAPE, at inference weight, with the detector's own
+ * reason as evidence - so the next archive laid out the same way is recognised
+ * as offering a choice rather than installed nine times over.
+ */
+async function learnFromFreshPlan(plan: InstallPlan): Promise<InstallPlan> {
+  try {
+    const { signature, files } = await planIdentity(plan)
+    if (plan.variants.length > 0) {
+      learnVariantGroupsFromArchive(signature, files, plan.readmes[0]?.raw ?? null, plan.title)
+    }
+    return attachKnownConflicts(plan, signature)
+  } catch (e) {
+    logError('knowledge: learning from the plan failed', e)
+    return plan
+  }
+}
+
+/** The user picked a variant option in the dialog. That is their decision, at their weight. */
+async function learnVariantPick(plan: InstallPlan, groupId: string, optionId: string): Promise<InstallPlan> {
+  try {
+    const selections = { ...(planSelections.get(plan.planId) ?? {}), [groupId]: optionId }
+    planSelections.set(plan.planId, selections)
+    const signature = await planSignature(plan)
+    learnVariantChoices(signature, plan.variants, selections, plan.files, plan.title)
+    return attachKnownConflicts(plan, signature)
+  } catch (e) {
+    logError('knowledge: learning the variant choice failed', e)
+    return plan
+  }
+}
+
+/**
+ * The user moved a file. This is the input the spec calls the highest weight
+ * there is, and it is learned here rather than after the install: the
+ * correction is a statement about where this archive belongs, and it is just as
+ * true if the person then changes their mind about installing at all.
+ *
+ * Only the files they actually retargeted are learned - the ones the classifier
+ * placed and they merely did not object to stay an inference, written by
+ * `applyPlan`. Learning both at one weight is what made a correction
+ * indistinguishable from a guess.
+ */
+async function learnUserPlacement(plan: InstallPlan, sourcePath: string): Promise<InstallPlan> {
+  try {
+    const corrected = planCorrections.get(plan.planId) ?? new Set<string>()
+    corrected.add(sourcePath)
+    planCorrections.set(plan.planId, corrected)
+    const signature = await planSignature(plan)
+    const moved = plan.files.filter((f) => corrected.has(f.sourcePath))
+    if (moved.length > 0) learnLayout(signature, moved, 'user', [...corrected])
+    return attachKnownConflicts(plan, signature)
+  } catch (e) {
+    logError('knowledge: learning your correction failed', e)
+    return plan
+  }
+}
+
+/**
+ * "Mod A obsoletes mods B, C, D", read off the profile as it actually stands.
+ *
+ * Learned from the real conflict index rather than a preview: the preview
+ * exists to answer "what if I moved this slider", and a hypothetical is not
+ * evidence. A finding stops being true the moment a priority changes, which is
+ * why it is written at inference weight and re-read every time.
+ */
+function learnRedundanciesFor(profileId: number, conflicts: FileConflict[]): void {
+  try {
+    const rows = getDb()
+      .prepare(
+        `SELECT i.id AS install_id, i.enabled, i.folder_name, m.title, p.relative_path
+           FROM provides p
+           JOIN install i ON i.id = p.install_id
+           JOIN mod_version mv ON mv.id = i.mod_version_id
+           JOIN mod m ON m.id = mv.mod_id
+          WHERE i.profile_id = ?`
+      )
+      .all(profileId) as { install_id: number; enabled: number; folder_name: string | null; title: string; relative_path: string }[]
+    const installs = new Map<number, { installId: number; title: string; folder: string | null; provides: string[]; enabled: boolean }>()
+    for (const r of rows) {
+      const entry = installs.get(r.install_id) ?? {
+        installId: r.install_id,
+        title: r.title,
+        folder: r.folder_name,
+        provides: [],
+        enabled: !!r.enabled
+      }
+      entry.provides.push(r.relative_path)
+      installs.set(r.install_id, entry)
+    }
+    const winnerByPath = new Map<string, number>()
+    for (const c of conflicts) if (c.winner) winnerByPath.set(c.relativePath, c.winner.installId)
+    learnRedundancies(redundancyFindings([...installs.values()], winnerByPath))
+  } catch (e) {
+    logError('knowledge: working out what this profile makes redundant failed', e)
+  }
+}
+
 async function planFromCatalogVersion(modVersionId: number, profileId: number): Promise<InstallPlan> {
   const db = getDb()
   const row = db

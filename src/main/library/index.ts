@@ -13,6 +13,7 @@ import { listVariantOption, quarantineEdited, storeDir } from '../store/contentS
 import { openJournal, recordManifest, restoreFromJournal, setJournalState, snapshotFiles } from '../profiles/switchTx'
 import { providesKey } from '../conflicts'
 import { Paths } from '../util/paths'
+import { learnPriorityOverride, learnVariantChoice } from '../knowledge/learn'
 
 interface Row {
   install_id: number
@@ -161,19 +162,34 @@ export async function setEnabled(installId: number, enabled: boolean): Promise<v
 
 export async function setPriority(installId: number, priority: number): Promise<void> {
   const db = getDb()
-  const row = db.prepare('SELECT profile_id FROM install WHERE id = ?').get(installId) as { profile_id: number } | undefined
+  const row = db.prepare('SELECT profile_id, folder_name FROM install WHERE id = ?').get(installId) as
+    | { profile_id: number; folder_name: string | null }
+    | undefined
   if (!row) throw new Error('That install no longer exists.')
-  db.prepare('UPDATE install SET priority = ? WHERE id = ?').run(clampPriority(priority), installId)
+  const clamped = clampPriority(priority)
+  db.prepare('UPDATE install SET priority = ? WHERE id = ?').run(clamped, installId)
+  // A slider a person moved by hand is the strongest evidence the store has -
+  // nothing else ever changes a priority away from the install default.
+  if (row.folder_name) learnPriorityOverride(row.folder_name, clamped)
   await syncProfileIni(row.profile_id)
 }
 
 export async function applyPriorities(profileId: number, changes: { installId: number; priority: number }[]): Promise<void> {
   const db = getDb()
+  const folders = new Map(
+    (db.prepare('SELECT id, folder_name FROM install WHERE profile_id = ?').all(profileId) as { id: number; folder_name: string | null }[]).map(
+      (r) => [r.id, r.folder_name]
+    )
+  )
   db.transaction(() => {
     for (const c of changes) {
       db.prepare('UPDATE install SET priority = ? WHERE id = ? AND profile_id = ?').run(clampPriority(c.priority), c.installId, profileId)
     }
   })()
+  for (const c of changes) {
+    const folder = folders.get(c.installId)
+    if (folder) learnPriorityOverride(folder, clampPriority(c.priority))
+  }
   await syncProfileIni(profileId)
 }
 
@@ -299,9 +315,22 @@ function planVariantSwap(
 export async function switchVariant(installId: number, groupId: string, optionId: string): Promise<void> {
   const db = getDb()
   const row = db
-    .prepare('SELECT profile_id, store_key, variant_groups_json, variant_choice FROM install WHERE id = ?')
+    .prepare(
+      `SELECT i.profile_id, i.store_key, i.variant_groups_json, i.variant_choice, i.folder_name, m.title
+         FROM install i
+         JOIN mod_version mv ON mv.id = i.mod_version_id
+         JOIN mod m ON m.id = mv.mod_id
+        WHERE i.id = ?`
+    )
     .get(installId) as
-    | { profile_id: number; store_key: string | null; variant_groups_json: string | null; variant_choice: string | null }
+    | {
+        profile_id: number
+        store_key: string | null
+        variant_groups_json: string | null
+        variant_choice: string | null
+        folder_name: string | null
+        title: string
+      }
     | undefined
   if (!row) throw new Error('That install no longer exists.')
   if (!row.store_key) throw new Error('This install has no store payload to switch within.')
@@ -525,6 +554,13 @@ export async function switchVariant(installId: number, groupId: string, optionId
 
     // 4. Link the new bytes into the game folder.
     await remateriliseInstall(installId)
+
+    // A person switching a variant by hand after the install is exactly the
+    // correction the spec means: it outranks whatever the detector guessed
+    // when the archive first went in. Keyed by folder rather than the archive
+    // signature - that survives a reinstall of the same mod, which a switch
+    // usually follows.
+    if (row.folder_name) learnVariantChoice(row.folder_name.toLowerCase(), 'folder', group, row.title)
   } catch (e) {
     try {
       await undo()
