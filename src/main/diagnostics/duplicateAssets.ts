@@ -1,6 +1,6 @@
 import path from 'node:path'
 import type { GameInstall, HealthCheck } from '@shared/types'
-import { groupDuplicateAssets, type HashedAsset } from '@shared/duplicateAssets'
+import { groupDuplicateAssets, isInertScanPath, type HashedAsset } from '@shared/duplicateAssets'
 import { identifyLimitAdjusters } from '@shared/limitAdjusters'
 import { exists, sha256File, walk } from '../util/fsx'
 import { t } from '../util/i18n'
@@ -104,8 +104,17 @@ export async function scanGameTree(game: GameInstall, opts: { maxFiles?: number 
       if (!PLUGIN_BINARY.test(f.abs)) continue
       const key = f.abs.toLowerCase()
       if (seenAbs.has(key)) continue
+      const rel = path.relative(game.path, f.abs)
+      // On disk but not loaded: a mod the user DISABLED (Mod Loader's own ". "
+      // folder rename - every byte deliberately kept) and the hidden
+      // `.variants\` snapshot of the options nobody chose. Both are reachable
+      // through the same junctions this walk follows on purpose, and counting
+      // them would let a duplicate-.asi or stacked-adjuster FAIL - a launch
+      // blocker - be raised over content the user switched off or never
+      // picked. See `isInertScanPath`.
+      if (isInertScanPath(rel)) continue
       seenAbs.add(key)
-      out.push({ abs: f.abs, name: path.basename(f.abs), rel: path.relative(game.path, f.abs) })
+      out.push({ abs: f.abs, name: path.basename(f.abs), rel })
     }
   }
   return { assets: out, capped }

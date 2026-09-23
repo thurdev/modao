@@ -44,6 +44,8 @@ import { V1_US_SIZE, V1_US_TIMESTAMP } from './game/pe'
 import { reuniteOrphans, runHealthCheck } from './diagnostics/health'
 import { duplicateAssetCheck, scanGameTree, scanGameTreeAssets, stackedAdjusterCheck } from './diagnostics/duplicateAssets'
 import { t } from './util/i18n'
+import { ArchiveError, extractArchive, MIXMODS_PASSWORD, sevenZipPath } from './install/archive'
+import { spawn } from 'node:child_process'
 import type { InstalledMod, SubMod } from '@shared/types'
 
 /**
@@ -1483,6 +1485,56 @@ export async function runE2E(): Promise<number> {
   await removeLinkOrDir(path.join(game, 'modloader', 'Alpha Mod'))
   await removeLinkOrDir(path.join(game, 'modloader', 'Beta Mod'))
 
+  // --- copilot review: content that is on disk but not loaded ---------------
+  // Two features reviewed apart meet in this walk. Disabling a mod is Mod
+  // Loader's ". " folder rename - nothing is deleted, which is the point - and
+  // every unchosen variant option is kept in a hidden .variants\ snapshot.
+  // Both sit under modloader\, both are walked, and neither is loaded. Counting
+  // them let a duplicate-.asi or stacked-adjuster FAIL - a launch blocker on
+  // this branch - be raised over the copy the user had switched off.
+  const inertBytes = fakePe(2816, 0x60000000, 0x2102)
+  const liveMod = path.join(game, 'modloader', 'Live Mod')
+  const offMod = path.join(game, 'modloader', '. Switched Off Mod')
+  await fsp.mkdir(path.join(liveMod, '.variants', 'option-b'), { recursive: true })
+  await fsp.mkdir(offMod, { recursive: true })
+  await fsp.writeFile(path.join(liveMod, 'InertTwin.asi'), inertBytes)
+  await fsp.writeFile(path.join(liveMod, '.variants', 'option-b', 'InertTwin.asi'), inertBytes)
+  await fsp.writeFile(path.join(offMod, 'InertTwin.asi'), inertBytes)
+  await fsp.writeFile(path.join(offMod, 'SimpleLimitAdjuster_Enex.asi'), inertBytes)
+  await fsp.writeFile(path.join(liveMod, 'III.VC.SA.LimitAdjuster.asi'), inertBytes)
+  const inertDup = await duplicateAssetCheck(installed)
+  check(
+    'not loaded: a disabled mod and an unchosen variant snapshot are not duplicates of the live copy',
+    inertDup.status === 'pass' && !inertDup.items?.some((i) => i.includes('InertTwin.asi')),
+    inertDup
+  )
+  const inertStacked = await stackedAdjusterCheck(installed)
+  check(
+    'not loaded: an adjuster inside a disabled mod is not stacked on the live one',
+    inertStacked.status === 'pass',
+    inertStacked
+  )
+  // The same fixture with the mod switched back ON: proof the paths above were
+  // excluded for being unloadable and not because the scan missed them.
+  const onMod = path.join(game, 'modloader', 'Switched Off Mod')
+  await fsp.rename(offMod, onMod)
+  const enabledDup = await duplicateAssetCheck(installed)
+  const enabledStacked = await stackedAdjusterCheck(installed)
+  check(
+    'not loaded: enabling that same mod reports the duplicate and the stack at once',
+    enabledDup.status === 'fail' &&
+      !!enabledDup.items?.some((i) => i.includes('InertTwin.asi')) &&
+      enabledStacked.status === 'fail',
+    { dup: enabledDup.items, stacked: enabledStacked.summary }
+  )
+  check(
+    'not loaded: and the variant snapshot stays out of it even then',
+    !enabledDup.items?.some((i) => i.includes('.variants')),
+    enabledDup.items
+  )
+  await fsp.rm(liveMod, { recursive: true, force: true })
+  await fsp.rm(onMod, { recursive: true, force: true })
+
   // --- item 08 review: no ASI directory detected, plugins loose in the root --
   // The inverse of the field install. modloader.asi absent or undetected and
   // the .asi files sitting in the game root: scanning only scripts\, cleo\ and
@@ -1974,6 +2026,81 @@ export async function runE2E(): Promise<number> {
     providesRows(orphanB.id).join(',') === 'ginputsa.asi',
     { b: providesRows(orphanB.id), a: providesRows(orphanA.id) }
   )
+
+  // --- archives MixMods locks with its own domain name ------------------------
+  // Against the real 7za, not a transcript of it: an archive is built here with
+  // the site password, handed to the extractor with no password at all, and has
+  // to come out anyway. The one that cannot be opened has to say so without
+  // calling anything corrupt, and a genuinely broken file has to stay broken.
+  {
+    const lockedDir = path.join(tmp, 'locked')
+    await fsp.mkdir(lockedDir, { recursive: true })
+    const payload = path.join(lockedDir, 'infernus.dff')
+    await fsp.writeFile(payload, 'a car nobody can read without the password')
+
+    const pack = (out: string, args: string[]): Promise<number> =>
+      new Promise((resolve) => {
+        const child = spawn(sevenZipPath(), ['a', '-t7z', out, payload, ...args], { windowsHide: true })
+        child.stdout.resume()
+        child.stderr.resume()
+        child.on('close', (code) => resolve(code ?? 1))
+      })
+
+    const filesLocked = path.join(lockedDir, 'files-locked.7z')
+    const headersLocked = path.join(lockedDir, 'headers-locked.7z')
+    const otherPassword = path.join(lockedDir, 'someone-elses.7z')
+    await pack(filesLocked, [`-p${MIXMODS_PASSWORD}`])
+    await pack(headersLocked, [`-p${MIXMODS_PASSWORD}`, '-mhe=on'])
+    await pack(otherPassword, ['-pnot-the-mixmods-one'])
+
+    const extractInto = async (archive: string, name: string): Promise<string | null> => {
+      try {
+        await extractArchive(archive, path.join(lockedDir, 'out', name))
+        return null
+      } catch (e) {
+        return e instanceof ArchiveError ? `${e.failure}: ${e.message}` : String(e)
+      }
+    }
+
+    const filesErr = await extractInto(filesLocked, 'files')
+    check(
+      'mixmods password: an archive locked with the site password extracts with no password asked for',
+      filesErr === null && fs.existsSync(path.join(lockedDir, 'out', 'files', 'infernus.dff')),
+      filesErr
+    )
+
+    const headersErr = await extractInto(headersLocked, 'headers')
+    check(
+      'mixmods password: an -mhe=on archive - the one that reads as a headers error - extracts too',
+      headersErr === null && fs.existsSync(path.join(lockedDir, 'out', 'headers', 'infernus.dff')),
+      headersErr
+    )
+
+    const otherErr = await extractInto(otherPassword, 'other')
+    check(
+      'mixmods password: a different password is refused as a locked archive, naming the password, never damage',
+      otherErr !== null && otherErr.includes(MIXMODS_PASSWORD) && !/headers error|is not archive/i.test(otherErr),
+      otherErr
+    )
+
+    const broken = path.join(lockedDir, 'broken.7z')
+    await fsp.writeFile(broken, Buffer.from('7z\xbc\xaf\x27\x1c not really an archive at all', 'binary'))
+    const brokenErr = await extractInto(broken, 'broken')
+    check(
+      'mixmods password: a genuinely broken archive still fails as broken, with no password claim over the top',
+      brokenErr !== null && brokenErr.startsWith('corrupt:') && !brokenErr.includes(MIXMODS_PASSWORD),
+      brokenErr
+    )
+
+    const rar = path.join(lockedDir, 'mod.rar')
+    await fsp.writeFile(rar, Buffer.from('Rar!\x1a\x07\x01\x00 whatever WinRAR put here', 'binary'))
+    const rarErr = await extractInto(rar, 'rar')
+    check(
+      'mixmods password: a .rar says which formats Modão can open rather than blaming the download',
+      rarErr !== null && rarErr.startsWith('rar-unsupported:') && rarErr.includes('.rar'),
+      rarErr
+    )
+  }
 
   getDb().prepare('DELETE FROM profile').run()
   await fsp.rm(tmp, { recursive: true, force: true }).catch(() => undefined)

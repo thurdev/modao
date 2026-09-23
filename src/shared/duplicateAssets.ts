@@ -26,6 +26,42 @@
  * same split as ./crashlist.ts and ./upstream.ts.
  */
 
+import { isDisabledFolderName } from './loadOrder'
+
+/**
+ * A path the walk reaches but Mod Loader never loads from.
+ *
+ * Two features that were reviewed apart meet here, and both of them put real
+ * files under `modloader\` that the game will never see:
+ *
+ *  - DISABLING A MOD IS A FOLDER RENAME. Mod Loader skips any folder whose
+ *    name starts with ". " and that is exactly what the enable/disable toggle
+ *    writes - not one byte is moved, which is the whole point. So a mod the
+ *    user switched OFF is still on disk, still walked, and still hashed.
+ *  - AN UNCHOSEN VARIANT OPTION IS KEPT. Every option of a variant group is
+ *    snapshotted into a hidden `.variants\` folder so a later switch never
+ *    needs the archive again. It is content the user did not pick.
+ *
+ * Feeding either to the duplicate-.asi or stacked-adjuster scan turns a
+ * deliberate, non-destructive "not this one" into a FAIL - and every fail on
+ * this branch is a launch blocker. The user would be refused a launch over the
+ * copy they turned off, with no way to act on it short of deleting the thing
+ * the disable existed to preserve.
+ *
+ * Any component of the path decides it, not just the leaf: the disabled folder
+ * is an ancestor of everything inside it. A loose file disabled by having its
+ * extension taken away (`x.asi.disabled`) never reaches here at all - it stops
+ * matching the plugin-binary extension, which is the same idea by other means.
+ */
+export function isInertScanPath(relativePath: string): boolean {
+  return relativePath
+    .split(/[\\/]/)
+    .some((part) => isDisabledFolderName(part) || part.toLowerCase() === VARIANT_SNAPSHOT_DIR)
+}
+
+/** The hidden store folder every unchosen variant option is kept in. */
+const VARIANT_SNAPSHOT_DIR = '.variants'
+
 export interface HashedAsset {
   /** Base file name, e.g. "III.VC.SA.LimitAdjuster.asi". */
   name: string

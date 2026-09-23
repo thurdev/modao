@@ -55,7 +55,7 @@ import { catalogKind } from '../src/shared/catalogKind'
 import { parseCrashDump, parseModLoaderLog } from '../src/main/diagnostics/modloaderLog'
 import { limitAdjusterNames, parseStreamIni, SAFE_STREAMING_MEMORY_MB } from '../src/main/game/streamIni'
 import { identifyLimitAdjusters } from '../src/shared/limitAdjusters'
-import { groupDuplicateAssets } from '../src/shared/duplicateAssets'
+import { groupDuplicateAssets, isInertScanPath } from '../src/shared/duplicateAssets'
 import { pluginEvidence } from '../src/main/formats/strings'
 import { decodeMangledHex, extractMangledAddresses } from '../src/shared/mangled'
 import { findHookCollisions } from '../src/shared/hookCollisions'
@@ -1055,6 +1055,33 @@ check(
     { name: 'x.asi', path: 'scripts/x.asi', hash: 'aaa' },
     { name: 'x.asi', path: 'scripts/x.asi', hash: 'aaa' }
   ]).length === 0
+)
+// The walk follows junctions into places Mod Loader will not load from: a mod
+// the user DISABLED is still on disk under its ". " name, and every unchosen
+// variant option is kept in a hidden .variants\ snapshot. Both used to feed
+// this scan, so a disabled second copy of a limit adjuster could raise a FAIL -
+// a launch blocker - over content the user had switched off on purpose.
+check(
+  'duplicate assets: a disabled mod folder is on disk but not loaded, so it is not scanned',
+  isInertScanPath('modloader/. Open Limit Adjuster/III.VC.SA.LimitAdjuster.asi') &&
+    isInertScanPath('modloader\\. $VHud\\VHud.asi') &&
+    isInertScanPath('modloader/. Mod/nested/deep.asi'),
+  null
+)
+check(
+  'duplicate assets: an unchosen variant snapshot is not scanned either',
+  isInertScanPath('modloader/Mod/.variants/opt-2k/x.asi') && isInertScanPath('modloader/Mod/.VARIANTS/opt-2k/x.asi'),
+  null
+)
+check(
+  'duplicate assets: a live mod folder is still scanned, dot or no dot in its name',
+  !isInertScanPath('modloader/Open Limit Adjuster/III.VC.SA.LimitAdjuster.asi') &&
+    !isInertScanPath('scripts/x.asi') &&
+    // ".variants" is the disable prefix's near neighbour and neither is the
+    // other: ". " is a dot AND a space, and a folder merely starting with a
+    // dot is a hidden folder, not a disabled mod.
+    !isInertScanPath('modloader/.git/x.asi'),
+  null
 )
 
 // --- what a plugin says about itself -----------------------------------------
@@ -4195,6 +4222,91 @@ check(
       !belongsInAsiDirectory('WeirdHook.asi') &&
       matchEarlyHook('WeirdHook.asi', [{ plugin: 'WeirdHook.asi', role: 'loader', bare: true }])?.source === 'learned',
     matchEarlyHook('WeirdHook.asi', [{ plugin: 'WeirdHook.asi', role: 'loader', bare: true }])
+  )
+}
+
+// --- 7. what a failed extraction means -------------------------------------
+// Every string below is verbatim output from the bundled 7za.exe 21.07, stderr
+// and stdout joined the way archive.ts joins them. Nothing here is invented.
+{
+  const wrongPassword7z =
+    'ERROR: Data Error in encrypted file. Wrong password? : src\\a.txt\n' +
+    '\n  0%    T src\\a.txt\n  0%    \n100%    \nSub items Errors: 1\n'
+  const wrongPasswordZip =
+    'ERROR: Wrong password : src\\a.txt\n' + '\n  0%    - src\\a.txt\n100%    \nSub items Errors: 1\n'
+  const headerEncrypted =
+    'ERROR: hdr.7z\nCannot open encrypted archive. Wrong password?\n\nERRORS:\nHeaders Error\n' +
+    "\n  0M Scan\nExtracting archive: hdr.7z\n  0%    \nCan't open as archive: 1\nFiles: 0\n"
+  const notAnArchive =
+    'ERROR: corrupt.7z\ncorrupt.7z\nOpen ERROR: Cannot open the file as [7z] archive\n\nERRORS:\nIs not archive\n' +
+    "\n  0M Scan\nExtracting archive: corrupt.7z\n  0%    \nCan't open as archive: 1\nFiles: 0\n"
+  const rarHandedToIt =
+    'ERROR: mod.rar\nCannot open the file as archive\n' +
+    "\n  0M Scan\nExtracting archive: mod.rar\n  0%    \nCan't open as archive: 1\nFiles: 0\n"
+  const succeeded =
+    '\n  0M Scan         1 file, 154 bytes (1 KiB)\nMethod = LZMA2:12 7zAES\n  0%    - src\\a.txt\n100%    Everything is Ok\n'
+
+  check(
+    'mixmods password: an encrypted .7z that would not decrypt is a password failure, not damage',
+    classifyArchiveFailure(wrongPassword7z, 'mod.7z') === 'wrong-password',
+    classifyArchiveFailure(wrongPassword7z, 'mod.7z')
+  )
+  check(
+    'mixmods password: the .zip wording ("Wrong password :") is the same failure',
+    classifyArchiveFailure(wrongPasswordZip, 'mod.zip') === 'wrong-password',
+    classifyArchiveFailure(wrongPasswordZip, 'mod.zip')
+  )
+  check(
+    'mixmods password: -mhe=on reports a headers error, and that is a locked archive, not a corrupt one',
+    classifyArchiveFailure(headerEncrypted, 'mod.7z') === 'encrypted-headers',
+    classifyArchiveFailure(headerEncrypted, 'mod.7z')
+  )
+  check(
+    'mixmods password: bytes that are not an archive stay corrupt - no password message for a real bad download',
+    classifyArchiveFailure(notAnArchive, 'mod.7z') === 'corrupt' &&
+      !isPasswordFailure(classifyArchiveFailure(notAnArchive, 'mod.7z')),
+    classifyArchiveFailure(notAnArchive, 'mod.7z')
+  )
+  check(
+    'mixmods password: a .rar is named as the format the bundled 7za cannot open, not as damage',
+    classifyArchiveFailure(rarHandedToIt, 'C:\\Downloads\\mod.rar') === 'rar-unsupported' &&
+      classifyArchiveFailure(rarHandedToIt, 'C:\\Downloads\\mod.7z') === 'corrupt',
+    classifyArchiveFailure(rarHandedToIt, 'C:\\Downloads\\mod.rar')
+  )
+  check(
+    'mixmods password: a run that worked matches no failure signature at all',
+    classifyArchiveFailure(succeeded, 'mod.7z') === 'unknown' && classifyArchiveFailure('', 'mod.7z') === 'unknown',
+    classifyArchiveFailure(succeeded, 'mod.7z')
+  )
+
+  // The retry decision itself.
+  check(
+    'mixmods password: both locked shapes are retried with the site password',
+    shouldRetryWithPassword('wrong-password') && shouldRetryWithPassword('encrypted-headers')
+  )
+  check(
+    'mixmods password: a corrupt archive fails fast - no second extraction, no password claim',
+    !shouldRetryWithPassword('corrupt') &&
+      !shouldRetryWithPassword('rar-unsupported') &&
+      !shouldRetryWithPassword('unknown')
+  )
+  check(
+    'mixmods password: a password the caller supplied is not guessed over when it is refused',
+    !shouldRetryWithPassword('wrong-password', 'something-the-user-typed') &&
+      !shouldRetryWithPassword('encrypted-headers', 'something-the-user-typed') &&
+      shouldRetryWithPassword('wrong-password', '')
+  )
+  check(
+    'mixmods password: the refusal is offered in both languages and neither one says corrupt',
+    translate('pt-BR', 'messages.install.archivePasswordProtected', { file: 'a.7z', password: 'p' }).includes('senha') &&
+      translate('pt-BR', 'messages.install.archivePasswordProtected', { file: 'a.7z', password: 'p' }).includes(
+        'não está corrompido'
+      ) &&
+      translate('en', 'messages.install.archivePasswordProtected', { file: 'a.7z', password: 'p' }).includes(
+        'password protected'
+      ) &&
+      translate('pt-BR', 'messages.install.archiveRarUnsupported', { file: 'a.rar' }).includes('.rar') &&
+      translate('en', 'messages.install.archiveRarUnsupported', { file: 'a.rar' }).includes('.rar')
   )
 }
 
