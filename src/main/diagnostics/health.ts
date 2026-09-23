@@ -739,6 +739,17 @@ export async function reuniteOrphans(profileId: number | null): Promise<{ moved:
     })()
     moved.push(`${f.pluginPath} → ${newRel}`)
   }
+  // Any file that actually moved changes what the disk-reading checks see -
+  // `duplicate-asi` and `stacked-adjuster` above all, since a plugin lifted out
+  // of the ASI directory and back beside its .ini has changed path without
+  // changing any install row or stream.ini, which is all the cached report's
+  // fingerprint looks at. Dropping the stored report is the cheap half of that
+  // trade: the alternative is stat-ing every installed file on the path to the
+  // Play button. Dynamic import because healthCache imports this module.
+  if (moved.length > 0 || quarantined.length > 0) {
+    const { forgetHealthReport } = await import('./healthCache')
+    forgetHealthReport()
+  }
   return { moved, quarantined, refused }
 }
 

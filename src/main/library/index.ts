@@ -286,6 +286,24 @@ export async function setSubModEnabled(installId: number, relativePath: string, 
       await copyRecursive(src, target)
     }
   }
+
+  // The pre-launch report is now describing a tree that no longer exists.
+  //
+  // Its fingerprint reads install rows and stream.ini, and this operation moves
+  // neither: it writes `submod_state` and RENAMES A FOLDER. But two of the
+  // checks behind that report - `duplicate-asi` and `stacked-adjuster` - read
+  // the DISK, and both are fail-level, so enabling a sub-mod that holds a
+  // second limit adjuster or a second copy of an installed plugin introduces a
+  // launch blocker the stored report cannot know about. Inside the two-minute
+  // TTL, pressing Play would be answered from before the rename.
+  //
+  // Dropping the report is the fix rather than widening the fingerprint:
+  // fingerprinting this means stat-ing every file of every install on the path
+  // to the Play button, which is the exact cost the cache exists to avoid.
+  // Here rather than in the IPC handler so that every caller is covered, and
+  // imported dynamically because healthCache reaches health.ts.
+  const { forgetHealthReport } = await import('../diagnostics/healthCache')
+  forgetHealthReport()
 }
 
 /**

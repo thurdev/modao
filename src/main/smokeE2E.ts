@@ -743,6 +743,36 @@ export async function runE2E(): Promise<number> {
   )
   check('the rest of the mod stays materialised', fs.existsSync(path.join(game, 'modloader', 'Sub Mod Pack', 'models', 'wheel.dff')))
 
+  // --- copilot review: the pre-launch cache cannot outlive this rename -------
+  // The cached report's fingerprint reads install rows and stream.ini. This
+  // operation moves neither - it writes `submod_state` and renames a folder -
+  // but `duplicate-asi` and `stacked-adjuster` read the DISK and are fail-level,
+  // so enabling a sub-mod holding a second limit adjuster introduces a launch
+  // blocker the stored report knows nothing about. Within the two-minute TTL,
+  // Play would be answered from before the rename.
+  {
+    const cacheMod = await import('./diagnostics/healthCache')
+    await cacheMod.freshHealthReport(adopted.profileId, game)
+    check(
+      'submod cache: a report is stored before the rename, so there is something to go stale',
+      cacheMod.storedHealthReport().report !== null,
+      null
+    )
+    await setSubModEnabled(packApplied.installId, 'models', false)
+    check(
+      'submod cache: disabling a sub-mod drops the stored report instead of letting Play reuse it',
+      cacheMod.storedHealthReport().report === null && cacheMod.storedHealthReport().stamp === null,
+      cacheMod.storedHealthReport().stamp
+    )
+    await cacheMod.freshHealthReport(adopted.profileId, game)
+    await setSubModEnabled(packApplied.installId, 'models', true)
+    check(
+      'submod cache: and enabling one drops it too - that is the direction that adds a blocker',
+      cacheMod.storedHealthReport().report === null,
+      cacheMod.storedHealthReport().stamp
+    )
+  }
+
   await setSubModEnabled(packApplied.installId, 'data', true)
   const afterReEnable = listInstalled(adopted.profileId).find((m) => m.installId === packApplied.installId)!
   check('a disabled sub-mod can be re-enabled', subOf(afterReEnable, 'data')?.enabled === true, afterReEnable.subMods)
@@ -2078,7 +2108,20 @@ export async function runE2E(): Promise<number> {
     noProfileRepair
   )
 
+  // The repair moves a plugin between two paths that both already exist: no
+  // install row moves, stream.ini is untouched, and the cached pre-launch
+  // report's fingerprint reads nothing else - while `duplicate-asi` and
+  // `stacked-adjuster`, both fail-level, read exactly the paths that changed.
+  const orphanCache = await import('./diagnostics/healthCache')
+  await orphanCache.freshHealthReport(orphanA.id, game)
+  const cachedBeforeRepair = orphanCache.storedHealthReport().report !== null
+
   const repaired = await reuniteOrphans(orphanA.id)
+  check(
+    'orphan repair: the move drops the stored pre-launch report - Play must not answer from before it',
+    cachedBeforeRepair && orphanCache.storedHealthReport().report === null,
+    { before: cachedBeforeRepair, after: orphanCache.storedHealthReport().stamp }
+  )
   const repairedRel = path.relative(game, path.join(asiDir, 'GInputSA.asi')).split(path.sep).join('/')
   check(
     'orphan repair: the plugin is moved back to the ASI directory for the profile that asked',
