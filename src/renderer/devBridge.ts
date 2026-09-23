@@ -297,11 +297,18 @@ export function installDevBridge(): void {
             },
             { id: 'modloader', title: 'Mod Loader', status: 'pass', summary: 'Instalado (0.3.7)' },
             {
-              id: 'cleo-plus',
-              title: 'Versão do CLEO exigida pelo CLEO+',
+              id: 'cleo',
+              title: 'CLEO',
               status: 'fail',
-              summary: 'O CLEO+ está instalado mas o CLEO 4.3 é velho demais',
-              detail: 'CLEO+ against CLEO 4.3 fails at startup with "The ordinal 22 could not be located in the dynamic link library CLEO+.cleo".'
+              summary: 'O CLEO+ exige CLEO >=4.4, e o instalado é 4.3',
+              detail: 'CLEO+ against CLEO 4.3 fails at startup with "The ordinal 22 could not be located in the dynamic link library CLEO+.cleo".',
+              items: ['CLEO+ exige CLEO >=4.4 (instalado: 4.3) — cleo/CLEO+.cleo']
+            },
+            {
+              id: 'write-access',
+              title: 'Permissão de escrita na pasta do jogo',
+              status: 'unknown',
+              summary: 'Não checado agora: o jogo está aberto'
             },
             {
               id: 'textures',

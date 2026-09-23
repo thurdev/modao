@@ -66,7 +66,8 @@ import { analyzeTxd } from './formats/txd'
 import { analyzeImg } from './formats/img'
 import { compareWithVanilla } from './formats/ifp'
 import { runHealthCheck, scanTextures } from './diagnostics/health'
-import { describeBlockers, launchGate } from '@shared/launchGate'
+import { forgetHealthReport, freshHealthReport } from './diagnostics/healthCache'
+import { planLaunch } from './game/launch'
 import { listCrashes, listIncidents, scanCrashes, setCrashResolved } from './diagnostics/eventlog'
 import { listJournals, planSwitch, verifySwitch } from './profiles/switchTx'
 import { gameDefinition, type GameKind } from '@shared/games'
@@ -476,35 +477,24 @@ export function registerIpc(): void {
   // lives in @shared/launchGate, so anything else that must refuse a launch
   // adds a reason to the same list instead of growing a second gate.
   ipcMain.handle('game:launch', async (_e, force?: boolean) => {
-    const game = requireActiveGame()
-    const exe = gameDefinition(game.kind)
-      .exeNames.map((name) => path.join(game.path, name))
-      .find((candidate) => exists(candidate))
-    if (!exe) throw new Error(t('messages.game.exeNotFound', { game: game.gameName, path: game.path }))
-    const profile = await activeProfile()
+    // The decision lives in planLaunch, where the e2e harness can run it
+    // against a real game folder; what is left here starts a process.
+    const plan = await planLaunch(!!force)
+    if (plan.refusal) return plan.refusal
 
-    if (profile && !force) {
-      // A check that throws must not become a locked Play button: a broken
-      // health run is not a finding, so the launch goes ahead.
-      const report = await runHealthCheck(profile.id).catch(() => null)
-      const verdict = launchGate(report)
-      if (!verdict.allowed) {
-        return {
-          launched: false,
-          message: t('messages.game.launchBlocked', { names: describeBlockers(verdict.blockers) }),
-          blockers: verdict.blockers
-        }
-      }
+    if (plan.profileId !== null) {
+      getDb().prepare('UPDATE profile SET last_played_at = ? WHERE id = ?').run(new Date().toISOString(), plan.profileId)
     }
-
-    if (profile) getDb().prepare('UPDATE profile SET last_played_at = ? WHERE id = ?').run(new Date().toISOString(), profile.id)
-    const ok = await shell.openPath(exe)
+    const ok = await shell.openPath(plan.exe)
     // The process table just changed. The running check caches it for two
     // seconds, which is exactly long enough for a user to alt-tab back and
     // click something while the guard still believes the game is closed.
     forgetRunningProcesses()
-    if (ok === '') armCrashScan(profile?.id ?? null)
-    return { launched: ok === '', message: ok || `Launched ${exe}` }
+    // And the stored report describes a game that was closed when it was made:
+    // its running and write-access answers are now wrong.
+    forgetHealthReport()
+    if (ok === '') armCrashScan(plan.profileId)
+    return { launched: ok === '', message: ok || `Launched ${plan.exe}` }
   })
 
   // --- profiles -------------------------------------------------------------
@@ -764,11 +754,18 @@ export function registerIpc(): void {
   ipcMain.handle('install:setDestination', (_e, planId: string, sourcePath: string, destination: string) =>
     setDestination(planId, sourcePath, destination as DestinationClass)
   )
-  ipcMain.handle('install:apply', async (_e, planId: string, profileId: number) => {
+  // The third argument is the user's answer to the unparsed-readme warning, and
+  // it is never assumed: a renderer that does not send one gets the refusal.
+  ipcMain.handle('install:apply', async (_e, planId: string, profileId: number, acknowledgedUnparsedReadme?: boolean) => {
     await requireIdleGame()
     const task = newTask('Applying install plan')
     try {
-      const result = await applyPlan(planId, profileId, (phase, c, tot) => progress(task.id, 'Applying install plan', phase, c, tot))
+      const result = await applyPlan(
+        planId,
+        profileId,
+        { acknowledgedUnparsedReadme: acknowledgedUnparsedReadme === true },
+        (phase, c, tot) => progress(task.id, 'Applying install plan', phase, c, tot)
+      )
       task.end()
       const modeLabel = t(`messages.install.mode.${result.mode}`)
       toast(
@@ -841,7 +838,9 @@ export function registerIpc(): void {
   // state first is what suppresses that, with no write of its own.
   ipcMain.handle('health:run', async (_e, profileId: number) => {
     await noteWhetherGameIsRunning()
-    return runHealthCheck(requireProfile(profileId))
+    // "Re-run" means re-run: this always runs the checks. It stores the answer
+    // so that pressing Play right after reading it costs nothing.
+    return freshHealthReport(requireProfile(profileId), requireActiveGame().path)
   })
   ipcMain.handle('health:crashes', (_e, profileId: number) => listCrashes(requireProfile(profileId)))
   ipcMain.handle('health:incidents', (_e, profileId: number) => listIncidents(requireProfile(profileId)))

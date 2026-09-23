@@ -19,10 +19,26 @@ import { analyzeTxd } from '../formats/txd'
 import { storeDir } from '../store/contentStore'
 import { duplicateAssetCheck, stackedAdjusterCheck } from './duplicateAssets'
 
-/** The pre-launch check: everything that can be known before the game starts. */
-export async function runHealthCheck(profileId: number): Promise<HealthReport> {
+/**
+ * The pre-launch check: everything that can be known before the game starts.
+ *
+ * `profileId` may be null. Having no active profile is a reachable state, and
+ * it used to mean no check ran at all - which left the one failure this whole
+ * panel was written for, a stream.ini asking for more memory than a 32-bit
+ * process has, entirely unguarded. It is fatal with or without a profile
+ * pointing at it. So the game-level checks run either way and only the
+ * profile-scoped ones stand down.
+ */
+export async function runHealthCheck(profileId: number | null): Promise<HealthReport> {
   const game = requireActiveGame()
   const checks: HealthCheck[] = []
+  /** A check that reads a profile's installs, with no profile to read. */
+  const needsProfile = (id: string, title: string): HealthCheck => ({
+    id,
+    title,
+    status: 'skip',
+    summary: t('checks.noProfile')
+  })
 
   // 1. Executable
   try {
@@ -140,62 +156,76 @@ export async function runHealthCheck(profileId: number): Promise<HealthReport> {
   })
 
   // CLEO against every plugin's own requirement
-  checks.push(cleoCheck(profileId, game))
+  checks.push(profileId === null ? needsProfile('cleo', t('checks.cleoTitle')) : cleoCheck(profileId, game))
 
   // 4. Dependencies
-  const depProblems = profileDependencyProblems(profileId, game)
-  checks.push({
-    id: 'dependencies',
-    title: t('checks.depsTitle'),
-    status: depProblems.some((d) => d.resolution === 'blocking') ? 'fail' : depProblems.length ? 'warn' : 'pass',
-    summary: depProblems.length === 0 ? t('checks.depsOk') : t('checks.depsUnresolved', { count: depProblems.length }),
-    items: depProblems.map(
-      (d) =>
-        `${d.kind === 'conflicts' ? t('checks.depsConflict') : t('checks.depsMissing')}: ${d.title}${d.note ? ` - ${d.note}` : ''}`
-    )
-  })
+  if (profileId === null) checks.push(needsProfile('dependencies', t('checks.depsTitle')))
+  else {
+    const depProblems = profileDependencyProblems(profileId, game)
+    checks.push({
+      id: 'dependencies',
+      title: t('checks.depsTitle'),
+      status: depProblems.some((d) => d.resolution === 'blocking') ? 'fail' : depProblems.length ? 'warn' : 'pass',
+      summary: depProblems.length === 0 ? t('checks.depsOk') : t('checks.depsUnresolved', { count: depProblems.length }),
+      items: depProblems.map(
+        (d) =>
+          `${d.kind === 'conflicts' ? t('checks.depsConflict') : t('checks.depsMissing')}: ${d.title}${d.note ? ` - ${d.note}` : ''}`
+      )
+    })
+  }
 
   // 5. File conflicts
-  const conflicts = listConflicts(profileId)
-  const unresolved = conflicts.filter((c) => !c.winner)
-  checks.push({
-    id: 'conflicts',
-    title: t('checks.conflictsTitle'),
-    status: unresolved.length ? 'warn' : conflicts.length ? 'pass' : 'pass',
-    summary:
-      conflicts.length === 0
-        ? t('checks.conflictsNone')
-        : t('checks.conflictsSome', { count: conflicts.length, resolved: conflicts.length - unresolved.length }),
-    items: conflicts
-      .slice(0, 10)
-      .map(
-        (c) =>
-          `${c.relativePath} -> ${
-            c.winner
-              ? t('checks.conflictsWinner', { title: c.winner.title, priority: c.winner.priority })
-              : t('checks.conflictsNoWinner')
-          }`
-      )
-  })
+  if (profileId === null) checks.push(needsProfile('conflicts', t('checks.conflictsTitle')))
+  else {
+    const conflicts = listConflicts(profileId)
+    const unresolved = conflicts.filter((c) => !c.winner)
+    checks.push({
+      id: 'conflicts',
+      title: t('checks.conflictsTitle'),
+      status: unresolved.length ? 'warn' : conflicts.length ? 'pass' : 'pass',
+      summary:
+        conflicts.length === 0
+          ? t('checks.conflictsNone')
+          : t('checks.conflictsSome', { count: conflicts.length, resolved: conflicts.length - unresolved.length }),
+      items: conflicts
+        .slice(0, 10)
+        .map(
+          (c) =>
+            `${c.relativePath} -> ${
+              c.winner
+                ? t('checks.conflictsWinner', { title: c.winner.title, priority: c.winner.priority })
+                : t('checks.conflictsNoWinner')
+            }`
+        )
+    })
+  }
 
   // 6. Textures
-  const textureProblems = await scanTextures(profileId)
-  checks.push({
-    id: 'textures',
-    title: t('checks.texturesTitle'),
-    status: textureProblems.npot.length ? 'warn' : 'pass',
-    summary: textureProblems.npot.length
-      ? t('checks.texturesBad', { count: textureProblems.npot.length, scanned: textureProblems.scanned })
-      : t('checks.texturesOk', { scanned: textureProblems.scanned }),
-    detail: textureProblems.npot.length ? t('checks.texturesDetail') : undefined,
-    items: textureProblems.npot.slice(0, 12)
-  })
+  if (profileId === null) checks.push(needsProfile('textures', t('checks.texturesTitle')))
+  else {
+    const textureProblems = await scanTextures(profileId)
+    checks.push({
+      id: 'textures',
+      title: t('checks.texturesTitle'),
+      status: textureProblems.npot.length ? 'warn' : 'pass',
+      summary: textureProblems.npot.length
+        ? t('checks.texturesBad', { count: textureProblems.npot.length, scanned: textureProblems.scanned })
+        : t('checks.texturesOk', { scanned: textureProblems.scanned }),
+      detail: textureProblems.npot.length ? t('checks.texturesDetail') : undefined,
+      items: textureProblems.npot.slice(0, 12)
+    })
+  }
 
-  // 7. Streaming memory: the crash that looks like a mod and is not one
+  // 7. Streaming memory: the crash that looks like a mod and is not one.
+  // Game-level, and the reason this function accepts a null profile at all.
   checks.push(await streamingMemoryCheck(profileId, game))
 
   // 8. What Mod Loader itself says happened
-  checks.push(await modLoaderVerdictCheck(profileId, game))
+  checks.push(
+    profileId === null
+      ? needsProfile('modloader-log', t('checks.modsTitle'))
+      : await modLoaderVerdictCheck(profileId, game)
+  )
 
   // 9. Configs whose plugin is gone
   checks.push(await orphanedConfigCheck(game))
@@ -204,18 +234,18 @@ export async function runHealthCheck(profileId: number): Promise<HealthReport> {
   checks.push(await fpsCapCheck(game))
 
   // 11. Loose files that make the streamer crawl
-  checks.push(await looseFileCheck(profileId))
+  checks.push(profileId === null ? needsProfile('loose-files', t('checks.looseTitle')) : await looseFileCheck(profileId))
 
   // 12. Oversized assets
-  checks.push(await oversizedCheck(profileId))
+  checks.push(profileId === null ? needsProfile('size', t('checks.sizeTitle')) : await oversizedCheck(profileId))
 
   // 13. Is the build simply old? The cheapest suspect in any crash, and the one
   // the field report found last after days of bisecting.
-  checks.push(await outdatedBuildCheck(profileId))
+  checks.push(profileId === null ? needsProfile('upstream', t('checks.upstreamTitle')) : await outdatedBuildCheck(profileId))
 
   // 14. Two mods hooking the same address - invisible to the file-conflict
   // check above, since both .asi files install cleanly.
-  checks.push(await hookCollisionCheck(profileId))
+  checks.push(profileId === null ? needsProfile('hook-collision', t('checks.hookTitle')) : await hookCollisionCheck(profileId))
 
   // 15. The same plugin binary sitting at two paths at once - byte-identical
   // copies in scripts\ and a junctioned modloader\ folder both patch the same
@@ -402,19 +432,25 @@ async function oversizedCheck(profileId: number): Promise<HealthCheck> {
  * game dies inside the streamer on the first .IMG read. Nothing about the mods
  * is wrong, so nothing else in this panel would ever find it.
  */
-async function streamingMemoryCheck(profileId: number, game: GameInstall): Promise<HealthCheck> {
+async function streamingMemoryCheck(profileId: number | null, game: GameInstall): Promise<HealthCheck> {
   const reading = await readStreamIni(game.path)
   if (!reading.exists || reading.memoryMb === null) {
     return { id: 'stream-ini', title: t('checks.streamTitle'), status: 'skip', summary: t('checks.streamMissing') }
   }
 
   const adjuster = limitAdjusterNames()
-  const rows = getDb()
-    .prepare(
-      `SELECT f.relative_path p FROM install_file f JOIN install i ON i.id = f.install_id
+  // With no profile there are no tracked installs to look through - only the
+  // ASI directory, which is where a loose adjuster would sit anyway.
+  const rows = (
+    profileId === null
+      ? []
+      : getDb()
+          .prepare(
+            `SELECT f.relative_path p FROM install_file f JOIN install i ON i.id = f.install_id
         WHERE i.profile_id = ? AND i.enabled = 1`
-    )
-    .all(profileId) as { p: string }[]
+          )
+          .all(profileId)
+  ) as { p: string }[]
   const hasAdjuster = rows.some((r) => adjuster.test(r.p)) || (game.asiDirectory ? await asiDirHasAdjuster(game) : false)
 
   if (reading.memoryMb <= RISKY_STREAMING_MEMORY_MB) {

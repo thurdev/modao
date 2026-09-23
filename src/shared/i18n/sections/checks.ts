@@ -140,6 +140,7 @@ export const checks = {
     cleoPluginDetail:
       'Um plugin .cleo compilado contra um CLEO mais novo do que o instalado quebra na inicialização, com um diálogo fatal citando um ordinal que não existe na versão antiga. A exigência é lida de cada plugin instalado — do que o mod dele declara — e não de uma lista fixa dentro do Modão, então um plugin novo já entra checado.',
     cleoPluginItem: '{name} exige CLEO {range} (instalado: {version}) — {path}',
+    noProfile: 'Nenhum perfil ativo — esta checagem olha os mods de um perfil; as checagens do jogo em si rodaram assim mesmo',
     unknown: 'desconhecido'
   },
   en: {
@@ -276,6 +277,7 @@ export const checks = {
     cleoPluginDetail:
       'A .cleo plugin built against a newer CLEO than the installed one breaks at startup with a fatal dialog naming an ordinal the older version does not export. The requirement is read per installed plugin - from what its own mod declares - rather than from a fixed list inside Modão, so a new plugin arrives already checked.',
     cleoPluginItem: '{name} requires CLEO {range} (installed: {version}) - {path}',
+    noProfile: 'No active profile - this check reads the mods a profile has; the game-level checks ran anyway',
     unknown: 'unknown'
   }
 } as const
