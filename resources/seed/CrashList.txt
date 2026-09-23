@@ -5,7 +5,8 @@
 ; THIS FILE IS STILL A STUB. It is not the upstream CrashList: it holds a
 ; hand-written excerpt plus the two entries the field-audit spec states
 ; verbatim. A newer copy can be dropped in by hand: put a CrashList.txt in
-; %APPDATA%\Modão\ (the folder holding modao.db) and Modão reads that one
+; %APPDATA%\Modao\ - the folder that holds modao.db, spelled with no accent
+; whatever the product calls itself - and Modão reads that one
 ; instead of this file the next time it starts. It must be Windows-1252, in
 ; either of the two formats below.
 ;
