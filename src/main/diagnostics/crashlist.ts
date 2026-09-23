@@ -84,6 +84,11 @@ export async function installCrashList(data: Buffer): Promise<CrashListRefresh> 
  * Fetches a CrashList from upstream and installs it. The URL is the caller's
  * to choose - nothing here guesses one - so the app can be pointed at whatever
  * the community publishes without shipping a new build.
+ *
+ * Nothing in the app calls this yet: there is no channel and no button, and the
+ * bundled CrashList.txt no longer claims there is. What the user CAN do is the
+ * manual half of the same path - drop a CrashList.txt beside the database and
+ * `crashListPath()` prefers it - which is what the bundled file documents.
  */
 export async function refreshCrashListFrom(url: string): Promise<CrashListRefresh> {
   const { request } = await import('undici')

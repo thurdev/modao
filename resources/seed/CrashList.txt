@@ -4,9 +4,10 @@
 ;
 ; THIS FILE IS STILL A STUB. It is not the upstream CrashList: it holds a
 ; hand-written excerpt plus the two entries the field-audit spec states
-; verbatim. A newer copy can be dropped in at runtime - see
-; refreshCrashListFrom() in src/main/diagnostics/crashlist.ts, which writes
-; the replacement next to the database and takes precedence over this file.
+; verbatim. A newer copy can be dropped in by hand: put a CrashList.txt in
+; %APPDATA%\Modão\ (the folder holding modao.db) and Modão reads that one
+; instead of this file the next time it starts. It must be Windows-1252, in
+; either of the two formats below.
 ;
 ; Two formats are read. The upstream stanza:
 ;
