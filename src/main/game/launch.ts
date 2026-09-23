@@ -39,14 +39,29 @@ export interface LaunchPlan {
   refusal: LaunchRefusal | null
 }
 
+/**
+ * The full path of the executable THAT IS ON DISK for this install.
+ *
+ * `exeNames` is a list because one game ships under several names - Vice City
+ * is gta-vc.exe or gta_vc.exe depending on the release - and reading
+ * `exeNames[0]` alone is how a perfectly good Vice City install was reported as
+ * having no executable. The launch and the health check were brought onto
+ * `resolveExeName` for that reason; `health:deepAnalyze` was still reading the
+ * first name and so tried to disassemble a file that is not there, on an
+ * install it had just launched. Every caller that needs the path asks here.
+ */
+export function resolveGameExe(game: GameInstall): string {
+  const exeName = resolveExeName(game.kind, (name) => exists(path.join(game.path, name)))
+  if (!exeName) throw new Error(t('messages.game.exeNotFound', { game: game.gameName, path: game.path }))
+  return path.join(game.path, exeName)
+}
+
 export async function planLaunch(force = false): Promise<LaunchPlan> {
   const game = requireActiveGame()
   // The same question the health report's `exe` check asks, asked through the
   // same function: the two disagreeing is what refused a Vice City install
   // whose executable is the second name on the list.
-  const exeName = resolveExeName(game.kind, (name) => exists(path.join(game.path, name)))
-  if (!exeName) throw new Error(t('messages.game.exeNotFound', { game: game.gameName, path: game.path }))
-  const exe = path.join(game.path, exeName)
+  const exe = resolveGameExe(game)
 
   const profile = await activeProfile()
   const profileId = profile?.id ?? null

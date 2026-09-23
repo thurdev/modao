@@ -898,9 +898,15 @@ export function registerIpc(): void {
   // does and does not do.
   ipcMain.handle('health:deepAnalyze', async (_e, address: string) => {
     const game = requireActiveGame()
-    const exeName = gameDefinition(game.kind).exeNames[0]
+    // The executable THAT IS ON DISK, asked through the same helper planLaunch
+    // and the health check use. `exeNames[0]` is only the first name a game can
+    // ship under: a Vice City install holding gta_vc.exe (the second) launches
+    // and passes its checks, and this handler then went looking for gta-vc.exe,
+    // failed to read it and reported that instead of analysing the executable
+    // that is actually there.
+    const { resolveGameExe } = await import('./game/launch')
     const { deepAnalyse } = await import('./diagnostics/disasm')
-    return deepAnalyse(path.join(game.path, exeName), address)
+    return deepAnalyse(resolveGameExe(game), address)
   })
   // The renderer still passes a profile id; the logs are not per-profile, and an
   // extra argument to a handler that ignores it is harmless.

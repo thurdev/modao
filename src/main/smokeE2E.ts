@@ -1771,6 +1771,38 @@ export async function runE2E(): Promise<number> {
   await fsp.rm(streamIni, { force: true })
   forgetHealthReport()
 
+  // --- copilot review: every reader of "the executable" reads the same one ---
+  // Deep Analysis reached for `exeNames[0]` instead of the helper the launch
+  // and the health check share. A Vice City install holding gta_vc.exe - the
+  // SECOND configured name - launches and passes its checks, and this then went
+  // looking for gta-vc.exe, failed to read it and reported that instead of
+  // analysing the executable sitting right there. One helper, asked by all
+  // three, against a real folder holding only the second name.
+  {
+    const { resolveGameExe } = await import('./game/launch')
+    const viceDir = path.join(tmp, 'Vice City second name')
+    await fsp.mkdir(viceDir, { recursive: true })
+    await fsp.writeFile(path.join(viceDir, 'gta_vc.exe'), fakePe(1024, 0x40000000, 0x010e))
+    const viceInstall = { ...activeGame()!, kind: 'vc' as const, path: viceDir, gameName: 'Vice City' }
+    check(
+      'deep analysis: the executable on disk is the one resolved, not the first name configured',
+      resolveGameExe(viceInstall) === path.join(viceDir, 'gta_vc.exe'),
+      resolveGameExe(viceInstall)
+    )
+    await fsp.rm(path.join(viceDir, 'gta_vc.exe'), { force: true })
+    let refused: string | null = null
+    try {
+      resolveGameExe(viceInstall)
+    } catch (e) {
+      refused = (e as Error).message
+    }
+    check(
+      'deep analysis: and a folder with no executable at all is refused with a sentence, not an ENOENT',
+      refused !== null && refused.includes(viceDir),
+      refused
+    )
+  }
+
   // --- final review I5: a legitimate install is not bricked by the new gate ---
   // Making every `fail` a launch blocker turned two pre-existing cosmetic fails
   // into hard refusals. This is the second of them: a vanilla GTA SA with no
