@@ -216,6 +216,64 @@ export async function quarantineEdited(gamePath: string, files: TrackedFile[], q
   return quarantined
 }
 
+/** One file that could not be copied out, and why it must therefore stay. */
+export interface UnstoredFailure {
+  relativePath: string
+  reason: string
+}
+
+/**
+ * Takes a verified copy of every file that exists ONLY in the game folder.
+ *
+ * `quarantineEdited` above answers "did the user change what we wrote", and it
+ * needs a recorded hash to answer at all. An ADOPTED install has none: adoption
+ * indexes what is already there and writes `sha256 = NULL` / `store_key = NULL`,
+ * because it copies nothing. So every one of those files is skipped by that
+ * function - and the bytes exist in exactly one place on the machine, the game
+ * folder itself. Removing one deletes the user's own file with nothing anywhere
+ * to put back. That is the failure this whole audit began with (14 .asi plugins
+ * and 27 CLEO scripts), and it survived on the uninstall button.
+ *
+ * So: copy first, hash both ends, and report anything that did not verify. The
+ * caller must refuse to remove whatever comes back in `failed` - a file Modão
+ * cannot put back is a file Modão must not take away.
+ *
+ * Files that carry a hash are skipped: their bytes are in the store already.
+ */
+export async function quarantineUnstored(
+  gamePath: string,
+  files: TrackedFile[],
+  quarantineDir: string
+): Promise<{ quarantined: string[]; failed: UnstoredFailure[] }> {
+  const quarantined: string[] = []
+  const failed: UnstoredFailure[] = []
+  for (const f of files) {
+    if (f.sha256) continue
+    const abs = path.join(gamePath, f.relativePath)
+    // Nothing there is nothing to lose; a link points at the store, which keeps
+    // the content after the link goes.
+    if (!exists(abs) || isDirectory(abs) || isLink(abs)) continue
+    const dest = path.join(quarantineDir, f.relativePath)
+    try {
+      await fsp.mkdir(path.dirname(dest), { recursive: true })
+      await fsp.copyFile(abs, dest)
+      const source = await sha256File(abs)
+      const copy = await sha256File(dest)
+      if (source !== copy) {
+        failed.push({
+          relativePath: f.relativePath,
+          reason: `the copy taken into quarantine does not match the file (${source.slice(0, 12)} vs ${copy.slice(0, 12)})`
+        })
+        continue
+      }
+      quarantined.push(f.relativePath)
+    } catch (e) {
+      failed.push({ relativePath: f.relativePath, reason: (e as Error).message })
+    }
+  }
+  return { quarantined, failed }
+}
+
 /**
  * Removes one install's files from the game folder, restoring anything it
  * displaced.

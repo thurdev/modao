@@ -146,7 +146,8 @@ export const api = {
   setEnabled: (installId: number, enabled: boolean) => call<void>('library:setEnabled', installId, enabled),
   setPriority: (installId: number, priority: number) => call<void>('library:setPriority', installId, priority),
   setLoadFirst: (installId: number, loadFirst: boolean) => call<void>('library:setLoadFirst', installId, loadFirst),
-  uninstall: (installId: number) => call<{ restored: number; quarantined: string[] }>('library:uninstall', installId),
+  uninstall: (installId: number) =>
+    call<{ restored: number; quarantined: string[]; quarantineDir: string; kept: string[] }>('library:uninstall', installId),
   rollbackPreview: (installId: number) => call<{ relativePath: string; action: string }[]>('library:rollbackPreview', installId),
   readme: (installId: number) => call<string | null>('library:readme', installId),
   setSubModEnabled: (installId: number, rel: string, enabled: boolean) =>

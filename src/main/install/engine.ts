@@ -37,6 +37,7 @@ import {
   materialise,
   ownedKey,
   quarantineEdited,
+  quarantineUnstored,
   storeKey
 } from '../store/contentStore'
 import { buildPersistedVariantGroups } from '@shared/variantGroups'
@@ -660,8 +661,14 @@ function ensureLocalModVersion(plan: InstallPlan): number {
 
 export interface UninstallResult {
   restored: number
+  /** Copies taken into quarantine before anything was removed. */
   quarantined: string[]
-  /** Paths left in place because another install in this profile also owns them. */
+  /** Where those copies are, so the user can be told where to find them. */
+  quarantineDir: string
+  /**
+   * Paths left in place: another install in this profile also owns them, or no
+   * verified copy of them could be taken, which makes them not ours to remove.
+   */
   kept: string[]
 }
 
@@ -686,12 +693,22 @@ export async function uninstall(installId: number): Promise<UninstallResult> {
   // behind with no record of what it was.
   await normaliseInstallSpelling(installId)
 
+  const tracked = files.map((f) => ({ relativePath: f.relative_path, sha256: f.sha256 }))
+  const quarantineDir = path.join(Paths.quarantine(), String(installId))
+
   // The user (or another tool) may have changed a file after we wrote it: keep it.
-  const quarantined = await quarantineEdited(
-    game.path,
-    files.map((f) => ({ relativePath: f.relative_path, sha256: f.sha256 })),
-    path.join(Paths.quarantine(), String(installId))
-  )
+  const edited = await quarantineEdited(game.path, tracked, quarantineDir)
+
+  // And an ADOPTED install has no store copy at all: adoption indexes the files
+  // where they already are and records no hash, so the game folder holds the
+  // only copy of every one of them. `quarantineEdited` cannot speak for those -
+  // with nothing recorded, "changed" cannot be established - and uninstall used
+  // to remove them anyway. That is item 01's failure behind a different button,
+  // in the install shape this audit was written about, where every mod is
+  // adopted. Copy them out and verify the copy first.
+  const unstored = await quarantineUnstored(game.path, tracked, quarantineDir)
+  const quarantined = [...edited, ...unstored.quarantined]
+  const unsafe = new Set(unstored.failed.map((f) => f.relativePath))
 
   // A file another install in this profile also owns is not this install's to
   // remove. Two copies of the same pack, one disabled, share every path: the
@@ -705,11 +722,13 @@ export async function uninstall(installId: number): Promise<UninstallResult> {
     game,
     mine.map((f) => f.relative_path),
     mine.filter((f) => f.backup_path).map((f) => ({ relativePath: f.relative_path, backupPath: f.backup_path! })),
-    // Every path here is this install's alone (shared ones were filtered out above),
-    // its bytes are in the store, and anything the user edited went to quarantine
-    // a few lines up. Uninstall is the one caller that may take what it wrote.
-    { mayRemoveFile: () => true }
+    // Every path here is this install's alone (shared ones were filtered out
+    // above) and its bytes are somewhere else: in the store when the install has
+    // one, in quarantine when it does not. The only paths refused are the ones
+    // whose copy did not verify - those stay in the game folder, untouched.
+    { mayRemoveFile: (rel) => !unsafe.has(rel) }
   )
+  const keptUnsafe = mine.filter((f) => unsafe.has(f.relative_path)).map((f) => f.relative_path)
 
   db.transaction(() => {
     db.prepare('DELETE FROM provides WHERE install_id = ?').run(installId)
@@ -719,13 +738,19 @@ export async function uninstall(installId: number): Promise<UninstallResult> {
       installId,
       install.profile_id,
       'uninstall',
-      JSON.stringify({ restored, quarantined, keptForOtherInstalls: shared.map((f) => f.relative_path) }),
+      JSON.stringify({
+        restored,
+        quarantined,
+        quarantineDir,
+        keptForOtherInstalls: shared.map((f) => f.relative_path),
+        keptUnverified: unstored.failed
+      }),
       new Date().toISOString()
     )
   })()
 
   await syncProfileIni(install.profile_id)
-  return { restored, quarantined, kept: shared.map((f) => f.relative_path) }
+  return { restored, quarantined, quarantineDir, kept: [...shared.map((f) => f.relative_path), ...keptUnsafe] }
 }
 
 /**

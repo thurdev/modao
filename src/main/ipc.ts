@@ -653,6 +653,11 @@ export function registerIpc(): void {
     await requireIdleGame()
     const result = await uninstall(installId)
     toast('success', t('messages.library.uninstalled', { count: result.restored }))
+    // An adopted mod's bytes lived nowhere else. Say where they went, or the
+    // user has no way of knowing the uninstall was recoverable at all.
+    if (result.quarantined.length > 0) {
+      toast('info', t('messages.library.uninstalledQuarantined', { count: result.quarantined.length, path: result.quarantineDir }))
+    }
     return result
   })
   ipcMain.handle('library:rollbackPreview', (_e, installId: number) => rollbackPreview(installId))

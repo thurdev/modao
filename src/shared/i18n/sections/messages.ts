@@ -50,7 +50,9 @@ export const messages = {
         'Nenhum registro de crash para o gta_sa.exe depois dessa sessão. Se o jogo parou de responder em vez de fechar, essa ausência já é o diagnóstico: travamento não deixa registro de exceção.'
     },
     library: {
-      uninstalled: 'Desinstalado: {count} arquivo(s) restaurado(s).'
+      uninstalled: 'Desinstalado: {count} arquivo(s) restaurado(s).',
+      uninstalledQuarantined:
+        '{count} arquivo(s) que só existiam na pasta do jogo (mod adotado, ou arquivo que você editou) foram copiados para a quarentena antes de serem removidos, em {path}. Nada foi apagado sem cópia.'
     },
     bisect: {
       outdatedFirst:
@@ -165,7 +167,9 @@ export const messages = {
         'No crash record for gta_sa.exe after that session. If the game stopped responding rather than closing, that absence is the diagnosis: a hang leaves no exception entry.'
     },
     library: {
-      uninstalled: 'Uninstalled: {count} displaced file(s) restored.'
+      uninstalled: 'Uninstalled: {count} displaced file(s) restored.',
+      uninstalledQuarantined:
+        '{count} file(s) that existed only in the game folder (an adopted mod, or a file you edited) were copied to quarantine before they were removed, in {path}. Nothing was deleted without a copy.'
     },
     bisect: {
       outdatedFirst:

@@ -1759,6 +1759,63 @@ export async function runE2E(): Promise<number> {
     diff(beforeGuardSwitch, await snapshotDir(game))
   )
 
+  // --- final review C1: uninstalling an ADOPTED install must not delete the
+  // user's own files ----------------------------------------------------------
+  // Adoption records what is already in the game folder: store_key NULL, every
+  // install_file.sha256 NULL, nothing copied anywhere. So the game folder held
+  // the ONLY copy, quarantineEdited skipped every file for want of a hash to
+  // compare, and uninstall removed them with mayRemoveFile: () => true. That is
+  // the 14 .asi plugins and 27 CLEO scripts this audit began with, on a
+  // different button. Both shapes are covered: a mod folder and a loose plugin,
+  // which is the one priority cannot even switch off.
+  const adoptedUninstall = await createProfile({ name: 'Adopted Uninstall' })
+  await activateProfile(adoptedUninstall.id)
+  await fsp.mkdir(path.join(game, 'modloader', 'Hand Placed', 'data'), { recursive: true })
+  const handFile = path.join(game, 'modloader', 'Hand Placed', 'data', 'hand.dat')
+  const looseFile = path.join(game, 'scripts', 'HandPlaced.asi')
+  await fsp.writeFile(handFile, 'bytes that exist nowhere else on this machine')
+  await fsp.writeFile(looseFile, fakePe(4096, 0x60000000, 0x2102))
+  const handDatHash = await sha256File(handFile)
+  const looseHash = await sha256File(looseFile)
+
+  await adoptIntoProfile(adoptedUninstall.id)
+  const adoptedFolder = listInstalled(adoptedUninstall.id).find((m) => m.title === 'Hand Placed')!
+  const adoptedLoose = listInstalled(adoptedUninstall.id).find((m) => m.title === 'HandPlaced.asi')!
+  check(
+    'adopted uninstall: both shapes were adopted, with no store copy and no hash',
+    !!adoptedFolder &&
+      !!adoptedLoose &&
+      (getDb()
+        .prepare('SELECT COUNT(*) n FROM install WHERE id IN (?,?) AND store_key IS NULL')
+        .get(adoptedFolder?.installId ?? -1, adoptedLoose?.installId ?? -1) as { n: number }).n === 2,
+    listInstalled(adoptedUninstall.id).map((m) => m.title)
+  )
+
+  const folderRemoval = await uninstall(adoptedFolder.installId)
+  const looseRemoval = await uninstall(adoptedLoose.installId)
+  const handRescued = path.join(folderRemoval.quarantineDir, 'modloader', 'Hand Placed', 'data', 'hand.dat')
+  const looseRescued = path.join(looseRemoval.quarantineDir, 'scripts', 'HandPlaced.asi')
+  check(
+    'adopted uninstall: the adopted mod folder survives, byte for byte, in quarantine',
+    fs.existsSync(handRescued) && (await sha256File(handRescued)) === handDatHash,
+    { dir: folderRemoval.quarantineDir, quarantined: folderRemoval.quarantined }
+  )
+  check(
+    'adopted uninstall: so does the adopted loose plugin, the shape priority cannot switch off',
+    fs.existsSync(looseRescued) && (await sha256File(looseRescued)) === looseHash,
+    { dir: looseRemoval.quarantineDir, quarantined: looseRemoval.quarantined }
+  )
+  check(
+    'adopted uninstall: and the uninstall says what it put there',
+    folderRemoval.quarantined.includes('modloader/Hand Placed/data/hand.dat') &&
+      looseRemoval.quarantined.includes('scripts/HandPlaced.asi'),
+    { folder: folderRemoval.quarantined, loose: looseRemoval.quarantined }
+  )
+  check(
+    'adopted uninstall: the uninstall still did its job in the game folder',
+    !fs.existsSync(handFile) && !fs.existsSync(looseFile)
+  )
+
   getDb().prepare('DELETE FROM profile').run()
   await fsp.rm(tmp, { recursive: true, force: true }).catch(() => undefined)
 
