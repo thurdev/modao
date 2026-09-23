@@ -119,6 +119,7 @@ import {
   spellFolderName
 } from '../src/shared/loadOrder'
 import { findOrphanConfigs, orphanOwningProfiles, orphanPluginFolder } from '../src/shared/orphanConfigs'
+import { classifyArchiveFailure, isPasswordFailure, shouldRetryWithPassword } from '../src/shared/archiveFailure'
 import {
   disableOnDisk,
   enableOnDisk,
@@ -2709,6 +2710,42 @@ check(
 check(
   'cleo: version ranges still compare the way the resolver compared them',
   satisfiesRange('4.4.4', '>=4.4') && !satisfiesRange('4.3', '>=4.4') && satisfiesRange('4.3', null),
+  null
+)
+// A bare ">" used to be matched by the ">=" branch and answered with ">=", so
+// a version the author had excluded came back satisfied and every gate that
+// reads a range - dependencies and the pre-launch CLEO check - was weaker than
+// what it printed. Strict ">" is supported, not rejected: rejecting it would
+// fall through to the permissive default, which is the same bug wearing a hat.
+check(
+  'version range: a strict ">" excludes the boundary instead of admitting it',
+  !satisfiesRange('4.4', '>4.4') && !satisfiesRange('4.3', '>4.4') && satisfiesRange('4.5', '>4.4'),
+  {
+    at: satisfiesRange('4.4', '>4.4'),
+    below: satisfiesRange('4.3', '>4.4'),
+    above: satisfiesRange('4.5', '>4.4')
+  }
+)
+check(
+  'version range: ">=" still admits the boundary, so the two comparators stay apart',
+  satisfiesRange('4.4', '>=4.4') && satisfiesRange('4.4', '> 4.3') && !satisfiesRange('4.4', '> 4.4.1'),
+  null
+)
+// The mirror of the same hole from the other side: "<" alone never matched
+// "<=", which fell through to the bare-version branch and was read as "exactly
+// 5" - refusing 4.9, which the author allowed.
+check(
+  'version range: "<=" is inclusive rather than an equality test',
+  satisfiesRange('4.9', '<= 5') && satisfiesRange('5', '<=5') && !satisfiesRange('5.1', '<=5'),
+  {
+    below: satisfiesRange('4.9', '<= 5'),
+    at: satisfiesRange('5', '<=5'),
+    above: satisfiesRange('5.1', '<=5')
+  }
+)
+check(
+  'version range: "<" still excludes the boundary',
+  satisfiesRange('4.9', '<5') && !satisfiesRange('5', '<5'),
   null
 )
 
