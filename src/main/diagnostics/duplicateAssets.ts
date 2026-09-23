@@ -145,7 +145,19 @@ export async function duplicateAssetCheck(game: GameInstall, opts: { maxFiles?: 
   const cappedNote = scan.capped ? t('checks.scanCapped') : undefined
 
   if (!groups.length) {
-    return { id: 'duplicate-asi', title: t('checks.dupTitle'), status: 'pass', summary: t('checks.dupNone'), detail: cappedNote }
+    // Nothing found in a walk that STOPPED EARLY is not a clean folder, and
+    // `HealthReport.ok` cannot tell the difference from a status alone: a
+    // `pass` here puts a green badge on the panel and lets the launch gate wave
+    // through a tree nobody finished reading. `unknown` is the status this
+    // report already has for exactly this - a check that applies and could not
+    // be answered this run - and it blocks nothing, because only `fail` does.
+    return {
+      id: 'duplicate-asi',
+      title: t('checks.dupTitle'),
+      status: scan.capped ? 'unknown' : 'pass',
+      summary: scan.capped ? t('checks.dupUnknown') : t('checks.dupNone'),
+      detail: cappedNote
+    }
   }
   return {
     id: 'duplicate-asi',
@@ -173,7 +185,17 @@ export async function stackedAdjusterCheck(game: GameInstall, opts: { maxFiles?:
   const cappedNote = scan.capped ? t('checks.scanCapped') : undefined
 
   if (products.length < 2) {
-    return { id: 'stacked-adjuster', title: t('checks.stackedTitle'), status: 'pass', summary: t('checks.stackedNone'), detail: cappedNote }
+    // Same rule as `duplicateAssetCheck`, and it bites harder here: the second
+    // adjuster is exactly the file a capped walk is most likely not to have
+    // reached, and "at most one limit adjuster" is a sentence this run has not
+    // earned the right to say.
+    return {
+      id: 'stacked-adjuster',
+      title: t('checks.stackedTitle'),
+      status: scan.capped ? 'unknown' : 'pass',
+      summary: scan.capped ? t('checks.stackedUnknown') : t('checks.stackedNone'),
+      detail: cappedNote
+    }
   }
   return {
     id: 'stacked-adjuster',

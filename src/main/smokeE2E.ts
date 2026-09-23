@@ -1585,10 +1585,30 @@ export async function runE2E(): Promise<number> {
     (cappedStacked.detail ?? '').includes(t('checks.scanCapped')),
     cappedStacked
   )
+  // ...and it has to be the STATUS that says so, not only the prose. The note
+  // was threaded into `detail` while the status stayed `pass`, so
+  // `HealthReport.ok` - which reads statuses and nothing else - counted an
+  // unfinished walk as a clean one and the panel put a green badge on it.
+  check(
+    'cap: a walk that stopped early is unknown, not pass - the one thing HealthReport.ok can read',
+    cappedCheck.status === 'unknown' && cappedStacked.status === 'unknown',
+    { dup: cappedCheck.status, stacked: cappedStacked.status }
+  )
+  check(
+    'cap: unknown still blocks nothing - only a fail is a launch blocker',
+    cappedCheck.status !== 'fail' && cappedStacked.status !== 'fail',
+    null
+  )
   check(
     'cap: an uncapped scan of the same folder does not claim to be partial',
     !(looseCheck.detail ?? '').includes(t('checks.scanCapped')),
     looseCheck.detail
+  )
+  const uncappedStacked = await stackedAdjusterCheck(looseGame)
+  check(
+    'cap: and a finished walk with nothing in it is still a plain pass',
+    uncappedStacked.status === 'pass',
+    uncappedStacked
   )
 
   // --- item 17: a readme nobody could parse is never installed silently -----

@@ -129,6 +129,8 @@ export const checks = {
     stackedDetail:
       'O CrashList avisa explicitamente que empilhar limit adjusters derruba o jogo: dois produtos diferentes reescrevem os mesmos limites, um por cima do outro. Desative todos menos um.',
     stackedItem: '{label}: {paths}',
+    dupUnknown: 'Nenhum duplicado no que deu para ler — mas a varredura não chegou ao fim',
+    stackedUnknown: 'Nenhum empilhamento no que deu para ler — mas a varredura não chegou ao fim',
     scanCapped: 'A varredura atingiu o limite de arquivos por execução e parou antes de terminar — este resultado é parcial, não uma pasta limpa.',
     runningTitle: 'O jogo está aberto agora?',
     runningClosed: 'O {exe} não está rodando — instalar, desinstalar e trocar de perfil estão liberados',
@@ -274,6 +276,8 @@ export const checks = {
     stackedDetail:
       'The CrashList warns explicitly that stacking limit adjusters crashes the game: two different products rewrite the same limits, one on top of the other. Disable all but one.',
     stackedItem: '{label}: {paths}',
+    dupUnknown: 'No duplicate in what could be read - but the scan did not reach the end',
+    stackedUnknown: 'No stack in what could be read - but the scan did not reach the end',
     scanCapped: 'The scan hit its per-run file limit and stopped before finishing - this result is partial, not a clean folder.',
     runningTitle: 'Is the game open right now?',
     runningClosed: '{exe} is not running - installing, uninstalling and switching profiles are all allowed',
