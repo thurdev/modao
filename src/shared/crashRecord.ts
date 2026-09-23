@@ -22,8 +22,29 @@ export type CrashAddressSource =
   /** modloader.log: the address the process faulted at, image base included. */
   | { from: 'modloader'; module: string | null; address: string | null }
 
+/**
+ * What a modloader.log dump is recorded against when it names no module.
+ *
+ * Mod Loader's crash handler is San Andreas-only (`game.supportsModLoader`
+ * gates the whole scan), and its dump is written by a hook inside the running
+ * gta_sa.exe, so "no module line" means the executable rather than an unknown
+ * foreign DLL. The row has always been STORED that way; the addressing
+ * decision used to be taken from the bare null instead, which classified the
+ * absolute address as foreign and refused to look it up in CrashList - while
+ * the very same row claimed, in its `module` column, that it came from the
+ * exe. One value, used for both, so the two cannot disagree again.
+ */
+export const MODLOADER_DEFAULT_MODULE = 'gta_sa.exe'
+
 /** The columns a crash_report row carries for addressing. */
 export interface StoredCrashAddressing {
+  /**
+   * The module column, AS STORED - fallbacks already applied. Callers write
+   * this rather than the raw source value: the addressing above was decided
+   * from it, and a row whose module column disagrees with the addressing that
+   * produced it is a row that cannot be read back correctly.
+   */
+  module: string
   /**
    * The fault_offset column. EMPTY for any source that reports an absolute
    * address: storing one here is what made the read path re-derive
@@ -50,15 +71,21 @@ export interface StoredCrashAddressing {
  */
 export function addressingForStorage(source: CrashAddressSource): StoredCrashAddressing {
   if (source.from === 'modloader') {
-    const module = source.module ?? ''
+    // The fallback is applied HERE, before the addressing is decided, and the
+    // module it produces is returned for the caller to store. A dump with no
+    // module line used to take this decision from an empty string - "unknown
+    // foreign module", never looked up in CrashList - and then be written to
+    // the database as gta_sa.exe anyway.
+    const module = (source.module ?? '').trim() || MODLOADER_DEFAULT_MODULE
     const raw = source.address ?? ''
-    const addressing = module ? describeAbsoluteAddress(module, raw) : null
+    const addressing = describeAbsoluteAddress(module, raw)
     return {
+      module,
       faultOffset: '',
-      crashAddress: addressing?.display ?? raw,
-      addressKind: addressing?.kind ?? 'none',
-      addressNote: addressing?.note ?? null,
-      lookupAddress: addressing?.lookupAddress ?? null,
+      crashAddress: addressing.display || raw,
+      addressKind: addressing.kind,
+      addressNote: addressing.note,
+      lookupAddress: addressing.lookupAddress,
       moduleUnloaded: parseModuleName(module).unloaded
     }
   }
@@ -68,6 +95,7 @@ export function addressingForStorage(source: CrashAddressSource): StoredCrashAdd
     // A hang produces no exception and no address at all. The absence is the
     // diagnosis; there is nothing to look up.
     return {
+      module: source.module,
       faultOffset: source.faultOffset,
       crashAddress: '',
       addressKind: 'none',
@@ -79,6 +107,7 @@ export function addressingForStorage(source: CrashAddressSource): StoredCrashAdd
 
   const addressing = resolveCrashAddress(source.module, source.faultOffset)
   return {
+    module: source.module,
     faultOffset: source.faultOffset,
     crashAddress: addressing.display,
     addressKind: addressing.kind,

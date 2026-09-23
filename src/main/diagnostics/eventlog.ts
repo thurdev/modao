@@ -159,7 +159,10 @@ export async function scanCrashes(profileId: number | null): Promise<ScanResult>
         profileId,
         parsed.occurredAt,
         addressing.faultOffset,
-        parsed.module,
+        // Same rule as the Mod Loader path below: the module that is stored is
+        // the one the addressing was decided from, never a second reading of
+        // the source.
+        addressing.module,
         parsed.exceptionCode,
         addressing.crashAddress,
         cause,
@@ -320,7 +323,12 @@ async function scanModLoaderCrash(profileId: number | null): Promise<{ added: nu
       // in a column named for an offset is what made listCrashes re-derive
       // base + already-based-address on every read.
       addressing.faultOffset,
-      crash.module ?? 'gta_sa.exe',
+      // The module AS THE ADDRESSING DECIDED IT, not the raw dump value. A dump
+      // with no module line used to be classified from the bare null - "unknown
+      // foreign module", so the absolute address was never looked up in
+      // CrashList - and then stored here as gta_sa.exe anyway, a row whose own
+      // module column contradicted the decision that produced it.
+      addressing.module,
       '',
       addressing.crashAddress,
       cause,

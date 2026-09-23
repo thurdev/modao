@@ -1631,7 +1631,7 @@ check('running: assertGameNotRunning passes when the game is closed', !closedThr
 // PowerShell and better-sqlite3 and so cannot be loaded here. The DECISION those
 // paths make is extracted into @shared/crashRecord, and it is tested directly:
 // reverting any part of the fix makes one of these fail.
-import { addressingForStorage, addressingFromStoredRow } from '../src/shared/crashRecord'
+import { addressingForStorage, addressingFromStoredRow, MODLOADER_DEFAULT_MODULE } from '../src/shared/crashRecord'
 
 // Source 1: the Windows Event Log, which reports an offset relative to the module.
 const storedExe = addressingForStorage({
@@ -1699,6 +1699,39 @@ check(
   'stored: an absolute exe address is still the one thing CrashList may be asked',
   storedFromDump.lookupAddress === '0x005B8E55',
   storedFromDump
+)
+
+// A dump with NO module line. The row was always stored as gta_sa.exe, but the
+// addressing was taken from the bare null: "unknown foreign module", so the
+// absolute address was never offered to CrashList - and the persisted row then
+// claimed it came from the executable. One value decides both now.
+for (const missing of [null, '', '   ']) {
+  const storedNoModule = addressingForStorage({ from: 'modloader', module: missing, address: '0x005B8E55' })
+  check(
+    `stored: a modloader dump naming no module (${JSON.stringify(missing)}) is addressed as the executable, not as a foreign one`,
+    storedNoModule.addressKind === 'exe' && storedNoModule.lookupAddress === '0x005B8E55',
+    storedNoModule
+  )
+  check(
+    `stored: and the module it is addressed as is the module it is stored as (${JSON.stringify(missing)})`,
+    storedNoModule.module === MODLOADER_DEFAULT_MODULE && storedNoModule.module === 'gta_sa.exe',
+    storedNoModule.module
+  )
+}
+check(
+  'stored: a dump that DOES name a foreign module is still foreign, and is stored as that module',
+  (() => {
+    const foreign = addressingForStorage({ from: 'modloader', module: 'std.data.dll', address: '0x0F2B1000' })
+    return foreign.addressKind === 'module' && foreign.lookupAddress === null && foreign.module === 'std.data.dll'
+  })(),
+  null
+)
+check(
+  'stored: an Event Log record is stored against the module its addressing was decided from',
+  addressingForStorage({ from: 'eventlog', kind: 'exception', module: 'gta_sa.exe', faultOffset: '0x000C0C63' }).module ===
+    'gta_sa.exe' &&
+    addressingForStorage({ from: 'eventlog', kind: 'hang', module: 'gta_sa.exe', faultOffset: '' }).module === 'gta_sa.exe',
+  null
 )
 
 const storedDumpInDll = addressingForStorage({ from: 'modloader', module: 'std.data.dll_unloaded', address: '0x0F2B1000' })
