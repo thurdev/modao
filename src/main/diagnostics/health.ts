@@ -6,7 +6,7 @@ import { t } from '../util/i18n'
 import { limitAdjusterNames, readStreamIni, RISKY_STREAMING_MEMORY_MB, SAFE_STREAMING_MEMORY_MB } from '../game/streamIni'
 import { reportFromGame } from './modloaderLog'
 import { outdatedBuildCheck } from './upstream'
-import { gameDefinition } from '@shared/games'
+import { resolveExeName } from '@shared/games'
 import { exists, isLink, moveSafe, timestampSlug, walk } from '../util/fsx'
 import { Paths } from '../util/paths'
 import { findOrphanConfigs, orphanPluginFolder, type OrphanFinding } from '@shared/orphanConfigs'
@@ -44,10 +44,22 @@ export async function runHealthCheck(profileId: number | null): Promise<HealthRe
   })
 
   // 1. Executable
+  //
+  // Every `fail` in this report is a launch blocker (see @shared/launchGate), so
+  // a finding here has to be one that genuinely predicts a crash - or a game
+  // that runs fine gets refused. Two did:
+  //
+  //  - this check read `exeNames[0]` while planLaunch searches the whole list,
+  //    so a Vice City install named gta_vc.exe (the second entry) or an SA:DE
+  //    install started from PlayGTASA.exe reported "no executable" and was
+  //    refused a launch of the executable the launch had just found. It asks
+  //    the same question as the launch now.
+  //  - and a header this parser cannot read is not a crash: it is a build it
+  //    does not recognise. That is a `warn`. A missing executable is still a
+  //    `fail`, though planLaunch refuses on it first, with its own message.
+  const exeName = resolveExeName(game.kind, (name) => exists(path.join(game.path, name)))
   try {
-    // The exe to read is whichever one identifies this game; only San Andreas
-    // has a known-good stock build to compare against.
-    const exeName = gameDefinition(game.kind).exeNames[0]
+    if (!exeName) throw new Error(t('messages.game.exeNotFound', { game: game.gameName, path: game.path }))
     const verdict = await checkGameExe(path.join(game.path, exeName))
     checks.push({
       id: 'exe',
@@ -76,7 +88,12 @@ export async function runHealthCheck(profileId: number | null): Promise<HealthRe
       })
     })
   } catch (e) {
-    checks.push({ id: 'exe', title: t('checks.exeTitle'), status: 'fail', summary: (e as Error).message })
+    checks.push({
+      id: 'exe',
+      title: t('checks.exeTitle'),
+      status: exeName ? 'warn' : 'fail',
+      summary: (e as Error).message
+    })
   }
 
   // 2. Is the game open right now?
@@ -134,10 +151,16 @@ export async function runHealthCheck(profileId: number | null): Promise<HealthRe
   }
 
   // 3. Mod Loader and the ASI directory
+  //
+  // `warn`, not `fail`: a `fail` refuses the launch now, and a vanilla GTA SA
+  // with no Mod Loader in it runs perfectly well. Modão cannot install into it
+  // until Mod Loader is there - which is what the detail says - but refusing to
+  // start an unmodded game someone has just added is a refusal of something
+  // that was never going to crash.
   checks.push({
     id: 'modloader',
     title: t('checks.modloaderTitle'),
-    status: !game.supportsModLoader ? 'skip' : game.hasModLoader ? 'pass' : 'fail',
+    status: !game.supportsModLoader ? 'skip' : game.hasModLoader ? 'pass' : 'warn',
     summary: !game.supportsModLoader
       ? t('checks.modloaderNotApplicable')
       : game.hasModLoader

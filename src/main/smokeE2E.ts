@@ -1669,6 +1669,36 @@ export async function runE2E(): Promise<number> {
   await fsp.rm(streamIni, { force: true })
   forgetHealthReport()
 
+  // --- final review I5: a legitimate install is not bricked by the new gate ---
+  // Making every `fail` a launch blocker turned two pre-existing cosmetic fails
+  // into hard refusals. This is the second of them: a vanilla GTA SA with no
+  // Mod Loader in it runs perfectly well, and pressing Play on the install
+  // someone has just added refused it. (The first - the `exe` check reading
+  // exeNames[0] while the launch searched the whole list - is a Vice City
+  // install this synthetic San Andreas folder cannot be, and is held by
+  // resolveExeName's unit tests instead.)
+  const vanilla = path.join(tmp, 'Vanilla San Andreas')
+  await fsp.mkdir(vanilla, { recursive: true })
+  await fsp.writeFile(path.join(vanilla, 'gta_sa.exe'), fakePe(V1_US_SIZE, V1_US_TIMESTAMP, 0x010e))
+  const vanillaGame = await addGame(vanilla, 'Vanilla')
+  const moddedGameId = activeGame()!.id
+  setActiveGame(vanillaGame.id)
+  forgetHealthReport()
+  const vanillaPlan = await planLaunch()
+  const vanillaReport = storedHealthReport().report
+  check(
+    'launch: a vanilla install with no Mod Loader is not refused a launch',
+    vanillaPlan.refusal === null && vanillaPlan.verdict.allowed,
+    vanillaPlan.verdict.blockers
+  )
+  check(
+    'launch: and the missing Mod Loader is still reported, as a warning',
+    vanillaReport?.checks.find((c) => c.id === 'modloader')?.status === 'warn',
+    vanillaReport?.checks.map((c) => `${c.id}:${c.status}`)
+  )
+  setActiveGame(moddedGameId)
+  forgetHealthReport()
+
   // --- final review C3: a refusal the Health screen cannot show is a refusal
   // the user cannot answer ----------------------------------------------------
   // The gate refuses on `blocking` OR `missing` (dependencyLaunchBlockers), but

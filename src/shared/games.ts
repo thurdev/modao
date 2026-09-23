@@ -141,6 +141,24 @@ export function isGameKind(value: unknown): value is GameKind {
 }
 
 /**
+ * The executable that identifies THIS install: the first listed name that is
+ * actually on disk.
+ *
+ * `exeNames` is a list because one game ships under several names - Vice City
+ * is gta-vc.exe or gta_vc.exe depending on the release, SA:DE is the Gameface
+ * binary or the launcher beside it. Reading `exeNames[0]` and nothing else is
+ * how a perfectly good Vice City install was reported as having no executable,
+ * and - once every failing check became a launch blocker - refused a launch of
+ * a game whose exe the launch itself had just found. One definition, used by
+ * both, so they cannot drift again.
+ *
+ * `exists` is injected so this stays pure and the unit suite can hold it.
+ */
+export function resolveExeName(kind: GameKind | string | null | undefined, exists: (name: string) => boolean): string | null {
+  return gameDefinition(kind).exeNames.find((name) => exists(name)) ?? null
+}
+
+/**
  * Which games a catalogue post is for.
  *
  * MixMods states this in the post title - "[SA] VehFuncs", "[III|VC|SA]

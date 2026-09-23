@@ -95,6 +95,7 @@ import {
   type GraphDependencyRow
 } from '../src/shared/dependencyGraph'
 import { blockersFromReport, describeBlockers, launchGate, type LaunchBlocker } from '../src/shared/launchGate'
+import { resolveExeName } from '../src/shared/games'
 import {
   installFingerprint,
   launchDecision,
@@ -2633,6 +2634,22 @@ check(
   blockersFromReport(blockedReport).map((b) => b.id).join(',') === 'stream-ini',
   blockersFromReport(blockedReport)
 )
+
+// Every `fail` in the report is a blocker now, so a check that reads the wrong
+// executable name turns a working install into a refused one: the health check
+// read exeNames[0] while the launch searched the whole list. One function, both
+// callers. A Vice City install is gta-vc.exe OR gta_vc.exe; SA:DE is the
+// Gameface binary OR the launcher beside it.
+check(
+  'exe name: the second listed name is found, not only the first',
+  resolveExeName('vc', (n) => n === 'gta_vc.exe') === 'gta_vc.exe' &&
+    resolveExeName('sade', (n) => n === 'PlayGTASA.exe') === 'PlayGTASA.exe'
+)
+check(
+  'exe name: the first listed name still wins when both are there',
+  resolveExeName('vc', () => true) === 'gta-vc.exe'
+)
+check('exe name: nothing on disk is null, which is the one real failure', resolveExeName('sa', () => false) === null)
 
 // --- CLEO, per plugin ------------------------------------------------------
 // The rule used to be one hardcoded line: CLEO+ needs 4.4. Against CLEO 4.3

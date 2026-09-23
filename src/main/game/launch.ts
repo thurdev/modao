@@ -1,6 +1,6 @@
 import path from 'node:path'
 import type { GameInstall } from '@shared/types'
-import { gameDefinition } from '@shared/games'
+import { resolveExeName } from '@shared/games'
 import { describeBlockers, type LaunchBlocker, type LaunchVerdict } from '@shared/launchGate'
 import { launchDecision } from '@shared/prelaunch'
 import { t } from '../util/i18n'
@@ -41,10 +41,12 @@ export interface LaunchPlan {
 
 export async function planLaunch(force = false): Promise<LaunchPlan> {
   const game = requireActiveGame()
-  const exe = gameDefinition(game.kind)
-    .exeNames.map((name) => path.join(game.path, name))
-    .find((candidate) => exists(candidate))
-  if (!exe) throw new Error(t('messages.game.exeNotFound', { game: game.gameName, path: game.path }))
+  // The same question the health report's `exe` check asks, asked through the
+  // same function: the two disagreeing is what refused a Vice City install
+  // whose executable is the second name on the list.
+  const exeName = resolveExeName(game.kind, (name) => exists(path.join(game.path, name)))
+  if (!exeName) throw new Error(t('messages.game.exeNotFound', { game: game.gameName, path: game.path }))
+  const exe = path.join(game.path, exeName)
 
   const profile = await activeProfile()
   const profileId = profile?.id ?? null
