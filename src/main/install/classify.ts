@@ -307,6 +307,12 @@ export async function classifyTree(
   const addOns: AddOn[] = []
   const asiEvidence: Record<string, PluginEvidence> = {}
   let probesLeft = MAX_ASI_PROBES
+  /**
+   * Files a plugin's own strings have already placed. One .asi never gets to
+   * move a file a different .asi claimed: a plan where plugin A's literals
+   * relocate plugin B's data is worse than not acting at all.
+   */
+  const claimedByBinary = new Set<PlannedFile>()
 
   const excluded: string[] = []
   const chosenPaths = new Set<string>()
@@ -647,16 +653,25 @@ export async function classifyTree(
     const refused: DataPlacement[] = []
     for (const p of placements) {
       const f = byRel.get(p.bundlePath)
-      if (!f) continue
-      // The readme wins: it named this folder and said where it goes.
+      if (!f || claimedByBinary.has(f)) continue
+      // A readme wins only when it says something genuinely different.
+      //
+      // "Extract the VHud folder into modloader" is the default placement, not
+      // an instruction that contradicts anything - it is the single most common
+      // line in the corpus, and the only destination readme.ts ever attaches a
+      // folder name to. Reading it as a conflict would veto this whole feature
+      // and put VHud back where "No handler or callme" came from. The same
+      // reading is already the convention above, where a readme destination of
+      // 'modloader-folder' is treated as no override at all.
       const readmeSaid =
         readmeFolders.get(p.rootTarget.split('/')[0].toLowerCase()) ?? readmeFolders.get(modFolder.toLowerCase())
-      if (readmeSaid && readmeSaid !== 'root-file') {
+      if (readmeSaid && readmeSaid !== 'root-file' && readmeSaid !== 'modloader-folder') {
         refused.push(p)
         continue
       }
       f.targetRelative = p.rootTarget.replace(/\/+/g, '/')
       f.destination = 'root-file'
+      claimedByBinary.add(f)
       moved.push(p)
     }
 
@@ -784,10 +799,19 @@ export async function classifyTree(
     // installs as one mod, but the plugin opens "models\x360btns.txd" from the
     // game folder - without it there, it prints "GInput could not load pad
     // button textures... The game will now close."
-    for (const c of tree.children) {
-      if (c.isDir || !/\.asi$/i.test(c.name) || isExcluded(c.rel)) continue
-      const evidence = await probeAsi(c)
-      if (evidence) routeDataToGameRoot(evidence, c.name, ctx.fallbackName)
+    //
+    // A pile is undifferentiated: every file in it is a candidate for every
+    // .asi in it. So only a plugin that owns resources is read at all (a bare
+    // loader's placement is already settled and it has no data here), and with
+    // two such plugins sharing one pile there is no way to tell whose data is
+    // whose - guessing would move one plugin's files out from under it, so
+    // nothing is moved.
+    const pileAsis = tree.children.filter(
+      (c) => !c.isDir && /\.asi$/i.test(c.name) && !isExcluded(c.rel) && asiOwnsResources(tree, c)
+    )
+    if (pileAsis.length === 1) {
+      const evidence = await probeAsi(pileAsis[0])
+      if (evidence) routeDataToGameRoot(evidence, pileAsis[0].name, ctx.fallbackName)
     }
     for (const f of files) {
       if (/^(readme|leiame)/i.test(path.basename(f.sourcePath))) docs.push(f.sourcePath)

@@ -2335,31 +2335,123 @@ check(
     Object.keys(out.asiEvidence)
   )
 
-  // A readme is an instruction; this is an inference. The instruction wins, and
-  // the disagreement is put in front of the user instead of being swallowed.
-  const saysModloader = {
-    file: 'leiame.txt',
-    raw: 'Coloque a pasta VHud na pasta modloader',
-    instructions: [{ folder: 'VHud', destination: 'modloader-folder' as const, line: 'Coloque a pasta VHud na pasta modloader' }],
-    declared: [],
-    variantHints: []
-  }
-  const obeyed = await classifyTree(
+  // A readme is an instruction and this is an inference, so a readme that says
+  // something genuinely different wins. But "extract the VHud folder into
+  // modloader" is the DEFAULT placement, not a contradiction - it is the most
+  // common line in the corpus and the only destination readme.ts ever attaches
+  // a folder name to. Reading it as a conflict would veto the whole feature and
+  // put VHud straight back to "No handler or callme".
+  const readme = (destination: ReadmeParse['instructions'][number]['destination'], line: string): ReadmeParse =>
+    ({
+      file: 'leiame.txt',
+      raw: line,
+      instructions: [{ folder: 'VHud', destination, line }],
+      declared: [],
+      variantHints: []
+    }) as unknown as ReadmeParse
+
+  const boilerplate = await classifyTree(
     dataRoot,
-    { asiRelative: 'scripts', readmes: [saysModloader as unknown as ReadmeParse], fallbackName: 'VHud' },
+    {
+      asiRelative: 'scripts',
+      readmes: [readme('modloader-folder', 'Coloque a pasta VHud na pasta modloader')],
+      fallbackName: 'VHud'
+    },
     {}
   )
-  const obeyedTo = (needle: string): string | undefined =>
-    obeyed.files.find((f) => f.sourcePath.toLowerCase().endsWith(needle.toLowerCase()))?.targetRelative
+  const boilerplateTo = (needle: string): string | undefined =>
+    boilerplate.files.find((f) => f.sourcePath.toLowerCase().endsWith(needle.toLowerCase()))?.targetRelative
   check(
-    'field audit 11: a readme that names the folder outranks the binary',
-    obeyedTo('VHud/data/blips.dat') === 'modloader/VHud/data/blips.dat',
-    obeyedTo('VHud/data/blips.dat')
+    'field audit 11: ordinary "put the folder in modloader" boilerplate does not veto the binary',
+    boilerplateTo('VHud/data/blips.dat') === 'VHud/data/blips.dat',
+    boilerplateTo('VHud/data/blips.dat')
   )
   check(
-    'field audit 11: and the disagreement is surfaced rather than swallowed',
-    obeyed.warnings.some((w) => w.code === 'asi-data-readme'),
-    obeyed.warnings.map((w) => w.code)
+    'field audit 11: and no conflict is invented out of the default placement',
+    !boilerplate.warnings.some((w) => w.code === 'asi-data-readme'),
+    boilerplate.warnings.map((w) => w.code)
+  )
+
+  // A readme that really does send the folder somewhere else is a different
+  // thing, and it wins - loudly.
+  const contradicts = await classifyTree(
+    dataRoot,
+    {
+      asiRelative: 'scripts',
+      readmes: [readme('asi-plugin', 'Coloque a pasta VHud na pasta scripts')],
+      fallbackName: 'VHud'
+    },
+    {}
+  )
+  const contradictsTo = (needle: string): string | undefined =>
+    contradicts.files.find((f) => f.sourcePath.toLowerCase().endsWith(needle.toLowerCase()))?.targetRelative
+  check(
+    'field audit 11: a readme that sends the folder somewhere else outranks the binary',
+    contradictsTo('VHud/data/blips.dat') === 'modloader/VHud/data/blips.dat',
+    contradictsTo('VHud/data/blips.dat')
+  )
+  check(
+    'field audit 11: and that disagreement is surfaced rather than swallowed',
+    contradicts.warnings.some((w) => w.code === 'asi-data-readme'),
+    contradicts.warnings.map((w) => w.code)
+  )
+}
+
+// Two plugins in one undifferentiated pile: there is no way to tell whose data
+// is whose, so neither gets to move the other's files.
+{
+  const pile = path.join(tmp, 'asi-pile')
+  const put = (rel: string, content: Buffer | string = 'x'): void => {
+    const p = path.join(pile, rel)
+    fs.mkdirSync(path.dirname(p), { recursive: true })
+    fs.writeFileSync(p, content)
+  }
+  put('PluginA.asi', pe([`models${BS}x360btns.txd`, `models${BS}ps3btns.txd`]))
+  put('PluginB.asi', pe([`data${BS}handling.cfg`, `data${BS}peds.ide`]))
+  put('models/x360btns.txd')
+  put('data/handling.cfg')
+
+  const out = await classifyTree(pile, { asiRelative: 'scripts', readmes: [], fallbackName: 'Two Plugins' }, {})
+  const to = (needle: string): string | undefined =>
+    out.files.find((f) => f.sourcePath.toLowerCase().endsWith(needle.toLowerCase()))?.targetRelative
+  check(
+    'field audit 11: with two plugins sharing one pile, neither relocates the other\'s files',
+    to('models/x360btns.txd') === 'modloader/Two Plugins/models/x360btns.txd' &&
+      to('data/handling.cfg') === 'modloader/Two Plugins/data/handling.cfg',
+    [to('models/x360btns.txd'), to('data/handling.cfg')]
+  )
+  check(
+    'field audit 11: and no placement is claimed for a pile it could not read',
+    !out.warnings.some((w) => w.code === 'asi-data-root'),
+    out.warnings.map((w) => w.code)
+  )
+}
+
+// A bare loader in the pile is not read at all, and does not stop the plugin
+// that does own the data from being placed by its own strings.
+{
+  const pile = path.join(tmp, 'asi-pile-loader')
+  const put = (rel: string, content: Buffer | string = 'x'): void => {
+    const p = path.join(pile, rel)
+    fs.mkdirSync(path.dirname(p), { recursive: true })
+    fs.writeFileSync(p, content)
+  }
+  put('GInputSA.asi', pe([`models${BS}x360btns.txd`, `models${BS}pcbtns.txd`]))
+  put('SilentPatchSA.asi', pe([`models${BS}x360btns.txd`]))
+  put('models/x360btns.txd')
+
+  const out = await classifyTree(pile, { asiRelative: 'scripts', readmes: [], fallbackName: 'GInput' }, {})
+  const to = (needle: string): string | undefined =>
+    out.files.find((f) => f.sourcePath.toLowerCase().endsWith(needle.toLowerCase()))?.targetRelative
+  check(
+    'field audit 11: a bare loader beside the plugin is not read, so the plugin still places its own data',
+    to('models/x360btns.txd') === 'models/x360btns.txd',
+    to('models/x360btns.txd')
+  )
+  check(
+    'field audit 11: and the bare loader was never probed',
+    out.asiEvidence['SilentPatchSA.asi'] === undefined,
+    Object.keys(out.asiEvidence)
   )
 }
 
