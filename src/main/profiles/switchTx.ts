@@ -668,10 +668,18 @@ async function unresolvedDeps(profileId: number): Promise<string[]> {
  * Puts the game folder back exactly as the snapshot found it: every file in the
  * manifest is copied back and re-hashed, and anything Modão linked in after
  * the snapshot is removed first. Used by "Restore previous state".
+ *
+ * `baseDir` is where the manifest's relative paths are restored under. A
+ * profile switch's manifest is game-relative, so it defaults to the active
+ * game folder. A variant swap's manifest is store-relative instead - a
+ * junctioned mod folder is a live view of the store, so putting the store
+ * back is what puts the junction back too, without the game even needing to
+ * be open - so a caller recovering one of those passes its store directory
+ * explicitly and never pays for `requireActiveGame()`.
  */
 export async function restoreFromJournal(
   journalId: number,
-  opts: { removeFirst?: string[] } = {}
+  opts: { removeFirst?: string[]; baseDir?: string } = {}
 ): Promise<{ restored: number; problems: string[] }> {
   const db = getDb()
   const row = db.prepare('SELECT * FROM switch_journal WHERE id = ?').get(journalId) as
@@ -679,11 +687,11 @@ export async function restoreFromJournal(
     | undefined
   if (!row) throw new Error(`Switch #${journalId} is not in the journal.`)
   const journal = rowToJournal(row)
-  const game = requireActiveGame()
+  const baseDir = opts.baseDir ?? requireActiveGame().path
   const problems: string[] = []
 
   for (const rel of opts.removeFirst ?? []) {
-    const abs = path.join(game.path, rel)
+    const abs = path.join(baseDir, rel)
     if (isLink(abs)) await fsp.rm(abs, { recursive: true, force: true }).catch(() => undefined)
   }
 
@@ -698,7 +706,7 @@ export async function restoreFromJournal(
       problems.push(`${entry.relativePath}: the backup copy no longer matches its recorded hash; it was not restored`)
       continue
     }
-    const to = path.join(game.path, entry.relativePath)
+    const to = path.join(baseDir, entry.relativePath)
     await fsp.mkdir(path.dirname(to), { recursive: true })
     if (isLink(to)) await fsp.rm(to, { recursive: true, force: true }).catch(() => undefined)
     await fsp.copyFile(entry.backupPath, to)

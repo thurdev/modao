@@ -693,6 +693,23 @@ export interface SwitchVerification {
 
 export type SwitchState = 'snapshotted' | 'applied' | 'verified' | 'failed' | 'restored'
 
+/**
+ * What a variant swap's `switch_journal` row carries on top of the snapshot
+ * every switch keeps: which install and group it was switching, which option
+ * it was leaving and which it was going to, and the exact paths on both
+ * sides. This is what a stale journal's boot-time recovery reads before it
+ * touches anything - the install row (never caught mid-write, by SQLite's own
+ * atomicity) says which option won, and this record says what to do about it.
+ */
+export interface VariantSwapRecord {
+  installId: number
+  groupId: string
+  fromOptionId: string
+  toOptionId: string
+  outgoingTargets: string[]
+  incomingTargets: string[]
+}
+
 export interface SwitchJournal {
   id: number
   startedAt: string

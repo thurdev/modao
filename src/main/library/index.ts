@@ -1,6 +1,6 @@
 import path from 'node:path'
 import fsp from 'node:fs/promises'
-import type { DestinationClass, InstalledMod, InstalledVariantGroup, SubMod } from '@shared/types'
+import type { DestinationClass, InstalledMod, InstalledVariantGroup, SubMod, VariantSwapRecord } from '@shared/types'
 import type { PersistedVariantGroup } from '@shared/variantGroups'
 import { getDb } from '../db'
 import { clampPriority } from '../game/modloaderIni'
@@ -9,7 +9,7 @@ import { recordEarlyDisable } from '../catalog/rating'
 import { requireActiveGame } from '../game/detect'
 import { exists, isDirectory, isLink, sha256File } from '../util/fsx'
 import { listVariantOption, quarantineEdited, storeDir } from '../store/contentStore'
-import { snapshotFiles } from '../profiles/switchTx'
+import { openJournal, recordManifest, restoreFromJournal, setJournalState, snapshotFiles } from '../profiles/switchTx'
 import { providesKey } from '../conflicts'
 import { Paths } from '../util/paths'
 
@@ -344,16 +344,20 @@ export async function switchVariant(installId: number, groupId: string, optionId
 
   // --- staging: both states exist on disk, verified, before anything is lost -
   // Every destructive step below has a byte-for-byte copy behind it, taken and
-  // hash-checked by the same `snapshotFiles` the profile switch uses. This
-  // branch exists because a filesystem mutation with no verified undo destroyed
-  // a real install; a variant swap gets the same treatment.
-  const workDir = path.join(Paths.quarantine(), 'variant-swap', String(installId), String(Date.now()))
+  // hash-checked by the same `snapshotFiles` the profile switch uses, and the
+  // whole thing is journalled the way a profile switch is, so a kill or a power
+  // cut is recoverable and not only a thrown error. This branch exists because
+  // a filesystem mutation with no verified undo destroyed a real install; a
+  // variant swap gets the same treatment.
+  const journal = openJournal(row.profile_id, row.profile_id)
+  const workDir = journal.snapshotDir
   const rollback = await snapshotFiles(
     storeRoot,
     leaving.map((r) => r.relative_path),
     path.join(workDir, 'outgoing')
   )
   if (rollback.length !== leaving.length) {
+    setJournalState(journal.id, 'restored', 'refused: the store no longer holds the outgoing option')
     await fsp.rm(workDir, { recursive: true, force: true }).catch(() => undefined)
     throw new Error(
       `The store no longer holds every file "${outgoingLabel}" installed, so Modão cannot undo a switch away from it ` +
@@ -367,11 +371,29 @@ export async function switchVariant(installId: number, groupId: string, optionId
     await fsp.copyFile(s.abs, to)
     const sha = await sha256File(to)
     if (sha !== (await sha256File(s.abs))) {
+      setJournalState(journal.id, 'restored', `refused: the staged copy of ${s.target} did not verify`)
       await fsp.rm(workDir, { recursive: true, force: true }).catch(() => undefined)
       throw new Error(`The staged copy of ${s.target} does not match the store. Nothing was changed.`)
     }
     staged.push({ target: s.target, from: to, sha256: sha, size: (await fsp.stat(to)).size })
   }
+
+  // What the recovery needs if this process never reaches the end: which paths
+  // the outgoing option owns (the manifest holds their verified bytes) and which
+  // the incoming one would take, so an orphan of a half-finished swap can be
+  // found and removed rather than left showing through a junction.
+  recordManifest(journal.id, rollback)
+  db.prepare('UPDATE switch_journal SET variant_swap_json = ? WHERE id = ?').run(
+    JSON.stringify({
+      installId,
+      groupId,
+      fromOptionId: group.chosenOptionId,
+      toOptionId: optionId,
+      outgoingTargets: leaving.map((r) => r.relative_path),
+      incomingTargets: staged.map((s) => s.target)
+    } satisfies VariantSwapRecord),
+    journal.id
+  )
 
   // A file the user edited by hand is theirs, whichever way it leaves. Copying
   // it out changes nothing, so it belongs in the staging half.
@@ -495,15 +517,108 @@ export async function switchVariant(installId: number, groupId: string, optionId
     try {
       await undo()
     } catch (undoError) {
+      // The disk and the rows may now disagree with each other and with what
+      // the journal recorded - a plain exception cannot undo a mutation that
+      // itself failed. The journal is left in 'failed' rather than silently
+      // dropped, so the next boot's `recoverStaleVariantSwaps` tries again
+      // from the install row's own answer instead of never looking.
+      setJournalState(
+        journal.id,
+        'failed',
+        `switch failed (${(e as Error).message}) AND the rollback failed (${(undoError as Error).message})`
+      )
       throw new Error(
         `Switching to "${incoming.label}" failed (${(e as Error).message}) AND the rollback failed ` +
           `(${(undoError as Error).message}). A verified copy of "${outgoingLabel}" is in ${path.join(workDir, 'outgoing')}.`
       )
     }
+    setJournalState(journal.id, 'restored', `switch failed and was rolled back: ${(e as Error).message}`)
     throw new Error(
       `Switching to "${incoming.label}" failed, so Modão put "${outgoingLabel}" back: ${(e as Error).message}`
     )
   }
 
+  setJournalState(journal.id, 'verified')
   await fsp.rm(workDir, { recursive: true, force: true }).catch(() => undefined)
+}
+
+/**
+ * Finds a variant swap that started but never recorded how it ended -
+ * `openJournal` ran and the process is simply gone before `switchVariant`
+ * reached its own `setJournalState` again, the way a kill or a power cut
+ * leaves things. SQLite's own atomicity means the install row is never caught
+ * mid-write: by the time this runs, it already names either the option the
+ * swap was leaving or the one it was going to, in full. That answer is read
+ * first and the disk is reconciled to match it, rather than guessed at from
+ * the journal alone - the same "the row says what won" split a profile
+ * switch's own recovery leans on.
+ *
+ * Meant to run once at boot, before anything else touches a profile: the
+ * dangerous window this closes is a junctioned mod folder showing the
+ * incoming bytes - because the folder IS the store - while the row still
+ * names the outgoing option, which a kill mid-swap can leave open with no
+ * error ever thrown for `switchVariant`'s own try/catch to catch.
+ */
+export async function recoverStaleVariantSwaps(): Promise<{ recovered: number; problems: string[] }> {
+  const db = getDb()
+  const rows = db
+    .prepare("SELECT id FROM switch_journal WHERE variant_swap_json IS NOT NULL AND state IN ('snapshotted','failed')")
+    .all() as { id: number }[]
+  const problems: string[] = []
+  let recovered = 0
+
+  for (const row of rows) {
+    try {
+      const journalRow = db.prepare('SELECT variant_swap_json FROM switch_journal WHERE id = ?').get(row.id) as
+        | { variant_swap_json: string | null }
+        | undefined
+      if (!journalRow?.variant_swap_json) continue
+      const record = JSON.parse(journalRow.variant_swap_json) as VariantSwapRecord
+
+      const install = db
+        .prepare('SELECT store_key, variant_groups_json, profile_id FROM install WHERE id = ?')
+        .get(record.installId) as { store_key: string | null; variant_groups_json: string | null; profile_id: number } | undefined
+      if (!install?.store_key) {
+        // The install (or its store payload) is gone some other way; nothing
+        // is left to reconcile. Close the journal rather than retry forever.
+        setJournalState(row.id, 'restored', 'the install this swap belonged to no longer has a store payload')
+        recovered++
+        continue
+      }
+
+      const groups = parseVariantGroups(install.variant_groups_json)
+      const group = groups.find((g) => g.id === record.groupId)
+      const landed = group?.chosenOptionId === record.toOptionId
+      const profile = db.prepare('SELECT is_active FROM profile WHERE id = ?').get(install.profile_id) as
+        | { is_active: number }
+        | undefined
+
+      if (landed) {
+        // The row already names the new option, so the swap committed before
+        // the crash. Only its materialisation into the game folder might be
+        // unfinished; redoing it is always safe.
+        if (profile?.is_active) await remateriliseInstall(record.installId)
+        setJournalState(row.id, 'verified')
+      } else {
+        // The row still names the old option: the swap never committed.
+        // Whatever the store shows is put back from the verified snapshot -
+        // pointed at the store, not the game folder, because a junction
+        // mirrors the store and fixing the store is what fixes the junction.
+        const result = await restoreFromJournal(row.id, { baseDir: storeDir(install.store_key) })
+        problems.push(...result.problems.map((p) => `swap #${row.id}: ${p}`))
+        // An incoming file that landed nowhere the outgoing option also used
+        // is an orphan of the half-finished swap; nothing references it once
+        // the outgoing bytes are back, so it comes out rather than lingering.
+        for (const target of record.incomingTargets) {
+          if (record.outgoingTargets.some((t) => t.toLowerCase() === target.toLowerCase())) continue
+          await fsp.rm(path.join(storeDir(install.store_key), target), { force: true }).catch(() => undefined)
+        }
+        if (profile?.is_active) await remateriliseInstall(record.installId)
+      }
+      recovered++
+    } catch (e) {
+      problems.push(`swap #${row.id}: ${(e as Error).message}`)
+    }
+  }
+  return { recovered, problems }
 }

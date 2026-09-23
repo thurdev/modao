@@ -48,7 +48,16 @@ import {
   restoreSnapshot,
   snapshot
 } from './profiles/saves'
-import { listInstalled, applyPriorities, readInstallReadme, setEnabled, setPriority, setSubModEnabled, switchVariant } from './library'
+import {
+  listInstalled,
+  applyPriorities,
+  readInstallReadme,
+  recoverStaleVariantSwaps,
+  setEnabled,
+  setPriority,
+  setSubModEnabled,
+  switchVariant
+} from './library'
 import { annotateConflicts, listConflicts } from './conflicts'
 import { applyPlan, createPlan, choose, chooseAddOn, discardPlan, rollbackPreview, setDestination, uninstall } from './install/engine'
 import { getCatalogMod, listCatalog, loadSeedCatalog, seedInfo } from './catalog/service'
@@ -57,7 +66,8 @@ import { analyzeTxd } from './formats/txd'
 import { analyzeImg } from './formats/img'
 import { compareWithVanilla } from './formats/ifp'
 import { runHealthCheck, scanTextures } from './diagnostics/health'
-import { describeBlockers, launchGate } from '@shared/launchGate'
+import { forgetHealthReport, freshHealthReport } from './diagnostics/healthCache'
+import { planLaunch } from './game/launch'
 import { listCrashes, listIncidents, scanCrashes, setCrashResolved } from './diagnostics/eventlog'
 import { listJournals, planSwitch, verifySwitch } from './profiles/switchTx'
 import { gameDefinition, type GameKind } from '@shared/games'
@@ -467,35 +477,24 @@ export function registerIpc(): void {
   // lives in @shared/launchGate, so anything else that must refuse a launch
   // adds a reason to the same list instead of growing a second gate.
   ipcMain.handle('game:launch', async (_e, force?: boolean) => {
-    const game = requireActiveGame()
-    const exe = gameDefinition(game.kind)
-      .exeNames.map((name) => path.join(game.path, name))
-      .find((candidate) => exists(candidate))
-    if (!exe) throw new Error(t('messages.game.exeNotFound', { game: game.gameName, path: game.path }))
-    const profile = await activeProfile()
+    // The decision lives in planLaunch, where the e2e harness can run it
+    // against a real game folder; what is left here starts a process.
+    const plan = await planLaunch(!!force)
+    if (plan.refusal) return plan.refusal
 
-    if (profile && !force) {
-      // A check that throws must not become a locked Play button: a broken
-      // health run is not a finding, so the launch goes ahead.
-      const report = await runHealthCheck(profile.id).catch(() => null)
-      const verdict = launchGate(report)
-      if (!verdict.allowed) {
-        return {
-          launched: false,
-          message: t('messages.game.launchBlocked', { names: describeBlockers(verdict.blockers) }),
-          blockers: verdict.blockers
-        }
-      }
+    if (plan.profileId !== null) {
+      getDb().prepare('UPDATE profile SET last_played_at = ? WHERE id = ?').run(new Date().toISOString(), plan.profileId)
     }
-
-    if (profile) getDb().prepare('UPDATE profile SET last_played_at = ? WHERE id = ?').run(new Date().toISOString(), profile.id)
-    const ok = await shell.openPath(exe)
+    const ok = await shell.openPath(plan.exe)
     // The process table just changed. The running check caches it for two
     // seconds, which is exactly long enough for a user to alt-tab back and
     // click something while the guard still believes the game is closed.
     forgetRunningProcesses()
-    if (ok === '') armCrashScan(profile?.id ?? null)
-    return { launched: ok === '', message: ok || `Launched ${exe}` }
+    // And the stored report describes a game that was closed when it was made:
+    // its running and write-access answers are now wrong.
+    forgetHealthReport()
+    if (ok === '') armCrashScan(plan.profileId)
+    return { launched: ok === '', message: ok || `Launched ${plan.exe}` }
   })
 
   // --- profiles -------------------------------------------------------------
@@ -645,15 +644,11 @@ export function registerIpc(): void {
   })
   ipcMain.handle('library:setVariant', async (_e, installId: number, groupId: string, optionId: string) => {
     await requireIdleGame()
-    try {
-      return await switchVariant(installId, groupId, optionId)
-    } catch (e) {
-      // A refused or rolled-back switch left the old option live and says so in
-      // its message. That has to reach the user, not disappear into a rejected
-      // promise the renderer may or may not be listening to.
-      toast('error', (e as Error).message)
-      throw e
-    }
+    // A refused or rolled-back switch left the old option live and says so in
+    // its message. The rejection reaches the renderer directly, which already
+    // toasts it (Library.tsx) - toasting it here too would be the same error
+    // shown to the user twice.
+    return await switchVariant(installId, groupId, optionId)
   })
 
   // --- catalog --------------------------------------------------------------
@@ -759,11 +754,18 @@ export function registerIpc(): void {
   ipcMain.handle('install:setDestination', (_e, planId: string, sourcePath: string, destination: string) =>
     setDestination(planId, sourcePath, destination as DestinationClass)
   )
-  ipcMain.handle('install:apply', async (_e, planId: string, profileId: number) => {
+  // The third argument is the user's answer to the unparsed-readme warning, and
+  // it is never assumed: a renderer that does not send one gets the refusal.
+  ipcMain.handle('install:apply', async (_e, planId: string, profileId: number, acknowledgedUnparsedReadme?: boolean) => {
     await requireIdleGame()
     const task = newTask('Applying install plan')
     try {
-      const result = await applyPlan(planId, profileId, (phase, c, tot) => progress(task.id, 'Applying install plan', phase, c, tot))
+      const result = await applyPlan(
+        planId,
+        profileId,
+        { acknowledgedUnparsedReadme: acknowledgedUnparsedReadme === true },
+        (phase, c, tot) => progress(task.id, 'Applying install plan', phase, c, tot)
+      )
       task.end()
       const modeLabel = t(`messages.install.mode.${result.mode}`)
       toast(
@@ -836,7 +838,9 @@ export function registerIpc(): void {
   // state first is what suppresses that, with no write of its own.
   ipcMain.handle('health:run', async (_e, profileId: number) => {
     await noteWhetherGameIsRunning()
-    return runHealthCheck(requireProfile(profileId))
+    // "Re-run" means re-run: this always runs the checks. It stores the answer
+    // so that pressing Play right after reading it costs nothing.
+    return freshHealthReport(requireProfile(profileId), requireActiveGame().path)
   })
   ipcMain.handle('health:crashes', (_e, profileId: number) => listCrashes(requireProfile(profileId)))
   ipcMain.handle('health:incidents', (_e, profileId: number) => listIncidents(requireProfile(profileId)))
@@ -1146,6 +1150,18 @@ function hostOf(url: string): string {
 export async function bootstrap(): Promise<void> {
   getDb()
   setMainLanguage(getSetting('ui.language', DEFAULT_LANGUAGE))
+  // A variant swap journals itself the way a profile switch does; a stale one
+  // means the process died mid-swap, which for a junctioned mod folder can
+  // leave the game folder showing bytes the database has not agreed to yet.
+  // Reconciled before anything else touches a profile - never allowed to
+  // block the app from opening if it fails.
+  try {
+    const recovery = await recoverStaleVariantSwaps()
+    if (recovery.recovered) log(`Recovered ${recovery.recovered} stale variant-swap journal(s) at startup.`)
+    for (const problem of recovery.problems) log(`Variant-swap recovery: ${problem}`)
+  } catch (e) {
+    logError('recovering a stale variant-swap journal at startup', e)
+  }
   await loadSeedCatalog()
 }
 

@@ -14,16 +14,16 @@ import {
   SwitchVerificationError,
   unmanagedContent
 } from './profiles/manager'
-import { listJournals, planSwitch, verifySnapshot } from './profiles/switchTx'
+import { listJournals, openJournal, planSwitch, recordManifest, snapshotFiles, verifySnapshot } from './profiles/switchTx'
 import { storeDir } from './store/contentStore'
 import { detectExistingSaves, listSnapshots } from './profiles/saves'
 import { clearCache, storageReport } from './ipc'
 import { Paths } from './util/paths'
 import { applyPlan, createPlan, choose, uninstall } from './install/engine'
-import { listInstalled, setPriority, setSubModEnabled, switchVariant } from './library'
+import { listInstalled, recoverStaleVariantSwaps, setPriority, setSubModEnabled, switchVariant } from './library'
 import { listConflicts } from './conflicts'
 import { readIniFile, readKeys, getSection } from './game/modloaderIni'
-import { walk, sha256File, createJunction, removeLinkOrDir } from './util/fsx'
+import { walk, sha256File, createJunction, isLink, removeLinkOrDir } from './util/fsx'
 import { V1_US_SIZE, V1_US_TIMESTAMP } from './game/pe'
 import { runHealthCheck } from './diagnostics/health'
 import { duplicateAssetCheck, scanGameTree, scanGameTreeAssets, stackedAdjusterCheck } from './diagnostics/duplicateAssets'
@@ -172,7 +172,7 @@ export async function runE2E(): Promise<number> {
     chosen.files.map((f) => f.targetRelative)
   )
 
-  const applied = await applyPlan(chosen.planId, adopted.profileId)
+  const applied = await applyPlan(chosen.planId, adopted.profileId, { acknowledgedUnparsedReadme: false })
   check('install wrote the files', applied.written === 1, applied)
   const installedFile = path.join(game, 'modloader', 'Loadscreens 2K Definitive', 'models', 'LOADSCS.txd')
   check('file materialised into the game folder', fs.existsSync(installedFile))
@@ -214,7 +214,7 @@ export async function runE2E(): Promise<number> {
   })
   const shadersOption = shadersPlan.variants[0].options.find((o) => o.label.includes('DEFAULT'))!
   const shadersChosenPlan = await choose(shadersPlan.planId, shadersPlan.variants[0].id, shadersOption.id)
-  const shadersApplied = await applyPlan(shadersChosenPlan.planId, adopted.profileId)
+  const shadersApplied = await applyPlan(shadersChosenPlan.planId, adopted.profileId, { acknowledgedUnparsedReadme: false })
   check('field audit 09: the quality preset installed', shadersApplied.written >= 1, shadersApplied)
 
   const shadersFile = path.join(game, 'ProperShaders.ini')
@@ -293,7 +293,7 @@ export async function runE2E(): Promise<number> {
   )
   const hud2k = hudGroupPlan.options.find((o) => o.label.includes('2K'))!
   const hud4k = hudGroupPlan.options.find((o) => o.label.includes('4K'))!
-  const hudApplied = await applyPlan((await choose(hudPlan.planId, hudGroupPlan.id, hud2k.id)).planId, adopted.profileId)
+  const hudApplied = await applyPlan((await choose(hudPlan.planId, hudGroupPlan.id, hud2k.id)).planId, adopted.profileId, { acknowledgedUnparsedReadme: false })
   const hudOld = path.join(game, 'modloader', 'HUD 2K', 'models', 'hud2k.txd')
   const hudNew = path.join(game, 'modloader', 'HUD 2K', 'models', 'hud4k.txd')
   check('field audit 09: the 2K option installed', fs.existsSync(hudOld), hudApplied)
@@ -375,6 +375,208 @@ export async function runE2E(): Promise<number> {
     'field audit 09: and the game folder comes back byte-for-byte',
     sameTree(beforeHud, await snapshotDir(game)),
     diff(beforeHud, await snapshotDir(game))
+  )
+
+  // --- field audit 09, hardlink/copy coverage: a differently-named variant
+  // group whose files land as loose files at the game root - `root-file`, not
+  // `modloader-folder` - so `followsStore` is false and the swap has to remove
+  // the outgoing file from the game folder itself rather than get it for free
+  // from a junction's live view of the store. The HUD block above never
+  // exercises that removal-and-restore code at all: it is entirely a junction.
+  const beforeSettings = await snapshotDir(game)
+  const settingsSource = path.join(tmp, 'Settings Pack')
+  await fsp.mkdir(path.join(settingsSource, 'Settings 2K'), { recursive: true })
+  await fsp.mkdir(path.join(settingsSource, 'Settings 4K'), { recursive: true })
+  await fsp.writeFile(path.join(settingsSource, 'Settings 2K', 'settings_2k.ini'), 'two kay settings')
+  await fsp.writeFile(path.join(settingsSource, 'Settings 4K', 'settings_4k.ini'), 'four kay settings')
+
+  const settingsPlan = await createPlan({
+    archivePath: settingsSource,
+    profileId: adopted.profileId,
+    modId: null,
+    modVersionId: null,
+    title: 'Settings Pack',
+    author: 'Unknown',
+    sourceUrl: null
+  })
+  const settingsGroupPlan = settingsPlan.variants[0]
+  const settings2k = settingsGroupPlan.options.find((o) => o.label.includes('2K'))!
+  const settings4k = settingsGroupPlan.options.find((o) => o.label.includes('4K'))!
+  const settingsApplied = await applyPlan(
+    (await choose(settingsPlan.planId, settingsGroupPlan.id, settings2k.id)).planId,
+    adopted.profileId,
+    { acknowledgedUnparsedReadme: false }
+  )
+  const settingsOld = path.join(game, 'settings_2k.ini')
+  const settingsNew = path.join(game, 'settings_4k.ini')
+  check('field audit 09: the loose-file variant installed outside modloader\\', fs.existsSync(settingsOld), settingsApplied)
+  const settingsFileRow = getDb()
+    .prepare('SELECT destination_class FROM install_file WHERE install_id = ?')
+    .get(settingsApplied.installId) as { destination_class: string } | undefined
+  check(
+    'field audit 09: it materialised as a root file, not a junctioned folder',
+    settingsFileRow?.destination_class === 'root-file' && !isLink(path.join(game, 'modloader', 'Settings 2K')),
+    settingsFileRow
+  )
+
+  await fsp.rm(settingsSource, { recursive: true, force: true })
+  const settingsMod = listInstalled(adopted.profileId).find((m) => m.installId === settingsApplied.installId)!
+
+  // The same real filesystem obstruction as the junction case: a directory
+  // sitting where the incoming file has to land in the store, so the copy
+  // throws after the outgoing bytes are already gone.
+  const settingsKey = (
+    getDb().prepare('SELECT store_key FROM install WHERE id = ?').get(settingsApplied.installId) as { store_key: string }
+  ).store_key
+  const settingsBlocked = path.join(storeDir(settingsKey), 'settings_4k.ini')
+  await fsp.mkdir(settingsBlocked, { recursive: true })
+  let settingsSwapError: string | null = null
+  try {
+    await switchVariant(settingsMod.installId, settingsMod.variantGroups[0].id, settings4k.id)
+  } catch (e) {
+    settingsSwapError = (e as Error).message
+  }
+  check(
+    'field audit 09: a loose-file swap that fails midway also throws instead of reporting success',
+    !!settingsSwapError && settingsSwapError.includes('put "Settings 2K" back'),
+    settingsSwapError
+  )
+  check(
+    'field audit 09: the rolled-back loose-file swap left the old file live in the game folder, byte-for-byte',
+    fs.existsSync(settingsOld) && (await fsp.readFile(settingsOld, 'utf8')) === 'two kay settings',
+    settingsSwapError
+  )
+  check('field audit 09: and never wrote the incoming file into the game folder', !fs.existsSync(settingsNew))
+  const settingsRolledBack = listInstalled(adopted.profileId).find((m) => m.installId === settingsApplied.installId)!
+  check(
+    'field audit 09: the rolled-back loose-file swap left the records on the old option',
+    settingsRolledBack.fileCount === 1 && settingsRolledBack.variantGroups[0]?.chosenOptionId === settings2k.id,
+    { fileCount: settingsRolledBack.fileCount, group: settingsRolledBack.variantGroups[0] }
+  )
+  await fsp.rm(settingsBlocked, { recursive: true, force: true })
+
+  await switchVariant(settingsMod.installId, settingsMod.variantGroups[0].id, settings4k.id)
+  check('field audit 09: the real loose-file swap removes the old file', !fs.existsSync(settingsOld))
+  check(
+    'field audit 09: and writes the new one in its place',
+    fs.existsSync(settingsNew) && (await fsp.readFile(settingsNew, 'utf8')) === 'four kay settings'
+  )
+
+  const settingsUninstalled = await uninstall(settingsMod.installId)
+  check(
+    'field audit 09: uninstalling the loose-file switch quarantines nothing',
+    settingsUninstalled.quarantined.length === 0,
+    settingsUninstalled
+  )
+  check(
+    'field audit 09: and the game folder comes back byte-for-byte',
+    sameTree(beforeSettings, await snapshotDir(game)),
+    diff(beforeSettings, await snapshotDir(game))
+  )
+
+  // --- field audit 09, crash-safe recovery: a variant swap now journals
+  // itself the way a profile switch does. A junctioned mod folder is a live
+  // view of the store, so the instant the store shows the incoming bytes the
+  // game folder does too - before any row says so. `switchVariant`'s own
+  // try/catch cannot help a process that is simply gone; only a journal
+  // written to disk before the store moves can put things back. This drives
+  // the swap's own staging primitives by hand and stops exactly where a kill
+  // would land - the store already swapped, nothing else - then proves
+  // `recoverStaleVariantSwaps` (the boot-time recovery `bootstrap()` runs)
+  // finds it and repairs the disagreement without ever needing to touch the
+  // install row, which a kill never catches mid-write.
+  const beforeIcons = await snapshotDir(game)
+  const iconsSource = path.join(tmp, 'Icons Pack')
+  await fsp.mkdir(path.join(iconsSource, 'Icons Small', 'data'), { recursive: true })
+  await fsp.mkdir(path.join(iconsSource, 'Icons Large', 'data'), { recursive: true })
+  await fsp.writeFile(path.join(iconsSource, 'Icons Small', 'data', 'icon.dat'), 'small icons')
+  await fsp.writeFile(path.join(iconsSource, 'Icons Large', 'data', 'icon.dat'), 'large icons')
+  const iconsPlan = await createPlan({
+    archivePath: iconsSource,
+    profileId: adopted.profileId,
+    modId: null,
+    modVersionId: null,
+    title: 'Icons Pack',
+    author: 'Unknown',
+    sourceUrl: null
+  })
+  const iconsGroupPlan = iconsPlan.variants[0]
+  const iconsSmall = iconsGroupPlan.options.find((o) => o.label.includes('Small'))!
+  const iconsLarge = iconsGroupPlan.options.find((o) => o.label.includes('Large'))!
+  const iconsApplied = await applyPlan(
+    (await choose(iconsPlan.planId, iconsGroupPlan.id, iconsSmall.id)).planId,
+    adopted.profileId,
+    { acknowledgedUnparsedReadme: false }
+  )
+  await fsp.rm(iconsSource, { recursive: true, force: true })
+  const iconTarget = (
+    getDb().prepare('SELECT relative_path FROM install_file WHERE install_id = ?').get(iconsApplied.installId) as {
+      relative_path: string
+    }
+  ).relative_path
+  const iconAbs = path.join(game, iconTarget)
+  check(
+    'field audit 09: the icon variant materialised as a junctioned folder',
+    isLink(path.join(game, 'modloader', 'Icons Small')),
+    iconTarget
+  )
+  check('field audit 09: the small icon is live', (await fsp.readFile(iconAbs, 'utf8')) === 'small icons')
+
+  const iconsKey = (
+    getDb().prepare('SELECT store_key FROM install WHERE id = ?').get(iconsApplied.installId) as { store_key: string }
+  ).store_key
+  const iconsGroupId = listInstalled(adopted.profileId).find((m) => m.installId === iconsApplied.installId)!.variantGroups[0].id
+
+  // Drive the swap's own STAGE primitives by hand and stop right after the
+  // store write: the exact point a kill leaves the junction showing the
+  // incoming bytes with the install row still naming the outgoing option.
+  const iconsJournal = openJournal(adopted.profileId, adopted.profileId)
+  const iconsRollback = await snapshotFiles(storeDir(iconsKey), [iconTarget], path.join(iconsJournal.snapshotDir, 'outgoing'))
+  recordManifest(iconsJournal.id, iconsRollback)
+  getDb().prepare('UPDATE switch_journal SET variant_swap_json = ? WHERE id = ?').run(
+    JSON.stringify({
+      installId: iconsApplied.installId,
+      groupId: iconsGroupId,
+      fromOptionId: iconsSmall.id,
+      toOptionId: iconsLarge.id,
+      outgoingTargets: [iconTarget],
+      incomingTargets: [iconTarget]
+    }),
+    iconsJournal.id
+  )
+  const iconsStorePath = path.join(storeDir(iconsKey), iconTarget)
+  await fsp.rm(iconsStorePath, { force: true })
+  await fsp.copyFile(path.join(storeDir(iconsKey), '.variants', iconsLarge.id, 'data', 'icon.dat'), iconsStorePath)
+  check(
+    'field audit 09: the junction already shows the incoming bytes before any row has changed',
+    (await fsp.readFile(iconAbs, 'utf8')) === 'large icons' &&
+      listInstalled(adopted.profileId).find((m) => m.installId === iconsApplied.installId)!.variantGroups[0]?.chosenOptionId ===
+        iconsSmall.id
+  )
+
+  const iconsRecovery = await recoverStaleVariantSwaps()
+  check(
+    'field audit 09: a stale variant-swap journal is found and repaired at boot',
+    iconsRecovery.recovered === 1 && iconsRecovery.problems.length === 0,
+    iconsRecovery
+  )
+  check(
+    'field audit 09: recovery puts the outgoing bytes back, closing the window a kill would have left open',
+    (await fsp.readFile(iconAbs, 'utf8')) === 'small icons'
+  )
+  check(
+    'field audit 09: the install record it repaired was never wrong to begin with',
+    listInstalled(adopted.profileId).find((m) => m.installId === iconsApplied.installId)!.variantGroups[0]?.chosenOptionId ===
+      iconsSmall.id
+  )
+  const iconsJournalAfter = listJournals(50).find((j) => j.id === iconsJournal.id)!
+  check('field audit 09: the journal is marked restored, not left open', iconsJournalAfter.state === 'restored', iconsJournalAfter)
+
+  await uninstall(iconsApplied.installId)
+  check(
+    'field audit 09: and the game folder comes back byte-for-byte after the icon variant is removed',
+    sameTree(beforeIcons, await snapshotDir(game)),
+    diff(beforeIcons, await snapshotDir(game))
   )
 
   // --- profiles and saves -----------------------------------------------------
@@ -487,7 +689,7 @@ export async function runE2E(): Promise<number> {
     packPlan.files.some((f) => f.destination === 'asi-plugin') && packPlan.files.some((f) => f.destination === 'modloader-folder'),
     packPlan.files.map((f) => `${f.destination} ${f.targetRelative}`)
   )
-  const packApplied = await applyPlan(packPlan.planId, adopted.profileId)
+  const packApplied = await applyPlan(packPlan.planId, adopted.profileId, { acknowledgedUnparsedReadme: false })
   const packInstall = listInstalled(adopted.profileId).find((m) => m.installId === packApplied.installId)!
   const subOf = (mod: InstalledMod, rel: string): SubMod | undefined => mod.subMods.find((s) => s.relativePath === rel)
   check(
@@ -887,7 +1089,7 @@ export async function runE2E(): Promise<number> {
     author: 'Junior_Djjr',
     sourceUrl: null
   })
-  const ghostInstall = await applyPlan(ghostPlan.planId, ghost.id)
+  const ghostInstall = await applyPlan(ghostPlan.planId, ghost.id, { acknowledgedUnparsedReadme: false })
   const ghostRow = getDb().prepare('SELECT store_key, folder_name FROM install WHERE id = ?').get(ghostInstall.installId) as {
     store_key: string | null
     folder_name: string | null
@@ -1022,7 +1224,7 @@ export async function runE2E(): Promise<number> {
     packPlanA.warnings.some((w) => w.code === 'game-executable'),
     packPlanA.warnings.map((w) => w.code)
   )
-  const packA = await applyPlan(packPlanA.planId, risky.id)
+  const packA = await applyPlan(packPlanA.planId, risky.id, { acknowledgedUnparsedReadme: false })
   check(
     'pack: the game executable is untouched by the install',
     (await sha256File(path.join(game, 'gta_sa.exe'))) === exeBefore
@@ -1044,7 +1246,7 @@ export async function runE2E(): Promise<number> {
     author: 'Someone',
     sourceUrl: null
   })
-  const other = await applyPlan(otherPlan.planId, risky.id)
+  const other = await applyPlan(otherPlan.planId, risky.id, { acknowledgedUnparsedReadme: false })
   check('pack: a second mod shipping the same loader is installed alongside', other.installId !== packA.installId)
 
   const sharedFile = path.join(game, 'vorbisFile.dll')
@@ -1087,7 +1289,7 @@ export async function runE2E(): Promise<number> {
     author: 'Junior_Djjr',
     sourceUrl: null
   })
-  const story = await applyPlan(storyPlan.planId, risky.id)
+  const story = await applyPlan(storyPlan.planId, risky.id, { acknowledgedUnparsedReadme: false })
   const countNamed = (needle: string): number =>
     listInstalled(risky.id).filter((m) => m.title.toLowerCase().includes(needle.toLowerCase())).length
 
@@ -1116,7 +1318,7 @@ export async function runE2E(): Promise<number> {
     author: 'Junior_Djjr',
     sourceUrl: null
   })
-  const again = await applyPlan(againPlan.planId, risky.id)
+  const again = await applyPlan(againPlan.planId, risky.id, { acknowledgedUnparsedReadme: false })
   check('one entry: installing it again still leaves one entry', countNamed('Story Mode') === 1, listInstalled(risky.id).map((m) => m.title))
   check('one entry: and the file survived the replacement', fs.existsSync(path.join(game, 'scripts', 'TrilogyChaosMod.SA.asi')))
   void story
@@ -1253,8 +1455,130 @@ export async function runE2E(): Promise<number> {
     looseCheck.detail
   )
 
+  // --- item 17: a readme nobody could parse is never installed silently -----
+  // The ask-first rule has to hold where the install happens, not only in the
+  // plan dialog: every other caller - this suite included - would otherwise
+  // install an archive whose instructions the app failed to read. The readme
+  // below is cp1252 prose with no instruction line in it.
+  const opaque = path.join(tmp, 'opaque-readme-mod')
+  await fsp.mkdir(opaque, { recursive: true })
+  await fsp.writeFile(path.join(opaque, 'OpaqueMod.asi'), fakePe(4096, 0x60000000, 0x2102))
+  await fsp.writeFile(
+    path.join(opaque, 'Leiame (ou morra).txt'),
+    Buffer.from('Obrigado por baixar meu mod!\r\nQualquer dúvida, comente no post.\r\n', 'latin1')
+  )
+  const opaquePlan = await createPlan({
+    archivePath: opaque,
+    profileId: risky.id,
+    modId: null,
+    modVersionId: null,
+    title: 'Opaque Mod',
+    author: 'Desconhecido',
+    sourceUrl: null
+  })
+  check(
+    'ask first: the plan says the readme could not be parsed',
+    opaquePlan.warnings.some((w) => w.code === 'readme-unparsed'),
+    opaquePlan.warnings.map((w) => w.code)
+  )
+  let readmeRefusal: string | null = null
+  try {
+    await applyPlan(opaquePlan.planId, risky.id, { acknowledgedUnparsedReadme: false })
+  } catch (e) {
+    readmeRefusal = (e as Error).message
+  }
+  check('ask first: applying it without an acknowledgement is refused', !!readmeRefusal, readmeRefusal)
+  check(
+    'ask first: and the refusal wrote nothing',
+    !fs.existsSync(path.join(game, 'scripts', 'OpaqueMod.asi')) && !fs.existsSync(path.join(game, 'OpaqueMod.asi')),
+    readmeRefusal
+  )
+  const ackedInstall = await applyPlan(opaquePlan.planId, risky.id, { acknowledgedUnparsedReadme: true })
+  check('ask first: the same plan installs once the user acknowledges it', ackedInstall.written > 0, ackedInstall)
+
   await fsp.rm(path.join(game, looseName), { force: true })
   await fsp.rm(path.join(game, 'scripts', looseName), { force: true })
+
+  // --- item 14: a blocking finding actually refuses the launch --------------
+  // The field report's stream.ini asked for 13500 MB of streaming memory on a
+  // 32-bit process. The panel called it blocking and the Play button beside it
+  // started the game anyway. planLaunch IS that wiring - the IPC handler does
+  // nothing but carry out the plan - so this is the fix under test, against a
+  // real game folder and a real database.
+  //
+  // Imported here rather than at the top of the file: this module's import
+  // block is edited by several tasks at once.
+  const { planLaunch } = await import('./game/launch')
+  const { forgetHealthReport, storedHealthReport } = await import('./diagnostics/healthCache')
+
+  const streamIni = path.join(game, 'stream.ini')
+  await fsp.writeFile(streamIni, '[Streaming]\r\nStreaming Memory=13500\r\n', 'latin1')
+  forgetHealthReport()
+
+  const blockedPlan = await planLaunch()
+  const streamBlocker = blockedPlan.verdict.blockers.find((b) => b.id === 'stream-ini')
+  check(
+    'launch: stream.ini at 13500 MB with no limit adjuster refuses the launch',
+    blockedPlan.refusal !== null && !!streamBlocker,
+    blockedPlan.verdict.blockers
+  )
+  check(
+    'launch: the refusal names the finding instead of counting it',
+    (blockedPlan.refusal?.message ?? '').includes('13500'),
+    blockedPlan.refusal?.message
+  )
+
+  // Pressing Play twice must not run sixteen checks twice.
+  const reusedFrom = storedHealthReport().report?.generatedAt
+  await planLaunch()
+  check(
+    'launch: a second Play reuses the stored report instead of re-running every check',
+    !!reusedFrom && storedHealthReport().report?.generatedAt === reusedFrom,
+    { reusedFrom, now: storedHealthReport().report?.generatedAt }
+  )
+
+  // ...and the reuse must never outlive the thing it described. No forgetting
+  // here on purpose: rewriting stream.ini has to invalidate it by itself.
+  await fsp.writeFile(streamIni, '[Streaming]\r\nStreaming Memory=2048\r\n', 'latin1')
+  const fixedPlan = await planLaunch()
+  check(
+    'launch: rewriting stream.ini invalidates the stored report - the refusal lifts at once',
+    fixedPlan.refusal === null && fixedPlan.verdict.allowed,
+    fixedPlan.verdict.blockers
+  )
+
+  // "Launch anyway" is the user answering a refusal they have read.
+  await fsp.writeFile(streamIni, '[Streaming]\r\nStreaming Memory=13500\r\n', 'latin1')
+  const stillBlocked = await planLaunch()
+  const forcedPlan = await planLaunch(true)
+  check(
+    'launch: the override clears the refusal that still stands without it',
+    stillBlocked.refusal !== null && forcedPlan.refusal === null && forcedPlan.verdict.allowed,
+    { blocked: stillBlocked.verdict.blockers, forced: forcedPlan.verdict.blockers }
+  )
+
+  // No active profile is a reachable state, and this stream.ini is just as
+  // fatal without one. It used to skip the gate entirely and launch.
+  const activeBefore = (getDb().prepare('SELECT id FROM profile WHERE is_active = 1').get() as { id: number } | undefined)?.id
+  getDb().prepare('UPDATE profile SET is_active = 0').run()
+  forgetHealthReport()
+  const noProfilePlan = await planLaunch()
+  check(
+    'launch: with no active profile the game-level checks still run, and stream.ini still refuses',
+    noProfilePlan.profileId === null && noProfilePlan.verdict.blockers.some((b) => b.id === 'stream-ini'),
+    { profileId: noProfilePlan.profileId, blockers: noProfilePlan.verdict.blockers }
+  )
+  const noProfileReport = storedHealthReport().report
+  check(
+    'launch: and the profile-scoped checks stand down instead of lying about an empty profile',
+    noProfileReport?.checks.find((c) => c.id === 'textures')?.status === 'skip' &&
+      noProfileReport?.checks.find((c) => c.id === 'stream-ini')?.status === 'fail',
+    noProfileReport?.checks.map((c) => `${c.id}:${c.status}`)
+  )
+  if (activeBefore) getDb().prepare('UPDATE profile SET is_active = 1 WHERE id = ?').run(activeBefore)
+  await fsp.rm(streamIni, { force: true })
+  forgetHealthReport()
+
 
   getDb().prepare('DELETE FROM profile').run()
   await fsp.rm(tmp, { recursive: true, force: true }).catch(() => undefined)
