@@ -118,7 +118,7 @@ import {
   matchEarlyHook,
   spellFolderName
 } from '../src/shared/loadOrder'
-import { findOrphanConfigs, orphanPluginFolder } from '../src/shared/orphanConfigs'
+import { findOrphanConfigs, orphanOwningProfiles, orphanPluginFolder } from '../src/shared/orphanConfigs'
 import {
   disableOnDisk,
   enableOnDisk,
@@ -4075,10 +4075,10 @@ check(
     ],
     asiRelative: 'scripts',
     tracked: [
-      'modloader/GInput/GInputSA.asi',
-      'modloader/GInput/GInput.ini',
-      'scripts/SilentPatchSA.asi',
-      'modloader/Cool Cars/infernus.dff'
+      { relativePath: 'modloader/GInput/GInputSA.asi', installId: 11, profileId: 1 },
+      { relativePath: 'modloader/GInput/GInput.ini', installId: 11, profileId: 1 },
+      { relativePath: 'scripts/SilentPatchSA.asi', installId: 12, profileId: 1 },
+      { relativePath: 'modloader/Cool Cars/infernus.dff', installId: 13, profileId: 1 }
     ]
   })
   const byName = (n: string): (typeof found)[number] | undefined => found.find((f) => f.config === n)
@@ -4103,6 +4103,38 @@ check(
   check(
     'field audit 12: the game own configs are never orphans',
     !byName('modloader.ini') && !byName('stream.ini')
+  )
+  check(
+    're-review: the move-back names the install whose rows put the plugin there, so the fix can scope its UPDATE',
+    byName('GInputSA.ini')?.owners.length === 1 &&
+      byName('GInputSA.ini')?.owners[0].installId === 11 &&
+      byName('GInputSA.ini')?.owners[0].profileId === 1 &&
+      byName('FramerateVigilante.ini')?.owners.length === 0,
+    byName('GInputSA.ini')?.owners
+  )
+
+  // The same mod installed in two profiles: two installs, two sets of rows,
+  // one identical relative_path, and ONE file on disk. Nothing can say whose
+  // that file is, so the finding reports both owners and the fix refuses.
+  const shared = findOrphanConfigs({
+    entries: ['GInputSA.ini'],
+    asiRelative: 'scripts',
+    tracked: [
+      { relativePath: 'modloader/GInput/GInputSA.asi', installId: 21, profileId: 1 },
+      { relativePath: 'modloader/GInput/GInputSA.asi', installId: 22, profileId: 2 }
+    ]
+  })
+  check(
+    're-review: a plugin recorded by two profiles at one path reports both owners, not the first one found',
+    shared.length === 1 &&
+      shared[0].owners.length === 2 &&
+      orphanOwningProfiles(shared[0]).sort().join(',') === '1,2',
+    shared[0]?.owners
+  )
+  check(
+    're-review: a plugin recorded by one profile only has one owning profile, so the fix has a scope',
+    orphanOwningProfiles(byName('GInputSA.ini')!).length === 1,
+    orphanOwningProfiles(byName('GInputSA.ini')!)
   )
 }
 

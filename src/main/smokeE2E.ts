@@ -41,7 +41,7 @@ import { listConflicts } from './conflicts'
 import { readIniFile, readKeys, getSection } from './game/modloaderIni'
 import { walk, sha256File, createJunction, isLink, removeLinkOrDir } from './util/fsx'
 import { V1_US_SIZE, V1_US_TIMESTAMP } from './game/pe'
-import { runHealthCheck } from './diagnostics/health'
+import { reuniteOrphans, runHealthCheck } from './diagnostics/health'
 import { duplicateAssetCheck, scanGameTree, scanGameTreeAssets, stackedAdjusterCheck } from './diagnostics/duplicateAssets'
 import { t } from './util/i18n'
 import type { InstalledMod, SubMod } from '@shared/types'
@@ -1892,6 +1892,87 @@ export async function runE2E(): Promise<number> {
   check(
     'adopted uninstall: the uninstall still did its job in the game folder',
     !fs.existsSync(handFile) && !fs.existsSync(looseFile)
+  )
+
+  // --- re-review Important: repairing one profile's orphan must not rewrite
+  // another profile's rows -----------------------------------------------------
+  // reuniteOrphans keyed its UPDATE on relative_path alone. The same mod
+  // installed in two profiles carries the SAME relative_path in both, so
+  // repairing one silently rewrote the other's rows to a layout that profile's
+  // own store has no file at: the install then never materialises, reads as
+  // unresolved on the next switch, and there is no way back but a reinstall.
+  const orphanA = await createProfile({ name: 'Orphan Repair A' })
+  await activateProfile(orphanA.id)
+  const asiDir = activeGame()!.asiDirectory ?? game
+  await fsp.mkdir(path.join(game, 'modloader', 'GInputSA'), { recursive: true })
+  await fsp.mkdir(asiDir, { recursive: true })
+  const orphanPlugin = path.join(game, 'modloader', 'GInputSA', 'GInputSA.asi')
+  await fsp.writeFile(orphanPlugin, fakePe(4096, 0x60000000, 0x2102))
+  await fsp.writeFile(path.join(asiDir, 'GInputSA.ini'), '[Main]\r\nDeadzone=0\r\n')
+  await adoptIntoProfile(orphanA.id)
+  const orphanB = await createProfile({ name: 'Orphan Repair B', copyFrom: orphanA.id })
+  const pluginRows = (profileId: number): string[] =>
+    (
+      getDb()
+        .prepare(
+          `SELECT f.relative_path r FROM install_file f JOIN install i ON i.id = f.install_id
+            WHERE i.profile_id = ? AND lower(f.relative_path) LIKE '%ginputsa.asi'`
+        )
+        .all(profileId) as { r: string }[]
+    ).map((x) => x.r)
+  const providesRows = (profileId: number): string[] =>
+    (
+      getDb()
+        .prepare(
+          `SELECT p.relative_path r FROM provides p JOIN install i ON i.id = p.install_id
+            WHERE i.profile_id = ? AND p.relative_path LIKE '%ginputsa.asi'`
+        )
+        .all(profileId) as { r: string }[]
+    ).map((x) => x.r)
+  check(
+    'orphan repair: both profiles record the plugin at the one same path before anything is repaired',
+    pluginRows(orphanA.id).join(',') === 'modloader/GInputSA/GInputSA.asi' &&
+      pluginRows(orphanB.id).join(',') === 'modloader/GInputSA/GInputSA.asi' &&
+      providesRows(orphanB.id).join(',') === 'ginputsa.asi',
+    { a: pluginRows(orphanA.id), b: pluginRows(orphanB.id), provides: providesRows(orphanB.id) }
+  )
+
+  // With no profile in hand the findings come from every install in the
+  // database, and the single file on disk belongs to none of them in particular.
+  const noProfileRepair = await reuniteOrphans(null)
+  check(
+    'orphan repair: with no profile selected the move is refused rather than guessed at',
+    !noProfileRepair.moved.some((m) => m.includes('GInputSA.asi')) &&
+      noProfileRepair.refused.some((r) => r.includes('GInputSA.asi')) &&
+      fs.existsSync(orphanPlugin) &&
+      pluginRows(orphanA.id).join(',') === 'modloader/GInputSA/GInputSA.asi' &&
+      pluginRows(orphanB.id).join(',') === 'modloader/GInputSA/GInputSA.asi',
+    noProfileRepair
+  )
+
+  const repaired = await reuniteOrphans(orphanA.id)
+  const repairedRel = path.relative(game, path.join(asiDir, 'GInputSA.asi')).split(path.sep).join('/')
+  check(
+    'orphan repair: the plugin is moved back to the ASI directory for the profile that asked',
+    repaired.moved.some((m) => m.startsWith('modloader/GInputSA/GInputSA.asi')) &&
+      !fs.existsSync(orphanPlugin) &&
+      fs.existsSync(path.join(asiDir, 'GInputSA.asi')),
+    repaired
+  )
+  check(
+    'orphan repair: the repaired profile rows follow the file',
+    pluginRows(orphanA.id).join(',') === repairedRel,
+    pluginRows(orphanA.id)
+  )
+  check(
+    're-review Important: the OTHER profile install_file rows are untouched by the repair',
+    pluginRows(orphanB.id).join(',') === 'modloader/GInputSA/GInputSA.asi',
+    { b: pluginRows(orphanB.id), a: pluginRows(orphanA.id) }
+  )
+  check(
+    're-review Important: and so is its provides index - the conflict map still describes its own layout',
+    providesRows(orphanB.id).join(',') === 'ginputsa.asi',
+    { b: providesRows(orphanB.id), a: providesRows(orphanA.id) }
   )
 
   getDb().prepare('DELETE FROM profile').run()

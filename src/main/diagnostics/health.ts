@@ -9,7 +9,12 @@ import { outdatedBuildCheck } from './upstream'
 import { resolveExeName } from '@shared/games'
 import { exists, isLink, moveSafe, timestampSlug, walk } from '../util/fsx'
 import { Paths } from '../util/paths'
-import { findOrphanConfigs, orphanPluginFolder, type OrphanFinding } from '@shared/orphanConfigs'
+import {
+  findOrphanConfigs,
+  orphanOwningProfiles,
+  orphanPluginFolder,
+  type OrphanFinding
+} from '@shared/orphanConfigs'
 import { requireActiveGame } from '../game/detect'
 import { checkGameExe } from '../game/pe'
 import { cachedWriteAccess, probeWriteAccess } from '../game/access'
@@ -620,22 +625,22 @@ function asiRelativeOf(game: GameInstall): string {
  * The orphans and, for each, where its plugin actually went.
  *
  * Shared by the check and by the fix it offers, so the two can never describe
- * different files.
+ * different files. Every recorded path is carried with the install and profile
+ * that owns it: the fix rewrites rows, and a row is owned by an install, never
+ * by a path that several profiles can spell identically.
  */
 export async function orphanFindings(game: GameInstall, profileId: number | null): Promise<OrphanFinding[]> {
   const dir = game.asiDirectory ?? game.path
   if (!game.supportsAsi || !exists(dir)) return []
   const entries: string[] = await fsp.readdir(dir).catch(() => [])
+  type TrackedRow = { relative_path: string; install_id: number; profile_id: number }
+  const select = `SELECT f.relative_path, f.install_id, i.profile_id FROM install_file f
+                    JOIN install i ON i.id = f.install_id`
   const tracked = (
     profileId === null
-      ? (getDb().prepare('SELECT relative_path FROM install_file').all() as { relative_path: string }[])
-      : (getDb()
-          .prepare(
-            `SELECT f.relative_path FROM install_file f JOIN install i ON i.id = f.install_id
-              WHERE i.profile_id = ?`
-          )
-          .all(profileId) as { relative_path: string }[])
-  ).map((r) => r.relative_path)
+      ? (getDb().prepare(select).all() as TrackedRow[])
+      : (getDb().prepare(`${select} WHERE i.profile_id = ?`).all(profileId) as TrackedRow[])
+  ).map((r) => ({ relativePath: r.relative_path, installId: r.install_id, profileId: r.profile_id }))
   return findOrphanConfigs({ entries, asiRelative: asiRelativeOf(game), tracked })
 }
 
@@ -652,6 +657,16 @@ export async function orphanFindings(game: GameInstall, profileId: number | null
  * A plugin sitting inside a junctioned mod folder is refused, not moved: that
  * folder IS Modão's content store, and moving a file out of it would take the
  * only copy with it. The user is told where it is and left to decide.
+ *
+ * THE REWRITE IS SCOPED TO THE INSTALLS THAT OWN THE PATH, never to the path
+ * alone. The same mod in two profiles gives two sets of rows spelling the same
+ * relative_path, and `UPDATE ... WHERE relative_path = ?` would rewrite the
+ * other profile's copy to a layout its own store has no file at - that install
+ * then never materialises and reads as unresolved, with no way back but a
+ * reinstall. And when the owning rows span MORE THAN ONE PROFILE the single
+ * file on disk cannot be attributed to any of them, so the move is refused
+ * outright rather than guessed. That is the usual state with `profileId ===
+ * null`, where the findings are drawn from every install in the database.
  */
 export async function reuniteOrphans(profileId: number | null): Promise<{ moved: string[]; quarantined: string[]; refused: string[] }> {
   const game = requireActiveGame()
@@ -688,13 +703,28 @@ export async function reuniteOrphans(profileId: number | null): Promise<{ moved:
       )
       continue
     }
+    // Nothing moves until the rows that describe it can be named.
+    const ownerIds = f.owners.map((o) => o.installId)
+    if (ownerIds.length === 0) {
+      refused.push(t('checks.orphanRefusedUnowned', { plugin: f.plugin!, path: f.pluginPath!.replace(/\//g, '\\') }))
+      continue
+    }
+    const owningProfiles = orphanOwningProfiles(f)
+    if (owningProfiles.length > 1) {
+      refused.push(t('checks.orphanRefusedShared', { plugin: f.plugin!, count: String(owningProfiles.length) }))
+      continue
+    }
     await moveSafe(from, to)
     const newRel = path.relative(game.path, to).split(path.sep).join('/')
+    const scope = ownerIds.map(() => '?').join(',')
     db.transaction(() => {
-      db.prepare('UPDATE install_file SET relative_path = ? WHERE relative_path = ?').run(newRel, f.pluginPath)
-      db.prepare('UPDATE provides SET relative_path = ? WHERE relative_path = ?').run(
+      db.prepare(
+        `UPDATE install_file SET relative_path = ? WHERE relative_path = ? AND install_id IN (${scope})`
+      ).run(newRel, f.pluginPath, ...ownerIds)
+      db.prepare(`UPDATE provides SET relative_path = ? WHERE relative_path = ? AND install_id IN (${scope})`).run(
         providesKey(newRel),
-        providesKey(f.pluginPath!)
+        providesKey(f.pluginPath!),
+        ...ownerIds
       )
     })()
     moved.push(`${f.pluginPath} → ${newRel}`)

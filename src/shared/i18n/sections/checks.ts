@@ -63,6 +63,10 @@ export const checks = {
       '{count} deles é porque o .asi foi movido para uma pasta de mod. O Modão pode trazer o plugin de volta para a pasta ASI — nada é apagado.',
     orphanItemMoveBack: '{config} — {plugin} está na pasta {folder}, e o lugar dele é {where}',
     orphanItemNoPlugin: '{config} — nenhum {plugin} neste perfil; nada lê esse arquivo',
+    orphanRefusedShared:
+      '{plugin} está registrado em {count} perfis com o mesmo caminho. O arquivo no disco é um só e não dá para saber de qual perfil ele é, então nada foi movido: abra o perfil que você quer arrumar e use o botão lá.',
+    orphanRefusedUnowned:
+      '{plugin} aparece em {path}, mas nenhum mod instalado reivindica esse caminho. Nada foi movido — mova à mão se for isso que você quer.',
     fpsTitle: 'Limite de FPS',
     fpsOk: '{value} FPS — dentro do que o motor aguenta',
     fpsHigh: '{value} FPS — acima de 60 o GTA SA quebra física, animação e missão',
@@ -204,6 +208,10 @@ export const checks = {
       '{count} of them are there because the .asi was moved into a mod folder. Modão can move the plugin back to the ASI directory - nothing is deleted.',
     orphanItemMoveBack: '{config} - {plugin} is in the {folder} folder, and belongs in {where}',
     orphanItemNoPlugin: '{config} - no {plugin} anywhere in this profile; nothing reads it',
+    orphanRefusedShared:
+      '{plugin} is on record in {count} profiles at the same path. There is one file on disk and no way to tell whose it is, so nothing was moved: open the profile you want repaired and use the button there.',
+    orphanRefusedUnowned:
+      '{plugin} is at {path}, but no installed mod claims that path. Nothing was moved - move it by hand if that is what you want.',
     fpsTitle: 'FPS limit',
     fpsOk: '{value} FPS - within what the engine can take',
     fpsHigh: '{value} FPS - above 60 GTA SA breaks physics, animation and missions',
