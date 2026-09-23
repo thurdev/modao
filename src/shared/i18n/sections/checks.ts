@@ -124,6 +124,7 @@ export const checks = {
     stackedDetail:
       'O CrashList avisa explicitamente que empilhar limit adjusters derruba o jogo: dois produtos diferentes reescrevem os mesmos limites, um por cima do outro. Desative todos menos um.',
     stackedItem: '{label}: {paths}',
+    scanCapped: 'A varredura atingiu o limite de arquivos por execução e parou antes de terminar — este resultado é parcial, não uma pasta limpa.',
     unknown: 'desconhecido'
   },
   en: {
@@ -244,6 +245,7 @@ export const checks = {
     stackedDetail:
       'The CrashList warns explicitly that stacking limit adjusters crashes the game: two different products rewrite the same limits, one on top of the other. Disable all but one.',
     stackedItem: '{label}: {paths}',
+    scanCapped: 'The scan hit its per-run file limit and stopped before finishing - this result is partial, not a clean folder.',
     unknown: 'unknown'
   }
 } as const

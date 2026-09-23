@@ -81,6 +81,7 @@ import {
   type UpstreamRelease
 } from '../src/shared/upstream'
 import { createJunction, removeLinkOrDir, walk } from '../src/main/util/fsx'
+import { scanRoots } from '../src/main/diagnostics/duplicateAssets'
 
 let failures = 0
 function check(name: string, cond: boolean, extra?: unknown): void {
@@ -2063,6 +2064,24 @@ check(
   loopWalk
 )
 await removeLinkOrDir(path.join(loopRoot, 'self'))
+
+// --- the scan roots: nested roots are dropped before the walk, not after ----
+// The game-root fallback recurses, unlike the shallow `?? game.path` reads
+// elsewhere, so scripts\, cleo\ and modloader\ being INSIDE the root would
+// otherwise mean walking the same subtrees twice on every health check.
+const gameRootForRoots = path.join('C:', 'Games', 'GTA San Andreas')
+const detectedRoots = scanRoots(gameRootForRoots, path.join(gameRootForRoots, 'scripts'))
+check(
+  'scan roots: with the ASI directory detected, scripts\\ is not listed twice',
+  detectedRoots.length === 3 && detectedRoots[0] === path.join(gameRootForRoots, 'scripts'),
+  detectedRoots
+)
+const fallbackRoots = scanRoots(gameRootForRoots, null)
+check(
+  'scan roots: with no ASI directory detected, the game root swallows the nested ones - one walk, not four',
+  fallbackRoots.length === 1 && fallbackRoots[0] === gameRootForRoots,
+  fallbackRoots
+)
 
 fs.rmSync(tmp, { recursive: true, force: true })
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`)

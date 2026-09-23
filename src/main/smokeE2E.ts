@@ -26,7 +26,8 @@ import { readIniFile, readKeys, getSection } from './game/modloaderIni'
 import { walk, sha256File, createJunction, removeLinkOrDir } from './util/fsx'
 import { V1_US_SIZE, V1_US_TIMESTAMP } from './game/pe'
 import { runHealthCheck } from './diagnostics/health'
-import { duplicateAssetCheck, scanGameTreeAssets } from './diagnostics/duplicateAssets'
+import { duplicateAssetCheck, scanGameTree, scanGameTreeAssets, stackedAdjusterCheck } from './diagnostics/duplicateAssets'
+import { t } from './util/i18n'
 import type { InstalledMod, SubMod } from '@shared/types'
 
 /**
@@ -1042,6 +1043,34 @@ export async function runE2E(): Promise<number> {
     looseCheck.status === 'fail' && !!looseCheck.items?.some((i) => i.includes(path.join('scripts', looseName))),
     looseCheck
   )
+  // --- item 08 review: the fallback walk is capped, and a partial scan says so
+  // Making the game root a scan root means recursing a multi-gigabyte install
+  // inside a check the user is waiting on, so the walk has a per-run budget.
+  // What must never happen is a capped run dressing itself up as a clean folder.
+  const cappedScan = await scanGameTree(looseGame, { maxFiles: 2 })
+  check(
+    'cap: the walk stops at the budget instead of scanning the whole install',
+    cappedScan.capped && cappedScan.assets.length <= 2,
+    { capped: cappedScan.capped, found: cappedScan.assets.length }
+  )
+  const cappedCheck = await duplicateAssetCheck(looseGame, { maxFiles: 2 })
+  check(
+    'cap: the partial scan is reported as partial, not as a clean bill of health',
+    (cappedCheck.detail ?? '').includes(t('checks.scanCapped')),
+    cappedCheck
+  )
+  const cappedStacked = await stackedAdjusterCheck(looseGame, { maxFiles: 2 })
+  check(
+    'cap: the stacked-adjuster check says the same about its own partial scan',
+    (cappedStacked.detail ?? '').includes(t('checks.scanCapped')),
+    cappedStacked
+  )
+  check(
+    'cap: an uncapped scan of the same folder does not claim to be partial',
+    !(looseCheck.detail ?? '').includes(t('checks.scanCapped')),
+    looseCheck.detail
+  )
+
   await fsp.rm(path.join(game, looseName), { force: true })
   await fsp.rm(path.join(game, 'scripts', looseName), { force: true })
 
