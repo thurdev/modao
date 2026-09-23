@@ -83,6 +83,12 @@ import {
 } from '../src/shared/upstream'
 import { createJunction, removeLinkOrDir, walk } from '../src/main/util/fsx'
 import { scanRoots } from '../src/main/diagnostics/duplicateAssets'
+import type { HealthCheck, HealthReport } from '../src/shared/types'
+import { blockersFromReport, describeBlockers, launchGate, type LaunchBlocker } from '../src/shared/launchGate'
+import { cleoPluginRequirements, cleoRequirementStatus } from '../src/shared/cleoPlugins'
+import { satisfiesRange } from '../src/shared/versionRange'
+import { gameRootPlacements } from '../src/shared/asiData'
+import type { ReadmeParse } from '../src/shared/types'
 
 let failures = 0
 function check(name: string, cond: boolean, extra?: unknown): void {
@@ -2263,6 +2269,303 @@ check(
   'scan roots: with no ASI directory detected, the game root swallows the nested ones - one walk, not four',
   fallbackRoots.length === 1 && fallbackRoots[0] === gameRootForRoots,
   fallbackRoots
+)
+
+// --- field audit item 11: the binary decides where an .asi's data goes -------
+// VHud.asi carries "VHud\data\blips.dat" and "VHud\fonts\%s". Those are
+// relative paths, GTA's working directory is the GAME ROOT, and Mod Loader does
+// not change it - so the data has to exist at <game root>\VHud\, whatever
+// folder the .asi itself is installed into. Splitting the two is what printed
+// "No handler or callme" for ~250 files and left the HUD absent.
+{
+  const dataRoot = path.join(tmp, 'asi-data-root')
+  const put = (rel: string, content: Buffer | string = 'x'): void => {
+    const p = path.join(dataRoot, rel)
+    fs.mkdirSync(path.dirname(p), { recursive: true })
+    fs.writeFileSync(p, content)
+  }
+  put(
+    'VHud.asi',
+    pe(
+      [`VHud${BS}data${BS}blips.dat`, `VHud${BS}blips`, `VHud${BS}map`, 'VHud.ini'],
+      [`VHud${BS}fonts${BS}%s`, 'SilentPatch is installed.']
+    )
+  )
+  put('VHud/data/blips.dat')
+  put('VHud/fonts/pricedown.txd')
+  put('VHud/blips/radar_ammu.png')
+
+  const out = await classifyTree(dataRoot, { asiRelative: 'scripts', readmes: [], fallbackName: 'VHud' }, {})
+  const to = (needle: string): string | undefined =>
+    out.files.find((f) => f.sourcePath.toLowerCase().endsWith(needle.toLowerCase()))?.targetRelative
+
+  check(
+    'field audit 11: the .asi is never lifted away from its own files',
+    to('VHud.asi') === 'modloader/VHud/VHud.asi',
+    to('VHud.asi')
+  )
+  check(
+    'field audit 11: a file the binary names by relative path is installed at the game root',
+    to('VHud/data/blips.dat') === 'VHud/data/blips.dat',
+    to('VHud/data/blips.dat')
+  )
+  check(
+    'field audit 11: a UTF-16 string ("VHud\\fonts\\%s") places the folder it enumerates too',
+    to('VHud/fonts/pricedown.txd') === 'VHud/fonts/pricedown.txd',
+    to('VHud/fonts/pricedown.txd')
+  )
+  check(
+    'field audit 11: a folder the binary names without a file ("VHud\\blips") goes with it',
+    to('VHud/blips/radar_ammu.png') === 'VHud/blips/radar_ammu.png',
+    to('VHud/blips/radar_ammu.png')
+  )
+  check(
+    'field audit 11: none of the data is left where the plugin cannot reach it',
+    !out.files.some((f) => f.targetRelative.toLowerCase().startsWith('modloader/vhud/') && !/\.asi$/i.test(f.targetRelative)),
+    out.files.map((f) => f.targetRelative)
+  )
+  check(
+    'field audit 11: the install says which string in the binary decided it',
+    out.warnings.some((w) => w.code === 'asi-data-root' && (w.detail ?? '').includes(`VHud${BS}data${BS}blips.dat`)),
+    out.warnings.filter((w) => w.code === 'asi-data-root').map((w) => w.detail)
+  )
+  check(
+    'field audit 11: reading the plugin is not thrown away - the caller gets the evidence back',
+    out.asiEvidence['VHud.asi']?.rootFolder === 'VHud',
+    Object.keys(out.asiEvidence)
+  )
+
+  // A readme is an instruction; this is an inference. The instruction wins, and
+  // the disagreement is put in front of the user instead of being swallowed.
+  const saysModloader = {
+    file: 'leiame.txt',
+    raw: 'Coloque a pasta VHud na pasta modloader',
+    instructions: [{ folder: 'VHud', destination: 'modloader-folder' as const, line: 'Coloque a pasta VHud na pasta modloader' }],
+    declared: [],
+    variantHints: []
+  }
+  const obeyed = await classifyTree(
+    dataRoot,
+    { asiRelative: 'scripts', readmes: [saysModloader as unknown as ReadmeParse], fallbackName: 'VHud' },
+    {}
+  )
+  const obeyedTo = (needle: string): string | undefined =>
+    obeyed.files.find((f) => f.sourcePath.toLowerCase().endsWith(needle.toLowerCase()))?.targetRelative
+  check(
+    'field audit 11: a readme that names the folder outranks the binary',
+    obeyedTo('VHud/data/blips.dat') === 'modloader/VHud/data/blips.dat',
+    obeyedTo('VHud/data/blips.dat')
+  )
+  check(
+    'field audit 11: and the disagreement is surfaced rather than swallowed',
+    obeyed.warnings.some((w) => w.code === 'asi-data-readme'),
+    obeyed.warnings.map((w) => w.code)
+  )
+}
+
+// GInput is the same rule with a vanilla folder name: its strings name
+// models\x360btns.txd and friends, and without them at <game root>\models\ it
+// prints "GInput could not load pad button textures... The game will now close."
+{
+  const ginput = path.join(tmp, 'ginput')
+  const put = (rel: string, content: Buffer | string = 'x'): void => {
+    const p = path.join(ginput, rel)
+    fs.mkdirSync(path.dirname(p), { recursive: true })
+    fs.writeFileSync(p, content)
+  }
+  const pads = ['x360btns.txd', 'ps3btns.txd', 'sixaxis.txd', 'pcbtns.txd']
+  put(
+    'GInputSA.asi',
+    pe(
+      [...pads.map((n) => `models${BS}${n}`), 'GInput could not load pad button textures.', 'GInput.ini'],
+      [`models${BS}x360btns.txd`]
+    )
+  )
+  for (const n of pads) put(`models/${n}`)
+  put('GInput.ini', '[Main]')
+
+  const out = await classifyTree(ginput, { asiRelative: 'scripts', readmes: [], fallbackName: 'GInput' }, {})
+  const to = (needle: string): string | undefined =>
+    out.files.find((f) => f.sourcePath.toLowerCase().endsWith(needle.toLowerCase()))?.targetRelative
+  check(
+    'field audit 11: GInput\'s pad textures land at <game root>\\models\\',
+    pads.every((n) => to(`models/${n}`) === `models/${n}`),
+    pads.map((n) => to(`models/${n}`))
+  )
+  check(
+    'field audit 11: and they are installed as game-root files, not mod-folder assets',
+    out.files.filter((f) => /btns\.txd$|sixaxis\.txd$/i.test(f.targetRelative)).every((f) => f.destination === 'root-file'),
+    out.files.map((f) => `${f.targetRelative}:${f.destination}`)
+  )
+  check(
+    'field audit 11: the .asi stays in its mod folder even when its data leaves',
+    to('GInputSA.asi') === 'modloader/GInput/GInputSA.asi',
+    to('GInputSA.asi')
+  )
+  check(
+    'field audit 11: a config the binary does not name by path is left beside the plugin',
+    to('GInput.ini') === 'modloader/GInput/GInput.ini',
+    to('GInput.ini')
+  )
+}
+
+// The placement rule itself, without touching a disk.
+check(
+  'asi data: a path the plugin never names is left alone',
+  gameRootPlacements([`models${BS}x360btns.txd`], 'GInput', ['data/handling.cfg']).length === 0
+)
+check(
+  'asi data: a drive-absolute string from the author\'s machine is ignored',
+  gameRootPlacements([`C:${BS}dev${BS}VHud${BS}data${BS}x.dat`], 'VHud', ['data/x.dat']).length === 0
+)
+check(
+  'asi data: the plugin\'s own folder name in front of the path is understood',
+  gameRootPlacements([`VHud${BS}data${BS}blips.dat`], 'VHud', ['data/blips.dat'])[0]?.rootTarget === 'VHud/data/blips.dat'
+)
+check(
+  'asi data: casing in the binary does not have to match the archive',
+  gameRootPlacements([`MODELS${BS}X360BTNS.TXD`], 'GInput', ['models/x360btns.txd'])[0]?.rootTarget === 'models/x360btns.txd'
+)
+
+
+// --- the launch gate -------------------------------------------------------
+// `HealthReport.blocking` was computed on every health run and consulted by
+// nobody: the panel named the 13500 MB stream.ini as blocking and the Play
+// button beside it started the game anyway. The gate is pure on purpose - it
+// takes a report and returns a decision - so this is the whole contract.
+function healthCheckRow(id: string, status: HealthCheck['status'], summary: string): HealthCheck {
+  return { id, title: id.toUpperCase(), status, summary }
+}
+function healthReportOf(checks: HealthCheck[]): HealthReport {
+  return {
+    generatedAt: new Date().toISOString(),
+    profileId: 1,
+    gamePath: 'C:\Games\GTA San Andreas',
+    checks,
+    ok: checks.every((c) => c.status !== 'fail'),
+    blocking: checks.filter((c) => c.status === 'fail').length,
+    warnings: checks.filter((c) => c.status === 'warn').length
+  }
+}
+
+const blockedReport = healthReportOf([
+  healthCheckRow('exe', 'pass', 'v1.0 US'),
+  healthCheckRow('stream-ini', 'fail', 'stream.ini asks for 13500 MB with no limit adjuster'),
+  healthCheckRow('fps-cap', 'warn', 'frame limit is 120')
+])
+const blockedVerdict = launchGate(blockedReport)
+check(
+  'launch gate: a report with a blocking finding refuses the launch',
+  blockedVerdict.allowed === false && blockedVerdict.blockers.length === 1 && blockedVerdict.blockers[0].id === 'stream-ini',
+  blockedVerdict
+)
+check(
+  'launch gate: the refusal names the finding instead of counting it',
+  describeBlockers(blockedVerdict.blockers).includes('13500 MB') && blockedVerdict.warnings === 1,
+  describeBlockers(blockedVerdict.blockers)
+)
+
+const warnOnlyVerdict = launchGate(
+  healthReportOf([
+    healthCheckRow('fps-cap', 'warn', 'frame limit is 120'),
+    healthCheckRow('textures', 'warn', '3 non-power-of-two textures'),
+    healthCheckRow('loose-files', 'warn', '900 loose files')
+  ])
+)
+check(
+  'launch gate: warnings alone never block - a warning nobody can click past is a warning nobody reads',
+  warnOnlyVerdict.allowed === true && warnOnlyVerdict.blockers.length === 0 && warnOnlyVerdict.warnings === 3,
+  warnOnlyVerdict
+)
+
+const cleanVerdict = launchGate(
+  healthReportOf([
+    healthCheckRow('exe', 'pass', 'v1.0 US'),
+    healthCheckRow('modloader-log', 'skip', 'no log yet'),
+    healthCheckRow('write-access', 'unknown', 'not checked this run: the game is open')
+  ])
+)
+check(
+  'launch gate: a clean report launches, and an unanswered check is not a finding',
+  cleanVerdict.allowed === true && cleanVerdict.blockers.length === 0,
+  cleanVerdict
+)
+check('launch gate: no report at all does not invent a refusal', launchGate(null).allowed === true)
+
+// Task 7 blocks on an unsatisfied hard dependency through this same list
+// rather than through a second gate of its own.
+const extra: LaunchBlocker = { id: 'dependency:silentpatch', title: 'SilentPatch', summary: 'required and not installed' }
+const extraVerdict = launchGate(healthReportOf([healthCheckRow('exe', 'pass', 'v1.0 US')]), [extra])
+check(
+  'launch gate: a reason from outside the health report refuses exactly like a failing check',
+  extraVerdict.allowed === false && extraVerdict.blockers.length === 1 && extraVerdict.blockers[0].id === 'dependency:silentpatch',
+  extraVerdict
+)
+check(
+  'launch gate: blockersFromReport keeps report order and drops everything that is not a fail',
+  blockersFromReport(blockedReport).map((b) => b.id).join(',') === 'stream-ini',
+  blockersFromReport(blockedReport)
+)
+
+// --- CLEO, per plugin ------------------------------------------------------
+// The rule used to be one hardcoded line: CLEO+ needs 4.4. Against CLEO 4.3
+// CLEO+ throws "The ordinal 22 could not be located in the dynamic link
+// library CLEO+.cleo" before the menu appears - and that case has to keep
+// working while a plugin nobody wrote code for is covered by its own declared
+// requirement.
+const cleoPlus43 = cleoPluginRequirements([{ path: 'CLEO/CLEO+.cleo' }], '4.3')
+check(
+  'cleo: CLEO+ against CLEO 4.3 fails the check (the ordinal-22 dialog)',
+  cleoPlus43.length === 1 && cleoPlus43[0].satisfied === false && cleoPlus43[0].range === '>=4.4' &&
+    cleoRequirementStatus(cleoPlus43) === 'fail',
+  cleoPlus43
+)
+const cleoPlus44 = cleoPluginRequirements([{ path: 'cleo/cleo+.cleo' }], '4.4.4')
+check(
+  'cleo: CLEO+ against CLEO 4.4.4 passes',
+  cleoPlus44.length === 1 && cleoPlus44[0].satisfied === true && cleoRequirementStatus(cleoPlus44) === 'pass',
+  cleoPlus44
+)
+const futurePlugin = cleoPluginRequirements(
+  [{ path: 'cleo/SomethingNobodyWroteCodeFor.cleo', declaredRanges: ['>= 5.0'] }],
+  '4.4.4'
+)
+check(
+  'cleo: a plugin the app has never heard of is gated by its own declared requirement, with no code change',
+  futurePlugin.length === 1 && futurePlugin[0].source === 'declared' && futurePlugin[0].satisfied === false &&
+    cleoRequirementStatus(futurePlugin) === 'fail',
+  futurePlugin
+)
+const perPlugin = cleoPluginRequirements(
+  [
+    { path: 'cleo/CLEO+.cleo' },
+    { path: 'cleo/SilentPatchSA.cleo' },
+    { path: 'cleo/cleo_plus.ini' },
+    { path: 'cleo/script.cs' }
+  ],
+  '4.3'
+)
+check(
+  'cleo: every .cleo plugin is judged on its own, and non-plugin files in cleo\ are not',
+  perPlugin.length === 1 && perPlugin[0].name === 'CLEO+',
+  perPlugin
+)
+const declaredWins = cleoPluginRequirements([{ path: 'cleo/CLEO+.cleo', declaredRanges: ['>=4.3'] }], '4.3')
+check(
+  'cleo: what the plugin declares outranks the built-in fallback',
+  declaredWins.length === 1 && declaredWins[0].source === 'declared' && declaredWins[0].satisfied === true,
+  declaredWins
+)
+const unreadableCleo = cleoPluginRequirements([{ path: 'cleo/CLEO+.cleo' }], null)
+check(
+  'cleo: an unreadable CLEO version is unknown, never fine',
+  unreadableCleo[0].satisfied === null && cleoRequirementStatus(unreadableCleo) === 'warn',
+  unreadableCleo
+)
+check(
+  'cleo: version ranges still compare the way the resolver compared them',
+  satisfiesRange('4.4.4', '>=4.4') && !satisfiesRange('4.3', '>=4.4') && satisfiesRange('4.3', null),
+  null
 )
 
 fs.rmSync(tmp, { recursive: true, force: true })

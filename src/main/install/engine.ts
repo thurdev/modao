@@ -216,12 +216,17 @@ async function buildPlan(planId: string, meta: BuildMeta): Promise<InstallPlan> 
   const archiveFiles = (await walk(extractRoot)).map((f) => f.rel)
   const signature = signatureForArchive(archiveFiles, readmes[0]?.raw ?? null)
   learnFromReadme(signature, readmes)
+  const { pluginEvidence } = await import('../formats/strings')
   for (const file of archiveFiles) {
     if (!/\.asi$/i.test(file)) continue
-    const buf = await fsp.readFile(path.join(extractRoot, file)).catch(() => null)
-    if (!buf) continue
-    const { pluginEvidence } = await import('../formats/strings')
-    const evidence = pluginEvidence(buf)
+    // Classification already read the plugins whose placement depended on it;
+    // reading the same binary a second time buys nothing.
+    let evidence = classified.asiEvidence[file]
+    if (!evidence) {
+      const buf = await fsp.readFile(path.join(extractRoot, file)).catch(() => null)
+      if (!buf) continue
+      evidence = pluginEvidence(buf)
+    }
     learnFromBinary(signature, path.basename(file), evidence.probes, evidence.rootFolder)
   }
   const known = knownAbout(signature)

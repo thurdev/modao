@@ -10,6 +10,8 @@ import type {
 } from '@shared/types'
 import { walk } from '../util/fsx'
 import { findVariantHint } from './readme'
+import { pluginEvidence, type PluginEvidence } from '../formats/strings'
+import { gameRootPlacements, type DataPlacement } from '@shared/asiData'
 import {
   addOnParentName,
   addOnRelativePath,
@@ -44,6 +46,41 @@ export interface ClassifyResult {
   docs: string[]
   /** Add-on folders offered beside the plan - enable to merge or install separately. */
   addOns: AddOn[]
+  /**
+   * What each .asi that was read says about itself, keyed by its path inside the
+   * archive. Handed back so the caller does not read the same binaries again.
+   */
+  asiEvidence: Record<string, PluginEvidence>
+}
+
+/**
+ * Reading a plugin's strings costs one file read plus a scan of it, and
+ * classification runs on every install, so the work is bounded three ways: only
+ * an .asi that owns resources is ever read (a bare loader's placement is
+ * already settled), at most this many are read per archive, and only the head
+ * of each one is - a PE keeps its .rdata literals far below these limits, and
+ * anything bigger than the cap is not a plugin worth guessing about.
+ */
+const MAX_ASI_PROBES = 8
+const MAX_ASI_SIZE = 32 * 1024 * 1024
+const PROBE_HEAD_BYTES = 8 * 1024 * 1024
+
+/** Reads at most `max` bytes from the front of a file. */
+async function readHead(abs: string, max: number): Promise<Buffer | null> {
+  let handle: Awaited<ReturnType<typeof fsp.open>> | null = null
+  try {
+    handle = await fsp.open(abs, 'r')
+    const st = await handle.stat()
+    const len = Math.min(st.size, max)
+    if (len <= 0) return null
+    const buf = Buffer.alloc(len)
+    await handle.read(buf, 0, len, 0)
+    return buf
+  } catch {
+    return null
+  } finally {
+    await handle?.close().catch(() => undefined)
+  }
 }
 
 const ASSET_EXT = /\.(dff|txd|ifp|col|ide|ipl|dat|img|fxp|cfg|wav|mp3|bik|rrr|ifs)$/i
@@ -268,6 +305,8 @@ export async function classifyTree(
   const docs: string[] = []
   const files: PlannedFile[] = []
   const addOns: AddOn[] = []
+  const asiEvidence: Record<string, PluginEvidence> = {}
+  let probesLeft = MAX_ASI_PROBES
 
   const excluded: string[] = []
   const chosenPaths = new Set<string>()
@@ -561,6 +600,92 @@ export async function classifyTree(
   )
 
   /**
+   * Rule 2: ask the plugin itself where its files go.
+   *
+   * The archive's folder names are a guess; the strings compiled into the .asi
+   * are what the plugin actually passes to the game's file APIs. Only an .asi
+   * that owns resources is read, and only once.
+   */
+  async function probeAsi(ref: { rel: string; abs: string; size: number }): Promise<PluginEvidence | null> {
+    const cached = asiEvidence[ref.rel]
+    if (cached) return cached
+    if (probesLeft <= 0 || ref.size > MAX_ASI_SIZE) return null
+    probesLeft -= 1
+    const buf = await readHead(ref.abs, PROBE_HEAD_BYTES)
+    if (!buf) return null
+    const evidence = pluginEvidence(buf)
+    asiEvidence[ref.rel] = evidence
+    return evidence
+  }
+
+  /**
+   * Moves the files the plugin names in its own strings out to the game root.
+   *
+   * GTA's working directory is the game folder and Mod Loader does not change
+   * it, so "VHud\data\blips.dat" resolves from <game root>\ wherever the .asi
+   * ends up. The .asi stays in its mod folder - it is never lifted away from
+   * what it ships with - but the data it opens by relative path has to exist
+   * where the plugin will look for it.
+   *
+   * A readme that says otherwise outranks this: it is an instruction, and this
+   * is an inference. The disagreement is surfaced rather than silently taken.
+   */
+  function routeDataToGameRoot(evidence: PluginEvidence, asiName: string, modFolder: string): void {
+    if (evidence.paths.length === 0) return
+    const prefix = `modloader/${modFolder}/`
+    const owned = files.filter(
+      (f) =>
+        f.destination === 'modloader-folder' &&
+        f.targetRelative.toLowerCase().startsWith(prefix.toLowerCase()) &&
+        !/\.(asi|dll)$/i.test(f.targetRelative)
+    )
+    if (owned.length === 0) return
+    const byRel = new Map(owned.map((f) => [f.targetRelative.slice(prefix.length), f]))
+    const placements = gameRootPlacements(evidence.paths, modFolder, [...byRel.keys()])
+
+    const moved: DataPlacement[] = []
+    const refused: DataPlacement[] = []
+    for (const p of placements) {
+      const f = byRel.get(p.bundlePath)
+      if (!f) continue
+      // The readme wins: it named this folder and said where it goes.
+      const readmeSaid =
+        readmeFolders.get(p.rootTarget.split('/')[0].toLowerCase()) ?? readmeFolders.get(modFolder.toLowerCase())
+      if (readmeSaid && readmeSaid !== 'root-file') {
+        refused.push(p)
+        continue
+      }
+      f.targetRelative = p.rootTarget.replace(/\/+/g, '/')
+      f.destination = 'root-file'
+      moved.push(p)
+    }
+
+    if (moved.length > 0) {
+      const quoted = [...new Set(moved.map((p) => p.reason))].slice(0, 4)
+      warnings.push({
+        severity: 'info',
+        code: 'asi-data-root',
+        message: `${asiName} reads ${moved.length} of its files from the game folder, so they were installed there.`,
+        detail:
+          `The plugin carries ${quoted.map((r) => `"${r}"`).join(', ')} inside itself. The game runs from the game ` +
+          'folder and Mod Loader does not change that, so a path written like this resolves from the game folder - ' +
+          `left inside modloader\\${modFolder}\\, the plugin would never find it. ${asiName} itself stays with its ` +
+          'mod folder.'
+      })
+    }
+    if (refused.length > 0) {
+      warnings.push({
+        severity: 'warn',
+        code: 'asi-data-readme',
+        message: `The readme and ${asiName} disagree about where ${refused[0].rootTarget.split('/')[0]}\\ belongs.`,
+        detail:
+          `${asiName} carries "${refused[0].reason}" inside itself, which the game resolves from the game folder. ` +
+          'The readme says otherwise, and the readme was followed - check the mod works before trusting it.'
+      })
+    }
+  }
+
+  /**
    * Rule 1, applied to a whole directory level: if an .asi here owns resources,
    * it and they become one mod folder. Returns the paths that were consumed so
    * the ordinary walk skips them.
@@ -589,6 +714,10 @@ export async function classifyTree(
           consumed.add(sib.rel)
         }
       }
+      // Rule 2: the plugin's own strings get the last word on its data.
+      const evidence = await probeAsi(asi)
+      if (evidence) routeDataToGameRoot(evidence, asi.name, name)
+
       warnings.push({
         severity: 'info',
         code: 'asi-bundle',
@@ -608,7 +737,7 @@ export async function classifyTree(
    * wants the two together, so the .asi is moved into the mod folder that
    * carries its name.
    */
-  function rejoinSplitAsi(): void {
+  async function rejoinSplitAsi(): Promise<void> {
     const asiFiles = files.filter((f) => f.destination === 'asi-plugin')
     for (const asi of asiFiles) {
       const stem = path.basename(asi.targetRelative).replace(/\.asi$/i, '').toLowerCase()
@@ -621,6 +750,14 @@ export async function classifyTree(
       const folder = home.targetRelative.split('/').slice(0, 2).join('/')
       asi.targetRelative = `${folder}/${path.basename(asi.targetRelative)}`
       asi.destination = 'modloader-folder'
+      // Reunited, the same question applies: the .asi stays here, but the data
+      // it names by relative path belongs at the game root.
+      const evidence = await probeAsi({
+        rel: asi.sourcePath,
+        abs: path.join(root, asi.sourcePath),
+        size: asi.size
+      })
+      if (evidence) routeDataToGameRoot(evidence, path.basename(asi.targetRelative), folder.split('/')[1])
       warnings.push({
         severity: 'info',
         code: 'asi-split',
@@ -643,6 +780,15 @@ export async function classifyTree(
       if (!addOnSelections[c.rel]) for (const f of await walk(c.abs)) docs.push(c.rel ? `${c.rel}/${f.rel}` : f.rel)
     }
     await emitDir(tree, 'modloader-folder', `modloader/${ctx.fallbackName}`)
+    // GInput's shape: GInputSA.asi dropped in beside a models\ folder. The pile
+    // installs as one mod, but the plugin opens "models\x360btns.txd" from the
+    // game folder - without it there, it prints "GInput could not load pad
+    // button textures... The game will now close."
+    for (const c of tree.children) {
+      if (c.isDir || !/\.asi$/i.test(c.name) || isExcluded(c.rel)) continue
+      const evidence = await probeAsi(c)
+      if (evidence) routeDataToGameRoot(evidence, c.name, ctx.fallbackName)
+    }
     for (const f of files) {
       if (/^(readme|leiame)/i.test(path.basename(f.sourcePath))) docs.push(f.sourcePath)
     }
@@ -652,7 +798,7 @@ export async function classifyTree(
       if (consumed.has(child.rel)) continue
       await handleNode(child, ctx.fallbackName)
     }
-    rejoinSplitAsi()
+    await rejoinSplitAsi()
   }
 
   // Last, so an add-on's files land on top of the very files they override.
@@ -738,7 +884,8 @@ export async function classifyTree(
     variants,
     warnings,
     docs,
-    addOns
+    addOns,
+    asiEvidence
   }
 }
 
