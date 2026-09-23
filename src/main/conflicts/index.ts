@@ -2,6 +2,7 @@ import path from 'node:path'
 import fsp from 'node:fs/promises'
 import type { ConflictClaimant, FileConflict } from '@shared/types'
 import { findHookCollisions, type HookCollision } from '@shared/hookCollisions'
+import { findSplitModels } from '@shared/splitModels'
 import { getDb } from '../db'
 import { resolveWinner } from '../game/modloaderIni'
 import { storeDir } from '../store/contentStore'
@@ -84,7 +85,82 @@ export function listConflicts(profileId: number, overrides: Record<number, numbe
       binaryNotes: distinct.size <= 1 ? ['Both mods ship identical bytes - the winner does not matter here.'] : []
     })
   }
-  return conflicts.sort((a, b) => b.claimants.length - a.claimants.length || a.relativePath.localeCompare(b.relativePath))
+  conflicts.sort((a, b) => b.claimants.length - a.claimants.length || a.relativePath.localeCompare(b.relativePath))
+  // A split model is the same mechanism - priority deciding which install a
+  // file comes from - applied to a pair of files rather than to one path, so
+  // it belongs in the same list and is fixed with the same control. It is
+  // appended rather than interleaved so the per-path index above keeps its
+  // existing order.
+  return [...conflicts, ...listSplitModelConflicts(profileId, overrides)]
+}
+
+/**
+ * White or invisible cars and peds: `<name>.dff` won by one mod and
+ * `<name>.txd` by another.
+ *
+ * Nothing here is a duplicated path, so `listConflicts` above cannot see it -
+ * the two halves of a model have different names. The rule itself lives in
+ * `@shared/splitModels`, free of the database; this function is the query that
+ * feeds it and the translation of its findings into the shape the Conflicts
+ * screen already knows how to show, priority stepper included.
+ *
+ * The finding says out loud what it is NOT: a streaming memory budget too
+ * small for the installed models whites out vehicles in exactly the same way,
+ * and no priority change fixes that one. The two are distinguished by
+ * construction - this fires only when the two halves demonstrably resolve to
+ * different installs, which a starved budget never causes - and the note says
+ * so, so a user chasing white cars is not sent to the wrong screen.
+ */
+export function listSplitModelConflicts(profileId: number, overrides: Record<number, number> = {}): FileConflict[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT p.install_id, p.relative_path, p.sha256, p.size,
+              i.priority, i.enabled, i.folder_name, i.store_key,
+              m.id AS mod_id, m.title
+         FROM provides p
+         JOIN install i ON i.id = p.install_id
+         JOIN mod_version mv ON mv.id = i.mod_version_id
+         JOIN mod m ON m.id = mv.mod_id
+        WHERE i.profile_id = ?
+          AND (lower(p.relative_path) LIKE '%.dff' OR lower(p.relative_path) LIKE '%.txd')
+        ORDER BY p.relative_path`
+    )
+    .all(profileId) as ProvidesRow[]
+
+  const parts = rows.map((r) => ({
+    installId: r.install_id,
+    modId: r.mod_id,
+    title: r.title,
+    folder: r.folder_name ?? r.title,
+    relativePath: r.relative_path,
+    priority: overrides[r.install_id] ?? r.priority,
+    enabled: !!r.enabled,
+    size: r.size,
+    sha256: r.sha256 ?? ''
+  }))
+
+  return findSplitModels(parts, (candidates) => resolveWinner(candidates)).map((split) => ({
+    relativePath: `${split.stem} (.dff + .txd)`,
+    kind: 'split-model' as const,
+    claimants: split.claimants.map((c) => ({
+      installId: c.installId,
+      modId: c.modId,
+      title: c.title,
+      priority: c.priority,
+      enabled: c.enabled,
+      size: c.size,
+      sha256: c.sha256
+    })),
+    // Neither mod wins the model: one wins the mesh and the other the
+    // textures, which is precisely the problem being reported.
+    winner: null,
+    binaryNotes: [
+      `${split.dff.relativePath} is loaded from ${split.dff.title}, ${split.txd.relativePath} from ${split.txd.title}.`,
+      `${split.shippedTogether[0].title} ships both halves of this model, so the pair was made to match.`,
+      'A starved streaming memory budget whites out models the same way, for a different reason - that one is not ' +
+        'fixed by priority. This finding is not that: these two files demonstrably come from different mods.'
+    ]
+  }))
 }
 
 /** Adds binary-level detail (non-power-of-two textures) to the most contested files. */

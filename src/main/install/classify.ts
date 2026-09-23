@@ -264,6 +264,92 @@ function toVariantTree(node: Node): import('@shared/variantGroups').VariantTreeN
 const SPRITE_FOLDER = /^txd$/i
 
 /**
+ * The other half of the sprite rule, and the half that fails silently.
+ *
+ * "txd" is not a naming convention, it is the switch: Mod Loader loads a .txd
+ * as a sprite texture ONLY when the folder holding it is literally named
+ * "txd". A sprite .txd dropped anywhere else - modloader\<mod>\hud.txd,
+ * modloader\<mod>\models\hud.txd - is matched against the model archives
+ * instead, matches nothing there, and is never loaded. No error, no crash: the
+ * mod installs perfectly and the HUD is simply still the vanilla one.
+ *
+ * These are the names San Andreas keeps in models\txd\, which is exactly the
+ * set the rule is about. A name is the only honest signal here - the file's
+ * bytes say nothing about whether its textures are sprites or a car's paint -
+ * so the list stays limited to files the game itself ships in that folder.
+ */
+const SPRITE_TXD_NAMES =
+  /^(fonts\d*|hud|menu|misc|particle|pcbtns|target|outdoor_pc|fronten\d|fronten_pc|intro\d|splash\d|loadsc\d+|ld_[a-z0-9]{2,5})\.txd$/i
+
+/**
+ * Data files a mod either replaces whole or line-installs into - never both.
+ *
+ * Mod Loader offers two ways to change a data file: ship the complete file, or
+ * ship a .txt holding just the lines to add. They do not compose. The full file
+ * wins and the .txt is never read, so an archive doing both is shipping a .txt
+ * whose every line is dead - and the author, having written the lines, believes
+ * they are live. The usual result is a car that handles like the stock one
+ * however often the .txt is edited.
+ */
+const FULL_DATA_FILES = new Set([
+  'handling.cfg',
+  'vehicles.ide',
+  'default.ide',
+  'peds.ide',
+  'carcols.dat',
+  'carmods.dat',
+  'water.dat',
+  'weapon.dat',
+  'melee.dat',
+  'object.dat',
+  'surface.dat',
+  'ped.dat',
+  'pedgrp.dat',
+  'animgrp.dat',
+  'timecyc.dat',
+  'popcycle.dat',
+  'procobj.dat',
+  'statdisp.dat',
+  'furnitur.dat',
+  'plants.dat',
+  'shopping.dat',
+  'clothes.dat'
+])
+
+/**
+ * The .txt that line-installs into `dataName`, if the archive ships one.
+ *
+ * Named the same way `colHasLoader` reads a COLFILE .txt: by file name, which
+ * is the convention the loader itself documents ("handling.txt" beside, or
+ * instead of, "handling.cfg"). Documentation is excluded explicitly - a
+ * readme sitting beside handling.cfg is not a line-install of anything.
+ */
+function lineInstallFor(files: { sourcePath: string }[], dataName: string): string | null {
+  const lower = dataName.toLowerCase()
+  const stem = lower.replace(/\.[^.]+$/, '')
+  if (!stem) return null
+  for (const f of files) {
+    if (!/\.txt$/i.test(f.sourcePath)) continue
+    const name = (f.sourcePath.split('/').pop() ?? '').toLowerCase()
+    if (/^(readme|leiame|leia-me|changelog|credits|creditos|créditos)/i.test(name)) continue
+    if (name === `${stem}.txt` || name === `${lower}.txt`) return f.sourcePath
+  }
+  return null
+}
+
+/**
+ * Path nodes live inside an .img, so they need a folder named after it.
+ *
+ * nodes0.dat … nodes63.dat are members of gta3.img, not loose files in data\.
+ * Mod Loader replaces a file inside an archive when the mod folder holding it
+ * is named after that archive - the same mechanism that makes "player.img"
+ * work for clothes. Left loose, a nodes file is copied nowhere the game reads
+ * and the paths stay vanilla, which looks like traffic simply ignoring the new
+ * roads.
+ */
+const NODES_DAT = /^nodes\d+\.dat$/i
+
+/**
  * A CLEO script inside a mod keeps its sidecar files only if it sits in that
  * mod's own cleo\ folder. Dropped into the game's cleo\ instead, the script
  * loads and its data files do not.
@@ -847,6 +933,65 @@ export async function classifyTree(
         break
       }
     }
+  }
+
+  // The same rule read forwards: a sprite .txd that is NOT in a "txd" folder
+  // is not a sprite as far as Mod Loader is concerned, and never loads.
+  const strandedSprite = files.find(
+    (f) =>
+      SPRITE_TXD_NAMES.test(path.basename(f.sourcePath)) &&
+      !f.targetRelative.toLowerCase().split('/').some((seg) => SPRITE_FOLDER.test(seg))
+  )
+  if (strandedSprite) {
+    warnings.push({
+      severity: 'warn',
+      code: 'txd-sprite-missing-folder',
+      message: `${path.basename(strandedSprite.sourcePath)} is a sprite texture, but nothing in its path is a folder named "txd".`,
+      detail:
+        'Mod Loader loads a .txd as a sprite only from a folder literally named "txd" - ' +
+        `modloader\\<mod>\\txd\\${path.basename(strandedSprite.sourcePath)}. Anywhere else it is matched against the ` +
+        'model archives, matches nothing, and is never loaded: the mod installs and the HUD, menu or load screen ' +
+        'stays exactly as it was. Move it into a "txd" folder - but move only sprites there, never vehicle, ped, ' +
+        'weapon or map textures.'
+    })
+  }
+
+  // A data file replaced whole and line-installed into at the same time: the
+  // full file wins, so the .txt is dead weight the author thinks is live.
+  for (const f of files) {
+    const name = path.basename(f.sourcePath).toLowerCase()
+    if (!FULL_DATA_FILES.has(name)) continue
+    const txt = lineInstallFor(files, name)
+    if (!txt) continue
+    warnings.push({
+      severity: 'warn',
+      code: 'data-file-mixed',
+      message: `This mod ships a complete ${name} and a ${path.basename(txt)} that adds lines to the same data.`,
+      detail:
+        `Mod Loader does not combine the two: a data file replaced whole is never line-installed into as well, so ` +
+        `${name} wins and every line in ${path.basename(txt)} is silently ignored. Keep one of them - the complete ` +
+        `${name}, or the .txt holding just the lines you are adding - or check the mod really does what the .txt says.`
+    })
+    break
+  }
+
+  // Path nodes belong inside an .img, so they need a folder named after it.
+  const strandedNodes = files.filter(
+    (f) =>
+      NODES_DAT.test(path.basename(f.sourcePath)) &&
+      !f.targetRelative.toLowerCase().split('/').some((seg) => seg.endsWith('.img'))
+  )
+  if (strandedNodes.length > 0) {
+    warnings.push({
+      severity: 'warn',
+      code: 'nodes-folder',
+      message: `${strandedNodes.length === 1 ? path.basename(strandedNodes[0].sourcePath) : `${strandedNodes.length} nodes files`} must sit in a folder named after the .img they belong to.`,
+      detail:
+        'nodes0.dat to nodes63.dat are members of gta3.img, not loose files. Mod Loader replaces a file inside an ' +
+        'archive only when the folder holding it is named after that archive, the same way clothes need a folder ' +
+        'called "player.img". Put them in modloader\\<mod>\\gta3.img\\ - loose, they are copied somewhere the game ' +
+        'never reads and the paths stay vanilla.'
+    })
   }
 
   for (const f of files) {
