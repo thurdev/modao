@@ -14,7 +14,15 @@ import {
   SwitchVerificationError,
   unmanagedContent
 } from './profiles/manager'
-import { listJournals, openJournal, planSwitch, recordManifest, snapshotFiles, verifySnapshot } from './profiles/switchTx'
+import {
+  lastRestorableSwitch,
+  listJournals,
+  openJournal,
+  planSwitch,
+  recordManifest,
+  snapshotFiles,
+  verifySnapshot
+} from './profiles/switchTx'
 import { storeDir } from './store/contentStore'
 import { detectExistingSaves, listSnapshots } from './profiles/saves'
 import { clearCache, storageReport } from './ipc'
@@ -536,7 +544,10 @@ export async function runE2E(): Promise<number> {
   // Drive the swap's own STAGE primitives by hand and stop right after the
   // store write: the exact point a kill leaves the junction showing the
   // incoming bytes with the install row still naming the outgoing option.
-  const iconsJournal = openJournal(adopted.profileId, adopted.profileId)
+  // Opened exactly as `switchVariant` opens one: kind 'variant-swap', and no
+  // profile being left. Anything else would not be the row the boot recovery
+  // looks for - and would be a row "Restore previous state" could pick up.
+  const iconsJournal = openJournal(null, adopted.profileId, 'variant-swap')
   const iconsRollback = await snapshotFiles(storeDir(iconsKey), [iconTarget], path.join(iconsJournal.snapshotDir, 'outgoing'))
   recordManifest(iconsJournal.id, iconsRollback)
   getDb().prepare('UPDATE switch_journal SET variant_swap_json = ? WHERE id = ?').run(
@@ -1585,6 +1596,101 @@ export async function runE2E(): Promise<number> {
   await fsp.rm(streamIni, { force: true })
   forgetHealthReport()
 
+  // --- a variant swap must never be restorable as a profile switch ------------
+  // Every other `restorePreviousState()` in this suite runs with a real
+  // profile-switch journal as the newest row, so the right journal gets picked
+  // by accident of ordering. The field ordering is the opposite and far more
+  // common: switch profile, then adjust a variant. A variant swap writes into
+  // the same `switch_journal` table, reaches the same terminal state, and
+  // leaves `restored_at` NULL - so before the row carried a `kind` it WAS the
+  // newest restorable switch, and "Restore previous state" dematerialised the
+  // entire active profile and put the swap's two-file manifest in its place,
+  // reporting success. This block deliberately builds that ordering.
+  const guardA = await createProfile({ name: 'Journal Guard A' })
+  await activateProfile(guardA.id)
+
+  const guardPlainSrc = path.join(tmp, 'guard-plain')
+  await fsp.mkdir(path.join(guardPlainSrc, 'Guard Plain', 'models'), { recursive: true })
+  await fsp.writeFile(path.join(guardPlainSrc, 'Guard Plain', 'models', 'guard.dff'), 'guard plain bytes')
+  const guardPlainPlan = await createPlan({
+    archivePath: guardPlainSrc,
+    profileId: guardA.id,
+    modId: null,
+    modVersionId: null,
+    title: 'Guard Plain',
+    author: 'Unknown',
+    sourceUrl: null
+  })
+  await applyPlan(guardPlainPlan.planId, guardA.id, { acknowledgedUnparsedReadme: false })
+  await fsp.rm(guardPlainSrc, { recursive: true, force: true })
+
+  const guardSrc = path.join(tmp, 'guard-variants')
+  await fsp.mkdir(path.join(guardSrc, 'Guard 2K', 'data'), { recursive: true })
+  await fsp.mkdir(path.join(guardSrc, 'Guard 4K', 'data'), { recursive: true })
+  await fsp.writeFile(path.join(guardSrc, 'Guard 2K', 'data', 'guard.dat'), 'guard 2k')
+  await fsp.writeFile(path.join(guardSrc, 'Guard 4K', 'data', 'guard.dat'), 'guard 4k')
+  const guardPlan = await createPlan({
+    archivePath: guardSrc,
+    profileId: guardA.id,
+    modId: null,
+    modVersionId: null,
+    title: 'Guard Pack',
+    author: 'Unknown',
+    sourceUrl: null
+  })
+  const guardGroupPlan = guardPlan.variants[0]
+  const guard2k = guardGroupPlan.options.find((o) => o.label.includes('2K'))!
+  const guard4k = guardGroupPlan.options.find((o) => o.label.includes('4K'))!
+  const guardApplied = await applyPlan(
+    (await choose(guardPlan.planId, guardGroupPlan.id, guard2k.id)).planId,
+    guardA.id,
+    { acknowledgedUnparsedReadme: false }
+  )
+  await fsp.rm(guardSrc, { recursive: true, force: true })
+
+  // The real profile switch - the one "Restore previous state" must roll back.
+  const beforeGuardSwitch = await snapshotDir(game)
+  const guardB = await createProfile({ name: 'Journal Guard B' })
+  await activateProfile(guardB.id)
+  const guardSwitchJournal = listJournals(10, 'profile-switch')[0]
+
+  // ...and now a variant swap, with NO profile switch after it.
+  const guardGroupId = listInstalled(guardA.id).find((m) => m.installId === guardApplied.installId)!.variantGroups[0].id
+  await switchVariant(guardApplied.installId, guardGroupId, guard4k.id)
+  const guardNewest = listJournals(10)[0]
+  check(
+    'field audit 09: the variant swap is the newest journal row, and it is marked as a variant swap',
+    guardNewest.kind === 'variant-swap' && guardNewest.id > guardSwitchJournal.id,
+    { newest: guardNewest.id, kind: guardNewest.kind, switch: guardSwitchJournal.id }
+  )
+  check(
+    'field audit 09: the newest RESTORABLE switch is still the profile switch, not the variant swap',
+    lastRestorableSwitch()?.id === guardSwitchJournal.id,
+    { picked: lastRestorableSwitch()?.id, kind: lastRestorableSwitch()?.kind, expected: guardSwitchJournal.id }
+  )
+  check(
+    'field audit 09: switch history never offers a variant swap as a switch',
+    !listJournals(20, 'profile-switch').some((j) => j.id === guardNewest.id)
+  )
+  let guardRefused = false
+  try {
+    await restorePreviousState(guardNewest.id)
+  } catch {
+    guardRefused = true
+  }
+  check('field audit 09: restoring a variant-swap journal by id is refused outright', guardRefused)
+
+  const guardRestore = await restorePreviousState()
+  check(
+    'field audit 09: "Restore previous state" after a variant swap rolls the PROFILE SWITCH back',
+    (await listProfiles()).find((p) => p.isActive)?.id === guardA.id,
+    guardRestore
+  )
+  check(
+    'field audit 09: and it brings the whole profile back, not the variant swap handful of files',
+    sameTree(beforeGuardSwitch, await snapshotDir(game)),
+    diff(beforeGuardSwitch, await snapshotDir(game))
+  )
 
   getDb().prepare('DELETE FROM profile').run()
   await fsp.rm(tmp, { recursive: true, force: true }).catch(() => undefined)

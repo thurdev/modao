@@ -581,7 +581,10 @@ export function registerIpc(): void {
       throw e
     }
   })
-  ipcMain.handle('profiles:switchHistory', () => listJournals())
+  // Switch history means profile switches. A variant swap writes into the same
+  // journal table and would otherwise be listed here as one, inviting a restore
+  // that dematerialises the whole profile.
+  ipcMain.handle('profiles:switchHistory', () => listJournals(20, 'profile-switch'))
   ipcMain.handle('profiles:forgetMissing', async (_e, profileId: number) => {
     const { forgetMissingInstalls } = await import('./profiles/switchTx')
     const forgotten = forgetMissingInstalls(requireProfile(profileId))

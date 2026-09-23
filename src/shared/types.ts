@@ -2,6 +2,7 @@ import type { Language } from './i18n'
 import type { GameKind } from './games'
 import type { OutdatedBuild } from './upstream'
 import type { ActivationCode } from './activation'
+import type { SwitchJournalKind } from './switchJournal'
 /** Shared domain types. Imported by main, preload and renderer. */
 
 export type DestinationClass =
@@ -712,6 +713,12 @@ export interface VariantSwapRecord {
 
 export interface SwitchJournal {
   id: number
+  /**
+   * Which operation wrote this row. Only a 'profile-switch' is a previous
+   * state of the game folder; a 'variant-swap' is a few files inside one
+   * mod's store folder and must never be offered as one.
+   */
+  kind: SwitchJournalKind
   startedAt: string
   completedAt: string | null
   fromProfileId: number | null

@@ -2,6 +2,7 @@ import path from 'node:path'
 import fsp from 'node:fs/promises'
 import type { DestinationClass, InstalledMod, InstalledVariantGroup, SubMod, VariantSwapRecord } from '@shared/types'
 import type { PersistedVariantGroup } from '@shared/variantGroups'
+import { decideVariantRecovery } from '@shared/switchJournal'
 import { getDb } from '../db'
 import { clampPriority } from '../game/modloaderIni'
 import { remateriliseInstall, syncProfileIni } from '../profiles/materialize'
@@ -349,7 +350,18 @@ export async function switchVariant(installId: number, groupId: string, optionId
   // cut is recoverable and not only a thrown error. This branch exists because
   // a filesystem mutation with no verified undo destroyed a real install; a
   // variant swap gets the same treatment.
-  const journal = openJournal(row.profile_id, row.profile_id)
+  // A journal this install left open across a boot describes a state that is
+  // about to stop being anybody's: the swap below resolves and stages against
+  // what the install row says RIGHT NOW, so once it runs, those older outgoing
+  // bytes are no longer a state to go back to. Closing them here is what stops
+  // a stale journal from later "recovering" over this swap's result.
+  supersedeOpenSwaps(installId, 'a newer switch of the same install started')
+  // `kind` is what keeps this row out of `lastRestorableSwitch` and out of the
+  // switch history: it is a swap inside one mod's store folder, not a previous
+  // state of the game folder, and "Restore previous state" must never see it.
+  // `fromProfileId` is null for the same reason - there is no profile being
+  // left here - which `restorePreviousState` refuses a second way.
+  const journal = openJournal(null, row.profile_id, 'variant-swap')
   const workDir = journal.snapshotDir
   const rollback = await snapshotFiles(
     storeRoot,
@@ -561,18 +573,40 @@ export async function switchVariant(installId: number, groupId: string, optionId
  */
 export async function recoverStaleVariantSwaps(): Promise<{ recovered: number; problems: string[] }> {
   const db = getDb()
+  // Variant swaps only. The kind column is the discriminator; the COALESCE
+  // reads a row written before that column existed exactly as `journalKindOf`
+  // does, so a journal left open by an older build is still picked up here -
+  // and a profile switch's journal is still never picked up here.
   const rows = db
-    .prepare("SELECT id FROM switch_journal WHERE variant_swap_json IS NOT NULL AND state IN ('snapshotted','failed')")
+    .prepare(
+      `SELECT id FROM switch_journal
+        WHERE COALESCE(kind, CASE WHEN variant_swap_json IS NOT NULL THEN 'variant-swap' ELSE 'profile-switch' END)
+              = 'variant-swap'
+          AND variant_swap_json IS NOT NULL
+          AND state IN ('snapshotted','failed')`
+    )
     .all() as { id: number }[]
   const problems: string[] = []
   let recovered = 0
 
   for (const row of rows) {
+    // Whatever happens below, this journal reaches a terminal state before the
+    // loop moves on. A row left at 'snapshotted' is a row the NEXT boot would
+    // act on again, against an install that has moved on in the meantime -
+    // which is how a stale journal came to be able to stomp a later,
+    // fully-successful swap.
+    let close: { state: 'verified' | 'restored' | 'failed'; note: string | null } = {
+      state: 'failed',
+      note: 'recovery did not run to completion'
+    }
     try {
       const journalRow = db.prepare('SELECT variant_swap_json FROM switch_journal WHERE id = ?').get(row.id) as
         | { variant_swap_json: string | null }
         | undefined
-      if (!journalRow?.variant_swap_json) continue
+      if (!journalRow?.variant_swap_json) {
+        close = { state: 'restored', note: 'the journal carries no variant-swap record' }
+        continue
+      }
       const record = JSON.parse(journalRow.variant_swap_json) as VariantSwapRecord
 
       const install = db
@@ -581,24 +615,43 @@ export async function recoverStaleVariantSwaps(): Promise<{ recovered: number; p
       if (!install?.store_key) {
         // The install (or its store payload) is gone some other way; nothing
         // is left to reconcile. Close the journal rather than retry forever.
-        setJournalState(row.id, 'restored', 'the install this swap belonged to no longer has a store payload')
+        close = { state: 'restored', note: 'the install this swap belonged to no longer has a store payload' }
         recovered++
         continue
       }
 
       const groups = parseVariantGroups(install.variant_groups_json)
       const group = groups.find((g) => g.id === record.groupId)
-      const landed = group?.chosenOptionId === record.toOptionId
       const profile = db.prepare('SELECT is_active FROM profile WHERE id = ?').get(install.profile_id) as
         | { is_active: number }
         | undefined
+      // Never "not landed, therefore still on the old option". The row is
+      // checked against BOTH ends of the swap, and if it names neither - a
+      // later swap of this group already succeeded, or a reinstall reshaped
+      // the group so its id no longer resolves - this journal's manifest is
+      // older than whatever is live and putting it back would destroy a
+      // legitimate choice silently. It stands down instead.
+      const decision = decideVariantRecovery(record, group?.chosenOptionId)
 
-      if (landed) {
+      if (decision === 'stand-down') {
+        close = {
+          state: 'restored',
+          note:
+            `stood down: this install now has "${group?.chosenOptionId ?? 'no recorded option for that group'}", ` +
+            `which is neither the option the swap was leaving ("${record.fromOptionId}") nor the one it was going to ` +
+            `("${record.toOptionId}"), so its snapshot is no longer a state to restore`
+        }
+        recovered++
+        continue
+      }
+
+      if (decision === 'materialise-again') {
         // The row already names the new option, so the swap committed before
         // the crash. Only its materialisation into the game folder might be
         // unfinished; redoing it is always safe.
-        if (profile?.is_active) await remateriliseInstall(record.installId)
-        setJournalState(row.id, 'verified')
+        const relinked = await relink(profile?.is_active ? record.installId : null)
+        if (relinked) problems.push(`swap #${row.id}: ${relinked}`)
+        close = { state: 'verified', note: relinked }
       } else {
         // The row still names the old option: the swap never committed.
         // Whatever the store shows is put back from the verified snapshot -
@@ -613,12 +666,77 @@ export async function recoverStaleVariantSwaps(): Promise<{ recovered: number; p
           if (record.outgoingTargets.some((t) => t.toLowerCase() === target.toLowerCase())) continue
           await fsp.rm(path.join(storeDir(install.store_key), target), { force: true }).catch(() => undefined)
         }
-        if (profile?.is_active) await remateriliseInstall(record.installId)
+        const relinked = await relink(profile?.is_active ? record.installId : null)
+        if (relinked) problems.push(`swap #${row.id}: ${relinked}`)
+        // `restoreFromJournal` already moved the row to 'restored'; re-stating
+        // it keeps the note, and keeps every exit from this loop terminal.
+        close = { state: 'restored', note: relinked }
       }
       recovered++
     } catch (e) {
       problems.push(`swap #${row.id}: ${(e as Error).message}`)
+      close = { state: 'failed', note: `recovery failed: ${(e as Error).message}` }
+    } finally {
+      try {
+        setJournalState(row.id, close.state, close.note)
+      } catch (e) {
+        problems.push(`swap #${row.id}: the journal could not be closed (${(e as Error).message})`)
+      }
     }
   }
   return { recovered, problems }
+}
+
+/**
+ * Re-links an install into the game folder, reporting a failure instead of
+ * throwing it.
+ *
+ * Re-materialising is the LAST step of a recovery and never the thing being
+ * recovered: the store and the rows already agree by the time it runs. A
+ * transient failure here (no game detected yet, a file held open) used to
+ * escape into the per-row catch before the journal was closed, leaving the row
+ * open for the next boot to act on all over again - against an install that
+ * may have been switched, correctly, in between.
+ */
+async function relink(installId: number | null): Promise<string | null> {
+  if (installId === null) return null
+  try {
+    await remateriliseInstall(installId)
+    return null
+  } catch (e) {
+    return `the store and the records agree again, but re-linking into the game folder failed: ${(e as Error).message}`
+  }
+}
+
+/**
+ * Closes any variant-swap journal this install left open.
+ *
+ * An open journal is a claim that the install is still mid-swap. The moment a
+ * new swap of the same install resolves and stages against the install's
+ * CURRENT row, that claim is stale: its outgoing bytes describe a state the
+ * user has since moved away from deliberately. Left open, the next boot's
+ * recovery would find it and - before this round, unconditionally - restore
+ * that older option over the newer one.
+ */
+function supersedeOpenSwaps(installId: number, why: string): void {
+  const db = getDb()
+  const rows = db
+    .prepare(
+      `SELECT id, variant_swap_json FROM switch_journal
+        WHERE COALESCE(kind, CASE WHEN variant_swap_json IS NOT NULL THEN 'variant-swap' ELSE 'profile-switch' END)
+              = 'variant-swap'
+          AND variant_swap_json IS NOT NULL
+          AND state IN ('snapshotted','failed')`
+    )
+    .all() as { id: number; variant_swap_json: string | null }[]
+  for (const r of rows) {
+    try {
+      const record = JSON.parse(r.variant_swap_json ?? '{}') as Partial<VariantSwapRecord>
+      if (record.installId !== installId) continue
+      setJournalState(r.id, 'restored', `superseded: ${why}`)
+    } catch {
+      // A journal whose record will not parse cannot be matched to an install
+      // and is never acted on by the recovery either; leave it alone.
+    }
+  }
 }

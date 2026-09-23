@@ -13,6 +13,7 @@ import type {
   SwitchState,
   SwitchVerification
 } from '@shared/types'
+import { isRestorableProfileSwitch, journalKindOf, type SwitchJournalKind } from '@shared/switchJournal'
 
 /**
  * A profile switch removes files from a folder full of the user's own work, so
@@ -450,15 +451,26 @@ export async function verifySnapshot(entries: SnapshotEntry[]): Promise<{ ok: bo
 // Journal
 // ---------------------------------------------------------------------------
 
-export function openJournal(fromProfileId: number | null, toProfileId: number): { id: number; snapshotDir: string } {
+/**
+ * Opens a journal row. `kind` says which operation is writing it, and is the
+ * ONLY thing that separates a profile switch from a variant swap afterwards -
+ * they reach the same states, keep the same columns, and a variant swap is
+ * routinely the newest row. Everything that reads the table back asks for the
+ * kind it means.
+ */
+export function openJournal(
+  fromProfileId: number | null,
+  toProfileId: number,
+  kind: SwitchJournalKind = 'profile-switch'
+): { id: number; snapshotDir: string } {
   const startedAt = new Date().toISOString()
   const id = Number(
     getDb()
       .prepare(
-        `INSERT INTO switch_journal (started_at, from_profile_id, to_profile_id, state, snapshot_dir)
-         VALUES (?,?,?,'snapshotted','')`
+        `INSERT INTO switch_journal (started_at, from_profile_id, to_profile_id, state, snapshot_dir, kind)
+         VALUES (?,?,?,'snapshotted','',?)`
       )
-      .run(startedAt, fromProfileId, toProfileId).lastInsertRowid
+      .run(startedAt, fromProfileId, toProfileId, kind).lastInsertRowid
   )
   const snapshotDir = path.join(
     Paths.profileBackups(fromProfileId ?? toProfileId),
@@ -494,9 +506,12 @@ function rowToJournal(r: {
   verification_json: string | null
   error: string | null
   restored_at: string | null
+  kind?: string | null
+  variant_swap_json?: string | null
 }): SwitchJournal {
   return {
     id: r.id,
+    kind: journalKindOf(r),
     startedAt: r.started_at,
     completedAt: r.completed_at,
     fromProfileId: r.from_profile_id,
@@ -510,19 +525,46 @@ function rowToJournal(r: {
   }
 }
 
-export function listJournals(limit = 20): SwitchJournal[] {
+/**
+ * Recent journal rows, newest first. Pass `kind` to get one operation's rows
+ * only - anything that presents a row to the user as a switch, or acts on one
+ * as a switch, must pass 'profile-switch'.
+ */
+export function listJournals(limit = 20, kind?: SwitchJournalKind): SwitchJournal[] {
   const rows = getDb().prepare('SELECT * FROM switch_journal ORDER BY id DESC LIMIT ?').all(limit) as Parameters<
     typeof rowToJournal
   >[0][]
-  return rows.map(rowToJournal)
+  const journals = rows.map(rowToJournal)
+  return kind ? journals.filter((j) => j.kind === kind) : journals
 }
 
-/** The most recent switch that still has a snapshot to roll back to. */
+/**
+ * The most recent PROFILE SWITCH that still has a snapshot to roll back to.
+ *
+ * The kind filter is the whole point of this query. A variant swap lands in
+ * the same table with the same terminal states and a NULL `restored_at`, and
+ * it is usually the newest row - the user adjusts a variant long after they
+ * last changed profile. Without the filter, "Restore previous state" picked
+ * one up, vacated the entire active profile, and dropped a couple of variant
+ * files into the game root in its place while reporting success.
+ *
+ * The SQL already excludes them; `isRestorableProfileSwitch` re-checks each
+ * candidate through the same pure rule, so a row that somehow arrives with no
+ * `kind` (one written by a build older than schema 12, say) is still read as a
+ * variant swap when it carries a variant-swap payload.
+ */
 export function lastRestorableSwitch(): SwitchJournal | null {
-  const row = getDb()
-    .prepare("SELECT * FROM switch_journal WHERE state IN ('applied','verified','failed') AND restored_at IS NULL ORDER BY id DESC LIMIT 1")
-    .get() as Parameters<typeof rowToJournal>[0] | undefined
-  return row ? rowToJournal(row) : null
+  const rows = getDb()
+    .prepare(
+      `SELECT * FROM switch_journal
+        WHERE state IN ('applied','verified','failed')
+          AND restored_at IS NULL
+          AND COALESCE(kind, CASE WHEN variant_swap_json IS NOT NULL THEN 'variant-swap' ELSE 'profile-switch' END)
+              = 'profile-switch'
+        ORDER BY id DESC LIMIT 25`
+    )
+    .all() as Parameters<typeof rowToJournal>[0][]
+  return rows.map(rowToJournal).find(isRestorableProfileSwitch) ?? null
 }
 
 // ---------------------------------------------------------------------------

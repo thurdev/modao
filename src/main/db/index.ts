@@ -438,6 +438,27 @@ const MIGRATIONS: Migration[] = [
       // and the exact paths on both sides.
       d.exec('ALTER TABLE switch_journal ADD COLUMN variant_swap_json TEXT')
     }
+  },
+  {
+    version: 12,
+    name: 'switch-journal-kind-discriminator',
+    up: (d) => {
+      // Sharing the table with a profile switch was right; sharing it with no
+      // way to tell the two apart was not. A variant swap reaches the same
+      // terminal states, leaves restored_at NULL the same way, and is simply
+      // the newest row - so "Restore previous state" could pick one up,
+      // dematerialise the WHOLE active profile, and put a handful of variant
+      // files in the game root in its place, reporting success.
+      //
+      // The kind is now on the row, and every reader asks for the kind it
+      // means. Rows a previous build wrote are backfilled exactly as
+      // `journalKindOf` reads them: a variant swap is the row that carries a
+      // variant_swap_json payload (nothing before schema 11 could have one),
+      // and everything else was, and still is, a profile switch.
+      d.exec("ALTER TABLE switch_journal ADD COLUMN kind TEXT NOT NULL DEFAULT 'profile-switch'")
+      d.exec("UPDATE switch_journal SET kind = 'variant-swap' WHERE variant_swap_json IS NOT NULL")
+      d.exec('CREATE INDEX IF NOT EXISTS idx_switch_journal_kind ON switch_journal(kind, state)')
+    }
   }
 ]
 

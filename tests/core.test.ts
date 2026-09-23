@@ -3277,6 +3277,68 @@ check(
     ])
 )
 
+// --- a variant swap is not a profile switch ---------------------------------
+// Both write rows into `switch_journal`; only one of them is a previous state
+// of the game folder. The functions that act on those rows reach SQLite and
+// Electron and cannot be loaded here, so the DECISION they make is a pure
+// module and it is tested directly: reverting any part of the fix makes one of
+// these fail.
+import { decideVariantRecovery, isRestorableProfileSwitch, journalKindOf } from '../src/shared/switchJournal'
+
+const verifiedVariantSwap = { kind: journalKindOf({ kind: 'variant-swap' }), state: 'verified', restoredAt: null }
+check(
+  'journal: a completed variant swap is never offered as a restorable profile switch',
+  !isRestorableProfileSwitch(verifiedVariantSwap),
+  verifiedVariantSwap
+)
+check(
+  'journal: nor is one that failed, which is the state a rolled-back swap can reach',
+  !isRestorableProfileSwitch({ kind: 'variant-swap', state: 'failed', restoredAt: null })
+)
+check(
+  'journal: a completed profile switch still is - the filter did not close the door on both',
+  isRestorableProfileSwitch({ kind: 'profile-switch', state: 'verified', restoredAt: null }) &&
+    isRestorableProfileSwitch({ kind: 'profile-switch', state: 'applied', restoredAt: null })
+)
+check(
+  'journal: one already rolled back is not offered again',
+  !isRestorableProfileSwitch({ kind: 'profile-switch', state: 'verified', restoredAt: '2026-01-01T00:00:00.000Z' })
+)
+
+// Persisted rows. `kind` only exists from schema 12; a row a previous build
+// wrote must still read correctly, which is also exactly how the migration
+// backfills the column.
+check(
+  'journal: a row written before the kind column, with no variant payload, reads as a profile switch',
+  journalKindOf({ variant_swap_json: null }) === 'profile-switch' && journalKindOf({}) === 'profile-switch'
+)
+check(
+  'journal: a row written before the kind column that carries a variant payload reads as a variant swap',
+  journalKindOf({ variant_swap_json: '{"installId":4}' }) === 'variant-swap'
+)
+
+// Boot recovery must check BOTH ends of the swap. "Not landed" used to mean
+// "still on the old option" with nothing checking it, so a journal left open
+// across a boot could overwrite a later, fully-successful swap of the same
+// group with the bytes from before it.
+const swapRecord = { fromOptionId: 'Guard 2K', toOptionId: 'Guard 4K' }
+check(
+  'journal: the row naming the option the swap was going to means only re-link it',
+  decideVariantRecovery(swapRecord, 'Guard 4K') === 'materialise-again'
+)
+check(
+  'journal: the row still naming the option it was leaving means put those bytes back',
+  decideVariantRecovery(swapRecord, 'Guard 2K') === 'restore-outgoing'
+)
+check(
+  'journal: a later successful swap to a THIRD option is never overwritten by a stale journal',
+  decideVariantRecovery(swapRecord, 'Guard 8K') === 'stand-down'
+)
+check(
+  'journal: a group a reinstall reshaped away is stood down on, not restored over',
+  decideVariantRecovery(swapRecord, undefined) === 'stand-down' && decideVariantRecovery(swapRecord, null) === 'stand-down'
+)
+
 fs.rmSync(tmp, { recursive: true, force: true })
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`)
 process.exit(failures === 0 ? 0 : 1)

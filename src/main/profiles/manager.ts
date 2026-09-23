@@ -488,8 +488,17 @@ export async function activateProfile(
  */
 export async function restorePreviousState(journalId?: number): Promise<{ log: string[]; restored: number }> {
   const db = getDb()
-  const journal = journalId ? listJournals(50).find((j) => j.id === journalId) ?? null : lastRestorableSwitch()
+  const journal = journalId ? listJournals(50, 'profile-switch').find((j) => j.id === journalId) ?? null : lastRestorableSwitch()
   if (!journal) throw new Error('There is no switch with a backup to restore from.')
+  // Belt to the SQL's braces. This function vacates the ENTIRE active profile
+  // before it restores a manifest, so it must only ever be handed a profile
+  // switch's journal - a variant swap's manifest is a few files inside one
+  // mod's store folder, and restoring it here would tear the profile down and
+  // call that a success. Both routes to `journal` already filter by kind; this
+  // is the assertion that neither may be loosened without noticing.
+  if (journal.kind !== 'profile-switch') {
+    throw new Error('That journal entry is a variant swap, not a profile switch, so there is no previous state in it to restore.')
+  }
   if (journal.fromProfileId === null) throw new Error('That switch had no previous profile to go back to.')
 
   const log: string[] = []
