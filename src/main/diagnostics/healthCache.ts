@@ -53,11 +53,23 @@ export function forgetHealthReport(): void {
  * or stat-ing every file of every install on the path to the Play button, which
  * is the cost this cache exists to avoid. So for up to REPORT_MAX_AGE_MS after
  * a report is taken, a .cleo, .asi or .ini rewritten by an external editor (or
- * by the user in Notepad) is judged by the report taken before the edit. It
- * needs a tool outside Modão to reach - every mutation the app itself performs
- * either moves a row above or rewrites stream.ini - and it expires on its own
- * within two minutes. Anything that changes this trade-off should widen what is
- * fingerprinted rather than lengthen the TTL.
+ * by the user in Notepad) is judged by the report taken before the edit.
+ *
+ * SECOND GAP, narrower, and this one the app can walk into on its own: two
+ * write handlers change what the game will load without moving any row this
+ * fingerprint reads. `library:subModSetEnabled` writes `submod_state` and
+ * renames a folder; `health:reuniteOrphans` moves a plugin between two paths
+ * that already exist. Neither touches install.id/enabled/variant_choice and
+ * neither rewrites stream.ini. `subModSetEnabled` is the one that matters:
+ * enabling a sub-mod that holds a second limit adjuster, or a second copy of a
+ * plugin already installed elsewhere, flips `stacked-adjuster` or
+ * `duplicate-asi` - both fail-level, and both reading the DISK rather than the
+ * database - so inside the TTL the gate can be handed a report taken before
+ * that file was there.
+ *
+ * Both gaps close on their own within REPORT_MAX_AGE_MS. Anything that changes
+ * that trade-off should widen what is fingerprinted, or call
+ * `forgetHealthReport()` from the handler, rather than lengthen the TTL.
  */
 function fingerprint(profileId: number | null, gamePath: string): string {
   const parts: string[] = []
