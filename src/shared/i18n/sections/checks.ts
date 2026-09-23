@@ -34,9 +34,6 @@ export const checks = {
       'A pasta de .asi é detectada por onde o modloader.asi realmente está, e não presumida: algumas instalações carregam da raiz do jogo, repacks costumam carregar de scripts\\.',
     asiUnknown: 'desconhecida',
     asiGameRoot: 'a raiz do jogo',
-    cleoPlusTitle: 'Versão do CLEO exigida pelo CLEO+',
-    cleoPlusOk: 'O CLEO {version} atende o CLEO+',
-    cleoPlusTooOld: 'O CLEO+ está instalado mas o CLEO {version} é velho demais',
     cleoPlusDetail:
       'CLEO+ com CLEO 4.3 quebra na inicialização com um diálogo fatal: "The ordinal 22 could not be located in the dynamic link library CLEO+.cleo". Atualize o CLEO para 4.4 ou mais novo.',
     cleoTitle: 'CLEO',
@@ -125,6 +122,24 @@ export const checks = {
       'O CrashList avisa explicitamente que empilhar limit adjusters derruba o jogo: dois produtos diferentes reescrevem os mesmos limites, um por cima do outro. Desative todos menos um.',
     stackedItem: '{label}: {paths}',
     scanCapped: 'A varredura atingiu o limite de arquivos por execução e parou antes de terminar — este resultado é parcial, não uma pasta limpa.',
+    runningTitle: 'O jogo está aberto agora?',
+    runningClosed: 'O {exe} não está rodando — instalar, desinstalar e trocar de perfil estão liberados',
+    runningOpen: 'O {exe} está aberto agora (PID {pid})',
+    runningAssumed: 'Um {exe} está aberto agora; o Windows não disse de qual pasta ele veio, então o Modão assume que é desta',
+    runningDetail:
+      'O Mod Loader observa a pasta modloader\\ e recarrega o que muda embaixo dele. Mexer nos mods com o jogo aberto não dá erro de arquivo travado: dá crash no meio da sessão (CrashList 0x007F3825). Enquanto o jogo estiver aberto o Modão recusa qualquer alteração — e não escreve nem o arquivo de teste de permissão.',
+    writeUnknownRunning: 'Não checado agora: o jogo está aberto',
+    writeUnknownDetail:
+      'O teste de permissão grava um arquivo dentro de modloader\\, que é exatamente o que não pode acontecer com o jogo aberto. Ele não foi feito, então a resposta honesta é “não sei” — e não “está tudo certo”. Feche o jogo e rode a checagem de novo. Se aparecer um resultado abaixo, ele é de uma checagem anterior.',
+    cleoPluginsOk: 'O CLEO {version} atende os {count} plugin(s) que declaram uma exigência',
+    cleoPluginTooOld_one: 'O {name} exige CLEO {range}, e o instalado é {version}',
+    cleoPluginTooOld_other:
+      '{count} plugins exigem um CLEO mais novo que o instalado ({version}); o primeiro é o {name}, que exige {range}',
+    cleoPluginUnknown_one: 'O {name} exige CLEO {range}, mas não deu para ler a versão do CLEO instalado',
+    cleoPluginUnknown_other: '{count} plugins exigem uma versão mínima do CLEO, mas não deu para ler a versão instalada',
+    cleoPluginDetail:
+      'Um plugin .cleo compilado contra um CLEO mais novo do que o instalado quebra na inicialização, com um diálogo fatal citando um ordinal que não existe na versão antiga. A exigência é lida de cada plugin instalado — do que o mod dele declara — e não de uma lista fixa dentro do Modão, então um plugin novo já entra checado.',
+    cleoPluginItem: '{name} exige CLEO {range} (instalado: {version}) — {path}',
     unknown: 'desconhecido'
   },
   en: {
@@ -155,9 +170,6 @@ export const checks = {
       'The ASI directory is detected from where modloader.asi actually lives rather than assumed: some installs load from the game root, repacks often load from scripts\\.',
     asiUnknown: 'unknown',
     asiGameRoot: 'the game root',
-    cleoPlusTitle: 'CLEO+ version gate',
-    cleoPlusOk: 'CLEO {version} satisfies CLEO+',
-    cleoPlusTooOld: 'CLEO+ is installed but CLEO {version} is too old',
     cleoPlusDetail:
       'CLEO+ against CLEO 4.3 fails at startup with a fatal dialog: "The ordinal 22 could not be located in the dynamic link library CLEO+.cleo". Update CLEO to 4.4 or newer.',
     cleoTitle: 'CLEO',
@@ -246,6 +258,24 @@ export const checks = {
       'The CrashList warns explicitly that stacking limit adjusters crashes the game: two different products rewrite the same limits, one on top of the other. Disable all but one.',
     stackedItem: '{label}: {paths}',
     scanCapped: 'The scan hit its per-run file limit and stopped before finishing - this result is partial, not a clean folder.',
+    runningTitle: 'Is the game open right now?',
+    runningClosed: '{exe} is not running - installing, uninstalling and switching profiles are all allowed',
+    runningOpen: '{exe} is open right now (PID {pid})',
+    runningAssumed: 'An {exe} is open right now; Windows would not say which folder it came from, so Modão assumes it is this one',
+    runningDetail:
+      'Mod Loader watches modloader\\ and hot-reloads whatever changes underneath it. Touching mods with the game open does not fail with a locked-file error: it succeeds, and the game crashes mid-session (CrashList 0x007F3825). While the game is open Modão refuses every change - and writes not even the write-access probe file.',
+    writeUnknownRunning: 'Not checked this run: the game is open',
+    writeUnknownDetail:
+      'The probe writes a file into modloader\\, which is exactly what must not happen while the game is open. It was not taken, so the honest answer is "unknown" - not "fine". Close the game and run the check again. Anything listed below is from an earlier probe.',
+    cleoPluginsOk: 'CLEO {version} satisfies the {count} plugin(s) that state a requirement',
+    cleoPluginTooOld_one: '{name} requires CLEO {range}, and the installed one is {version}',
+    cleoPluginTooOld_other:
+      '{count} plugins require a newer CLEO than the installed {version}; the first is {name}, which requires {range}',
+    cleoPluginUnknown_one: '{name} requires CLEO {range}, but the installed CLEO version could not be read',
+    cleoPluginUnknown_other: '{count} plugins state a minimum CLEO version, but the installed version could not be read',
+    cleoPluginDetail:
+      'A .cleo plugin built against a newer CLEO than the installed one breaks at startup with a fatal dialog naming an ordinal the older version does not export. The requirement is read per installed plugin - from what its own mod declares - rather than from a fixed list inside Modão, so a new plugin arrives already checked.',
+    cleoPluginItem: '{name} requires CLEO {range} (installed: {version}) - {path}',
     unknown: 'unknown'
   }
 } as const

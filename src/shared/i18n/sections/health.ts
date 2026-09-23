@@ -9,7 +9,7 @@
 export const health = {
   pt: {
     tabCheck: 'Checagem antes de jogar',
-    status: { pass: 'ok', warn: 'aviso', fail: 'falha', skip: 'pulado' },
+    status: { pass: 'ok', warn: 'aviso', fail: 'falha', skip: 'pulado', unknown: 'não checado' },
     verdictClean: 'Passou em tudo. Este perfil está pronto para jogar.',
     verdictWarned_one: 'Nada impede de jogar, mas 1 checagem achou algo que vale ler antes.',
     verdictWarned_other: 'Nada impede de jogar, mas {count} checagens acharam algo que vale ler antes.',
@@ -23,6 +23,10 @@ export const health = {
     failCount: '{count} falha(s)',
     skippedCount: '{count} pulada(s)',
     rerun: 'Checar de novo',
+    launchBlockedHint:
+      'O botão de jogar fica recusando enquanto uma falha estiver aqui: o que ela descreve é um crash que já aconteceu com outra pessoa. Resolva, ou abra assim mesmo por sua conta.',
+    launchAnyway: 'Abrir o jogo assim mesmo',
+    launching: 'Abrindo…',
     fixStreaming: 'Gravar 2048 MB (com backup)',
     fixing: 'Gravando…',
     checkedAt: 'checado {when}',
@@ -81,7 +85,7 @@ export const health = {
   },
   en: {
     tabCheck: 'Pre-launch check',
-    status: { pass: 'pass', warn: 'warn', fail: 'fail', skip: 'skipped' },
+    status: { pass: 'pass', warn: 'warn', fail: 'fail', skip: 'skipped', unknown: 'not checked' },
     verdictClean: 'Every check passed. This profile is ready to launch.',
     verdictWarned_one: 'Nothing blocks a launch, but 1 check found something worth reading before you play.',
     verdictWarned_other: 'Nothing blocks a launch, but {count} checks found something worth reading before you play.',
@@ -95,6 +99,10 @@ export const health = {
     failCount: '{count} fail',
     skippedCount: '{count} skipped',
     rerun: 'Re-run',
+    launchBlockedHint:
+      'The Play button keeps refusing while a failure stands here: what it describes is a crash that already happened to somebody else. Fix it, or open the game anyway at your own risk.',
+    launchAnyway: 'Launch anyway',
+    launching: 'Launching…',
     fixStreaming: 'Write 2048 MB (keeping a backup)',
     fixing: 'Writing…',
     checkedAt: 'checked {when}',

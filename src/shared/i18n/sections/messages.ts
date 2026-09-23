@@ -37,6 +37,8 @@ export const messages = {
       adoptedIntoProfile: '{count} mod(s) adotado(s), já presente(s) na pasta do jogo — nenhum arquivo foi movido.',
       nothingNewInFolder: 'Nada de novo encontrado na pasta do jogo; este perfil já rastreia tudo que está lá.',
       exeNotFound: 'O executável de {game} não está em {path}.',
+      launchBlocked:
+        'O Modão não abriu o jogo: {names}. A checagem antes de jogar encontrou uma falha, e o que ela descreve é um crash que já aconteceu com outra pessoa. Abra a tela de Saúde para resolver — ou, de lá, para abrir assim mesmo.',
       activeElsewhere: 'O perfil "{profile}" está ativo em {path}. Troque para um perfil de outra instalação antes de remover esta.'
     },
     crashes: {
@@ -142,6 +144,8 @@ export const messages = {
       adoptedIntoProfile: '{count} mod(s) adopted, already in the game folder — no file was moved.',
       nothingNewInFolder: 'Nothing new found in the game folder; this profile already tracks everything there.',
       exeNotFound: 'The executable for {game} is not in {path}.',
+      launchBlocked:
+        'Modão did not launch the game: {names}. The pre-launch check found a failure, and what it describes is a crash that already happened to somebody else. Open the Health screen to fix it - or, from there, to launch anyway.',
       activeElsewhere: 'The profile "{profile}" is active on {path}. Switch to a profile on another install before removing this one.'
     },
     crashes: {

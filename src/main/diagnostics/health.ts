@@ -10,7 +10,9 @@ import { gameDefinition } from '@shared/games'
 import { exists, walk } from '../util/fsx'
 import { requireActiveGame } from '../game/detect'
 import { checkGameExe } from '../game/pe'
-import { probeWriteAccess } from '../game/access'
+import { cachedWriteAccess, probeWriteAccess } from '../game/access'
+import { checkGameRunning, gameExeNames } from '../game/running'
+import { cleoPluginRequirements, cleoRequirementStatus } from '@shared/cleoPlugins'
 import { listConflicts, listHookCollisions } from '../conflicts'
 import { profileDependencyProblems } from '../deps/resolver'
 import { analyzeTxd } from '../formats/txd'
@@ -58,17 +60,59 @@ export async function runHealthCheck(profileId: number): Promise<HealthReport> {
     checks.push({ id: 'exe', title: t('checks.exeTitle'), status: 'fail', summary: (e as Error).message })
   }
 
-  // 2. Write access - nothing else matters if the folder is read-only
-  const access = probeWriteAccess(game.path, true)
+  // 2. Is the game open right now?
+  //
+  // Asked here, and asked first, because half this panel depends on the answer
+  // and because the user should learn it from a check rather than from being
+  // refused an install three clicks later.
+  const running = await checkGameRunning(game)
   checks.push({
-    id: 'write-access',
-    title: t('checks.writeTitle'),
-    status: access.writable ? 'pass' : 'fail',
-    summary: access.writable
-      ? t('checks.writeOk', { path: access.probedPath })
-      : t('checks.writeDenied', { path: access.probedPath, code: access.code ? ` (${access.code})` : '' }),
-    detail: access.reason ?? undefined
+    id: 'game-running',
+    title: t('checks.runningTitle'),
+    status: running.allowed ? 'pass' : 'warn',
+    summary: running.allowed
+      ? t('checks.runningClosed', { exe: gameExeNames(game.kind)[0] })
+      : running.assumed
+        ? t('checks.runningAssumed', { exe: running.exe ?? gameExeNames(game.kind)[0] })
+        : t('checks.runningOpen', { exe: running.exe ?? gameExeNames(game.kind)[0], pid: running.process?.pid ?? 0 }),
+    detail: running.allowed ? undefined : t('checks.runningDetail')
   })
+
+  // 3. Write access - nothing else matters if the folder is read-only.
+  //
+  // With the game up the probe is deliberately not taken: it writes a file into
+  // modloader\, which Mod Loader watches and hot-reloads, and that is the very
+  // hazard the check above exists to name. So the answer is `unknown` and says
+  // so. It used to render as a plain `pass`, which is a never-taken probe
+  // presented as a clean bill of health.
+  if (!running.allowed) {
+    const stale = cachedWriteAccess(game.path)
+    checks.push({
+      id: 'write-access',
+      title: t('checks.writeTitle'),
+      status: 'unknown',
+      summary: t('checks.writeUnknownRunning'),
+      detail: t('checks.writeUnknownDetail'),
+      items: stale
+        ? [
+            stale.writable
+              ? t('checks.writeOk', { path: stale.probedPath })
+              : t('checks.writeDenied', { path: stale.probedPath, code: stale.code ? ` (${stale.code})` : '' })
+          ]
+        : undefined
+    })
+  } else {
+    const access = probeWriteAccess(game.path, true)
+    checks.push({
+      id: 'write-access',
+      title: t('checks.writeTitle'),
+      status: access.writable ? 'pass' : 'fail',
+      summary: access.writable
+        ? t('checks.writeOk', { path: access.probedPath })
+        : t('checks.writeDenied', { path: access.probedPath, code: access.code ? ` (${access.code})` : '' }),
+      detail: access.reason ?? undefined
+    })
+  }
 
   // 3. Mod Loader and the ASI directory
   checks.push({
@@ -95,38 +139,8 @@ export async function runHealthCheck(profileId: number): Promise<HealthReport> {
     detail: t('checks.asiDetail')
   })
 
-  // 3. CLEO against plugin requirements
-  const cleoPlugins = getDb()
-    .prepare(
-      `SELECT f.relative_path FROM install_file f JOIN install i ON i.id = f.install_id
-        WHERE i.profile_id = ? AND i.enabled = 1 AND lower(f.relative_path) LIKE 'cleo/%'`
-    )
-    .all(profileId) as { relative_path: string }[]
-  const hasCleoPlus = cleoPlugins.some((p) => /cleo\+?\.cleo$/i.test(p.relative_path) || /cleo\+/i.test(p.relative_path))
-  const cleoVersion = game.cleoVersion
-  if (hasCleoPlus) {
-    const major = Number.parseFloat((cleoVersion ?? '0').replace(/[^\d.]/g, '')) || 0
-    checks.push({
-      id: 'cleo-plus',
-      title: t('checks.cleoPlusTitle'),
-      status: major >= 4.4 ? 'pass' : 'fail',
-      summary:
-        major >= 4.4
-          ? t('checks.cleoPlusOk', { version: cleoVersion ?? t('checks.unknown') })
-          : t('checks.cleoPlusTooOld', { version: cleoVersion ?? t('checks.unknown') }),
-      detail: major >= 4.4 ? undefined : t('checks.cleoPlusDetail')
-    })
-  } else {
-    checks.push({
-      id: 'cleo',
-      title: t('checks.cleoTitle'),
-      status: cleoVersion ? 'pass' : 'skip',
-      summary: cleoVersion
-        ? t('checks.cleoDetected', { version: cleoVersion, count: cleoPlugins.length })
-        : t('checks.cleoMissing'),
-      detail: cleoPlugins.length ? cleoPlugins.slice(0, 8).map((p) => p.relative_path).join(', ') : undefined
-    })
-  }
+  // CLEO against every plugin's own requirement
+  checks.push(cleoCheck(profileId, game))
 
   // 4. Dependencies
   const depProblems = profileDependencyProblems(profileId, game)
@@ -222,6 +236,85 @@ export async function runHealthCheck(profileId: number): Promise<HealthReport> {
     ok: blocking === 0,
     blocking,
     warnings
+  }
+}
+
+/**
+ * Every installed .cleo plugin against the CLEO that will load it.
+ *
+ * The requirement is read per plugin, from the version range that plugin's own
+ * mod declares - so a plugin published tomorrow with a floor of its own is
+ * gated by a catalogue row rather than by a release of this app. CLEO+ is the
+ * one case that predates any catalogue and is kept as field knowledge in
+ * `KNOWN_CLEO_REQUIREMENTS`: against CLEO 4.3 it dies at startup with "The
+ * ordinal 22 could not be located in the dynamic link library CLEO+.cleo".
+ */
+function cleoCheck(profileId: number, game: GameInstall): HealthCheck {
+  const rows = getDb()
+    .prepare(
+      `SELECT f.relative_path p, d.version_range r
+         FROM install_file f
+         JOIN install i ON i.id = f.install_id
+         LEFT JOIN mod_version mv ON mv.id = i.mod_version_id
+         LEFT JOIN dependency d
+                ON d.mod_id = mv.mod_id AND d.kind = 'requires'
+               AND lower(coalesce((SELECT m.slug FROM mod m WHERE m.id = d.requires_mod_id), d.requires_slug, ''))
+                   IN ('cleo', 'cleo4', 'cleo-library', 'cleolibrary')
+        WHERE i.profile_id = ? AND i.enabled = 1
+          AND (lower(f.relative_path) LIKE 'cleo/%' OR lower(f.relative_path) LIKE '%.cleo')`
+    )
+    .all(profileId) as { p: string; r: string | null }[]
+
+  // One entry per file, carrying every range its mod declares against CLEO.
+  const declared = new Map<string, string[]>()
+  const paths: string[] = []
+  for (const row of rows) {
+    if (!declared.has(row.p)) {
+      declared.set(row.p, [])
+      paths.push(row.p)
+    }
+    if (row.r) declared.get(row.p)!.push(row.r)
+  }
+
+  const cleoVersion = game.cleoVersion
+  const version = cleoVersion ?? t('checks.unknown')
+  const verdicts = cleoPluginRequirements(
+    paths.map((p) => ({ path: p, declaredRanges: declared.get(p) })),
+    cleoVersion
+  )
+
+  if (verdicts.length === 0) {
+    return {
+      id: 'cleo',
+      title: t('checks.cleoTitle'),
+      status: cleoVersion ? 'pass' : 'skip',
+      summary: cleoVersion ? t('checks.cleoDetected', { version: cleoVersion, count: paths.length }) : t('checks.cleoMissing'),
+      detail: paths.length ? paths.slice(0, 8).join(', ') : undefined
+    }
+  }
+
+  const status = cleoRequirementStatus(verdicts)
+  const failing = verdicts.filter((v) => v.satisfied === false)
+  const unknown = verdicts.filter((v) => v.satisfied === null)
+  const first = failing[0] ?? unknown[0]
+
+  return {
+    id: 'cleo',
+    title: t('checks.cleoTitle'),
+    status,
+    summary:
+      status === 'fail'
+        ? t('checks.cleoPluginTooOld', { count: failing.length, name: first.name, range: first.range, version })
+        : status === 'warn'
+          ? t('checks.cleoPluginUnknown', { count: unknown.length, name: first.name, range: first.range })
+          : t('checks.cleoPluginsOk', { version, count: verdicts.length }),
+    detail:
+      status === 'fail'
+        ? failing.some((v) => /^cleo\+?$|^cleo[_ -]?plus$/i.test(v.name))
+          ? t('checks.cleoPlusDetail')
+          : t('checks.cleoPluginDetail')
+        : undefined,
+    items: verdicts.map((v) => t('checks.cleoPluginItem', { name: v.name, range: v.range, version, path: v.path }))
   }
 }
 

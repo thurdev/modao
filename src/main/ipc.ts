@@ -57,6 +57,7 @@ import { analyzeTxd } from './formats/txd'
 import { analyzeImg } from './formats/img'
 import { compareWithVanilla } from './formats/ifp'
 import { runHealthCheck, scanTextures } from './diagnostics/health'
+import { describeBlockers, launchGate } from '@shared/launchGate'
 import { listCrashes, listIncidents, scanCrashes, setCrashResolved } from './diagnostics/eventlog'
 import { listJournals, planSwitch, verifySwitch } from './profiles/switchTx'
 import { gameDefinition, type GameKind } from '@shared/games'
@@ -459,13 +460,34 @@ export function registerIpc(): void {
   })
   ipcMain.handle('game:unmanaged', (_e, profileId: number) => unmanagedContent(requireProfile(profileId)))
   ipcMain.handle('game:remove', (_e, id: number) => removeGame(id))
-  ipcMain.handle('game:launch', async () => {
+  // The pre-launch check is only a check if something acts on it. `blocking`
+  // used to be counted, shown, and then ignored by the one button that could
+  // have used it - which is how a stream.ini asking for 13500 MB was found,
+  // named on screen, and launched into anyway. The gate itself is pure and
+  // lives in @shared/launchGate, so anything else that must refuse a launch
+  // adds a reason to the same list instead of growing a second gate.
+  ipcMain.handle('game:launch', async (_e, force?: boolean) => {
     const game = requireActiveGame()
     const exe = gameDefinition(game.kind)
       .exeNames.map((name) => path.join(game.path, name))
       .find((candidate) => exists(candidate))
     if (!exe) throw new Error(t('messages.game.exeNotFound', { game: game.gameName, path: game.path }))
     const profile = await activeProfile()
+
+    if (profile && !force) {
+      // A check that throws must not become a locked Play button: a broken
+      // health run is not a finding, so the launch goes ahead.
+      const report = await runHealthCheck(profile.id).catch(() => null)
+      const verdict = launchGate(report)
+      if (!verdict.allowed) {
+        return {
+          launched: false,
+          message: t('messages.game.launchBlocked', { names: describeBlockers(verdict.blockers) }),
+          blockers: verdict.blockers
+        }
+      }
+    }
+
     if (profile) getDb().prepare('UPDATE profile SET last_played_at = ? WHERE id = ?').run(new Date().toISOString(), profile.id)
     const ok = await shell.openPath(exe)
     // The process table just changed. The running check caches it for two

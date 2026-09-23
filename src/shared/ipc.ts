@@ -1,4 +1,5 @@
 import type { GameKind } from './games'
+import type { LaunchBlocker } from './launchGate'
 import type {
   AppSettings,
   BisectSession,
@@ -74,7 +75,12 @@ export interface ModãoApi {
     /** What the game folder holds that this profile does not track yet. */
     unmanaged(profileId: number): Promise<UnmanagedReport>
     remove(id: number): Promise<void>
-    launch(): Promise<{ launched: boolean; message: string }>
+    /**
+     * Starts the game - unless the pre-launch check has a blocking finding, in
+     * which case nothing is started and the finding comes back named in
+     * `blockers`. `force` is the user saying "launch anyway" after reading it.
+     */
+    launch(force?: boolean): Promise<{ launched: boolean; message: string; blockers?: LaunchBlocker[] }>
   }
   profiles: {
     list(): Promise<Profile[]>

@@ -1,4 +1,5 @@
 import type { IpcChannel } from '@shared/ipc'
+import type { LaunchBlocker } from '@shared/launchGate'
 import type {
   AppSettings,
   CacheKind,
@@ -107,7 +108,8 @@ export const api = {
     call<{ profileId: number; adopted: number; report: string[] }>('game:adoptInto', profileId),
   unmanaged: (profileId: number) => call<UnmanagedReport>('game:unmanaged', profileId),
   removeGame: (id: number) => call<void>('game:remove', id),
-  launch: () => call<{ launched: boolean; message: string }>('game:launch'),
+  launch: (force?: boolean) =>
+    call<{ launched: boolean; message: string; blockers?: LaunchBlocker[] }>('game:launch', force),
 
   profiles: () => call<Profile[]>('profiles:list'),
   activeProfile: () => call<Profile | null>('profiles:active'),

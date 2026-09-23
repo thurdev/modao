@@ -19,7 +19,10 @@ const STATUS_TONE: Record<HealthCheck['status'], 'ok' | 'warn' | 'danger' | 'neu
   pass: 'ok',
   warn: 'warn',
   fail: 'danger',
-  skip: 'neutral'
+  skip: 'neutral',
+  // "Not checked this run" is neither a pass nor a complaint - it is the
+  // absence of an answer, and it has to read as one.
+  unknown: 'neutral'
 }
 
 export function HealthScreen(): JSX.Element {
@@ -66,7 +69,22 @@ export function HealthScreen(): JSX.Element {
 function PreLaunch(props: { profileId: number; pushToast: ToastFn }): JSX.Element {
   const t = useT()
   const [fixingStream, setFixingStream] = useState(false)
+  const [launching, setLaunching] = useState(false)
   const report = useAsync(() => api.health(props.profileId), [props.profileId])
+
+  // The override lives here rather than next to the Play button: it is only
+  // offered to someone who is looking at what refused and why.
+  async function launchAnyway(): Promise<void> {
+    setLaunching(true)
+    try {
+      const r = await api.launch(true)
+      props.pushToast(r.launched ? 'success' : 'error', r.message)
+    } catch (e) {
+      props.pushToast('error', (e as Error).message)
+    } finally {
+      setLaunching(false)
+    }
+  }
 
   if (report.error) return <ErrorNote message={report.error} onRetry={report.reload} />
   if (report.loading || !report.data) return <Loading label={t('health.running')} />
@@ -103,6 +121,11 @@ function PreLaunch(props: { profileId: number; pushToast: ToastFn }): JSX.Elemen
           <p style={{ margin: 0 }} className="muted">
             {verdict}
           </p>
+          {r.ok ? null : (
+            <p className="faint" style={{ margin: '7px 0 0' }}>
+              {t('health.launchBlockedHint')}
+            </p>
+          )}
           <div className="row wrap faint" style={{ marginTop: 7 }}>
             <span className="mono ellipsis" title={r.gamePath}>
               {r.gamePath}
@@ -110,6 +133,13 @@ function PreLaunch(props: { profileId: number; pushToast: ToastFn }): JSX.Elemen
             <span>·</span>
             <span>{t('health.checkedAt', { when: relativeTime(r.generatedAt, t) })}</span>
           </div>
+          {r.ok ? null : (
+            <div className="row" style={{ marginTop: 10 }}>
+              <Button size="sm" disabled={launching} onClick={launchAnyway}>
+                {launching ? t('health.launching') : t('health.launchAnyway')}
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 

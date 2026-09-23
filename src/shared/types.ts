@@ -425,7 +425,14 @@ export interface PeInfo {
 export interface HealthCheck {
   id: string
   title: string
-  status: 'pass' | 'warn' | 'fail' | 'skip'
+  /**
+   * `skip` means the check does not apply here; `unknown` means it applies and
+   * could not be answered this run - a probe deliberately not taken because the
+   * game is up, say. The two must not be one status: presenting a never-taken
+   * probe as a clean `pass` is what made write access read as fine while the
+   * game held the folder.
+   */
+  status: 'pass' | 'warn' | 'fail' | 'skip' | 'unknown'
   summary: string
   detail?: string
   items?: string[]

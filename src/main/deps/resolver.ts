@@ -1,5 +1,6 @@
 import type { DependencyNode, GameInstall } from '@shared/types'
 import { getDb } from '../db'
+import { satisfiesRange } from '@shared/versionRange'
 
 interface DepRow {
   id: number
@@ -184,38 +185,13 @@ function checkFramework(
   return null
 }
 
-/** Handles ">= 4.4", "4.4+", "4.4 - 5.0" and bare versions. Scene version strings are messy on purpose. */
-export function satisfiesRange(version: string | null, range: string | null): boolean {
-  if (!range) return true
-  if (!version) return false
-  const v = parseVersion(version)
-  if (!v) return true // unparseable installed version: do not block, warn elsewhere
-  const trimmed = range.trim()
-  const ge = /^>=?\s*([\d.]+)$/.exec(trimmed) ?? /^([\d.]+)\s*\+$/.exec(trimmed)
-  if (ge) return compare(v, parseVersion(ge[1])!) >= 0
-  const between = /^([\d.]+)\s*-\s*([\d.]+)$/.exec(trimmed)
-  if (between) {
-    return compare(v, parseVersion(between[1])!) >= 0 && compare(v, parseVersion(between[2])!) <= 0
-  }
-  const lt = /^<\s*([\d.]+)$/.exec(trimmed)
-  if (lt) return compare(v, parseVersion(lt[1])!) < 0
-  const exact = parseVersion(trimmed)
-  return exact ? compare(v, exact) === 0 : true
-}
-
-function parseVersion(s: string): number[] | null {
-  const m = /(\d+(?:\.\d+)*)/.exec(s)
-  if (!m) return null
-  return m[1].split('.').map((n) => Number.parseInt(n, 10))
-}
-
-function compare(a: number[], b: number[]): number {
-  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    const d = (a[i] ?? 0) - (b[i] ?? 0)
-    if (d !== 0) return d
-  }
-  return 0
-}
+/**
+ * Scene version strings are messy on purpose, and the pre-launch CLEO gate has
+ * to answer the same question without reaching a database - so the comparison
+ * lives in @shared/versionRange now and is re-exported here for every caller
+ * that already imports it from the resolver.
+ */
+export { satisfiesRange }
 
 /** Anti-dependencies that hold for the whole profile, checked before launch. */
 export function profileDependencyProblems(profileId: number, game: GameInstall): DependencyNode[] {

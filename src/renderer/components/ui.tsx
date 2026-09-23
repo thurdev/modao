@@ -1,5 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
+import type { HealthCheck } from '@shared/types'
 import { Icon } from './icons'
 import { useT } from '../lib/i18n'
 import { collapseVariants, modalVariants, scrimVariants, snappy, springy } from '../lib/motion'
@@ -276,7 +277,7 @@ export function Disclosure(props: { open: boolean; children: React.ReactNode }):
   )
 }
 
-export function StatusDot(props: { status: 'pass' | 'warn' | 'fail' | 'skip' }): JSX.Element {
+export function StatusDot(props: { status: HealthCheck['status'] }): JSX.Element {
   return <span className="status-dot" data-status={props.status} />
 }
 

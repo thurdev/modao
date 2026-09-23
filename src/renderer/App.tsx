@@ -85,6 +85,10 @@ export function App(): JSX.Element {
     try {
       const r = await api.launch()
       state.pushToast(r.launched ? 'success' : 'error', r.message)
+      // A refusal is not a dead end: the fix for what refused - the safe
+      // stream.ini value, backup kept - is a button on the Health screen, and
+      // so is launching anyway after reading why.
+      if (!r.launched && r.blockers && r.blockers.length > 0) state.setScreen('health')
       await state.refreshProfiles()
     } catch (e) {
       state.pushToast('error', (e as Error).message)
