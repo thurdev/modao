@@ -26,6 +26,7 @@ import { readIniFile, readKeys, getSection } from './game/modloaderIni'
 import { walk, sha256File, createJunction, removeLinkOrDir } from './util/fsx'
 import { V1_US_SIZE, V1_US_TIMESTAMP } from './game/pe'
 import { runHealthCheck } from './diagnostics/health'
+import { duplicateAssetCheck, scanGameTreeAssets } from './diagnostics/duplicateAssets'
 import type { InstalledMod, SubMod } from '@shared/types'
 
 /**
@@ -986,6 +987,63 @@ export async function runE2E(): Promise<number> {
   await removeLinkOrDir(path.join(game, 'modloader', 'Open Limit Adjuster'))
   await fsp.rm(path.join(game, 'scripts', 'III.VC.SA.LimitAdjuster.asi'), { force: true })
   await fsp.rm(path.join(game, 'scripts', 'SimpleLimitAdjuster_Enex.asi'), { force: true })
+
+  // --- item 08 review: two junctions onto ONE store folder --------------
+  // storeKey() is slug+version+variant, so two installs of the same mod+version
+  // share a single store folder and materialise as two junctions onto it. The
+  // walk's cycle guard used to be a global log of every realpath visited, which
+  // entered the first junction and returned immediately on the second - the
+  // file was live at two game-relative paths and reported at neither.
+  const twinSource = path.join(tmp, 'twin store payload')
+  await fsp.mkdir(twinSource, { recursive: true })
+  await fsp.writeFile(path.join(twinSource, 'TwinPlugin.asi'), fakePe(3072, 0x60000000, 0x2102))
+  await createJunction(path.join(game, 'modloader', 'Alpha Mod'), twinSource)
+  await createJunction(path.join(game, 'modloader', 'Beta Mod'), twinSource)
+  const twinReport = await runHealthCheck(risky.id)
+  const twinCheck = twinReport.checks.find((c) => c.id === 'duplicate-asi')
+  check('two junctions, one target: the second junction is walked, not collapsed into the first', twinCheck?.status === 'fail', twinCheck)
+  check(
+    'two junctions, one target: both game-relative paths are named',
+    !!twinCheck?.items?.some(
+      (i) =>
+        i.includes(path.join('modloader', 'Alpha Mod', 'TwinPlugin.asi')) &&
+        i.includes(path.join('modloader', 'Beta Mod', 'TwinPlugin.asi'))
+    ),
+    twinCheck?.items
+  )
+  await removeLinkOrDir(path.join(game, 'modloader', 'Alpha Mod'))
+  await removeLinkOrDir(path.join(game, 'modloader', 'Beta Mod'))
+
+  // --- item 08 review: no ASI directory detected, plugins loose in the root --
+  // The inverse of the field install. modloader.asi absent or undetected and
+  // the .asi files sitting in the game root: scanning only scripts\, cleo\ and
+  // modloader\ looked everywhere except where the plugins actually were and
+  // reported a clean bill of health. `asiDirectory ?? path`, as everywhere else.
+  const looseName = 'LooseRootPlugin.asi'
+  const looseBytes = fakePe(2560, 0x60000000, 0x2102)
+  await fsp.writeFile(path.join(game, looseName), looseBytes)
+  await fsp.writeFile(path.join(game, 'scripts', looseName), looseBytes)
+  const detectedCheck = await duplicateAssetCheck(installed)
+  check(
+    'loose root: with scripts\\ detected as the ASI directory the root copy is out of scope - it is the fallback that has to find it',
+    !detectedCheck.items?.some((i) => i.includes(looseName)),
+    detectedCheck.items
+  )
+  const looseGame = { ...installed, asiDirectory: null }
+  const looseRels = (await scanGameTreeAssets(looseGame)).map((f) => f.rel)
+  check(
+    'loose root: with no ASI directory detected the game root is scanned',
+    looseRels.includes(looseName) && looseRels.includes(path.join('scripts', looseName)),
+    looseRels.filter((r) => r.includes('LooseRoot'))
+  )
+  const looseCheck = await duplicateAssetCheck(looseGame)
+  check(
+    'loose root: and the duplicate is reported instead of a clean bill of health',
+    looseCheck.status === 'fail' && !!looseCheck.items?.some((i) => i.includes(path.join('scripts', looseName))),
+    looseCheck
+  )
+  await fsp.rm(path.join(game, looseName), { force: true })
+  await fsp.rm(path.join(game, 'scripts', looseName), { force: true })
 
   getDb().prepare('DELETE FROM profile').run()
   await fsp.rm(tmp, { recursive: true, force: true }).catch(() => undefined)

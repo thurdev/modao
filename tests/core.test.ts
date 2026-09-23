@@ -80,6 +80,7 @@ import {
   type ReleaseFetcher,
   type UpstreamRelease
 } from '../src/shared/upstream'
+import { createJunction, removeLinkOrDir, walk } from '../src/main/util/fsx'
 
 let failures = 0
 function check(name: string, cond: boolean, extra?: unknown): void {
@@ -2024,6 +2025,44 @@ check(
   regCrash?.backtrace
 )
 check('modloader.log: a dump with no register block reports no registers', mlCrash?.registers && Object.keys(mlCrash.registers).length === 0, mlCrash?.registers)
+
+// --- fsx.walk: a cycle guard that does not hide a second live mount ---------
+// storeKey() is slug+version+variant, so two installs of the same mod+version
+// share ONE store folder and materialise as two junctions onto it. A guard that
+// logged every realpath ever visited entered the first junction and returned
+// immediately on the second, so a file genuinely present at a second
+// game-relative path was never enumerated, never hashed, never reported.
+const twinTarget = path.join(tmp, 'walk-store', 'open-limit-adjuster')
+fs.mkdirSync(twinTarget, { recursive: true })
+fs.writeFileSync(path.join(twinTarget, 'III.VC.SA.LimitAdjuster.asi'), 'MZ-twin')
+const twinTree = path.join(tmp, 'walk-twin', 'modloader')
+fs.mkdirSync(twinTree, { recursive: true })
+await createJunction(path.join(twinTree, 'Alpha Mod'), twinTarget)
+await createJunction(path.join(twinTree, 'Beta Mod'), twinTarget)
+const twinWalk = (await walk(twinTree)).map((f) => f.rel.toLowerCase()).sort()
+check(
+  'walk: two junctions onto the same store folder are both walked, not collapsed into one',
+  twinWalk.length === 2 &&
+    twinWalk[0] === 'alpha mod/iii.vc.sa.limitadjuster.asi' &&
+    twinWalk[1] === 'beta mod/iii.vc.sa.limitadjuster.asi',
+  twinWalk
+)
+await removeLinkOrDir(path.join(twinTree, 'Alpha Mod'))
+await removeLinkOrDir(path.join(twinTree, 'Beta Mod'))
+
+// ...and the guard still terminates, without the same physical file coming back
+// as a copy of itself: a junction onto its own parent is descent, not a mount.
+const loopRoot = path.join(tmp, 'walk-loop')
+fs.mkdirSync(loopRoot, { recursive: true })
+fs.writeFileSync(path.join(loopRoot, 'plugin.asi'), 'MZ-loop')
+await createJunction(path.join(loopRoot, 'self'), loopRoot)
+const loopWalk = (await walk(loopRoot)).map((f) => f.rel.toLowerCase())
+check(
+  'walk: a junction that loops back on its own parent terminates, and the file is reported once',
+  loopWalk.length === 1 && loopWalk[0] === 'plugin.asi',
+  loopWalk
+)
+await removeLinkOrDir(path.join(loopRoot, 'self'))
 
 fs.rmSync(tmp, { recursive: true, force: true })
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`)

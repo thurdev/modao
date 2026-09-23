@@ -31,8 +31,17 @@ export interface ScannedAsset {
   rel: string
 }
 
+/**
+ * The ASI directory is used exactly as DETECTED, never assumed - but when
+ * detection yields nothing (no modloader.asi, or an install that never had
+ * one), the plugins are loose in the game root, and scanning only
+ * scripts\/cleo\/modloader\ would look at everything except where they
+ * actually are and report a clean bill of health. `game.asiDirectory ??
+ * game.path` is the same fallback every other ASI-directory call site uses
+ * (health.ts:357, engine.ts:775, switchTx.ts:601, manager.ts:797).
+ */
 function scanRoots(game: GameInstall): string[] {
-  const candidates = [game.asiDirectory, path.join(game.path, 'scripts'), path.join(game.path, 'cleo'), path.join(game.path, 'modloader')]
+  const candidates = [game.asiDirectory ?? game.path, path.join(game.path, 'scripts'), path.join(game.path, 'cleo'), path.join(game.path, 'modloader')]
   const seen = new Set<string>()
   const out: string[] = []
   for (const c of candidates) {
@@ -47,9 +56,12 @@ function scanRoots(game: GameInstall): string[] {
 
 /**
  * Every .asi / .cleo plugin binary reachable from the game tree, following
- * junctions. Cycle safety is `walk()`'s own: it tracks each directory's
- * realpath as it recurses and refuses to enter one twice, so a junction that
- * loops back on itself (or on a parent) cannot spin the scan forever.
+ * junctions. Cycle safety is `walk()`'s own: it tracks the realpath chain of
+ * the directories it is currently inside and refuses to re-enter one of its
+ * own ancestors, so a junction that loops back on itself (or on a parent)
+ * cannot spin the scan forever - while two separate junctions onto the same
+ * store folder are still both walked, because each is a real, live location
+ * the file loads from.
  */
 export async function scanGameTreeAssets(game: GameInstall): Promise<ScannedAsset[]> {
   const out: ScannedAsset[] = []
