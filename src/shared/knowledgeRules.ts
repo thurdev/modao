@@ -650,3 +650,29 @@ export function crashCorrelationRule(
 export function isLegacyCrashRule(row: { kind: string; source: string; subject: string }): boolean {
   return row.kind === 'redundancy' && row.source === 'crash' && row.subject.startsWith('crash:')
 }
+
+/**
+ * The stored payload of such a row, brought up to the current shape.
+ *
+ * The old writer had no `profileId`, so a migrated row would otherwise carry a
+ * field that is simply absent where every other crash rule has one. It becomes
+ * `null` - "this row predates the field" - and is never invented: guessing a
+ * profile for a crash recorded before the app tracked one would be exactly the
+ * fabricated evidence this layer exists to avoid. The address falls back to the
+ * one already in the subject (`crash:<address>`), which is where it came from.
+ */
+export function migrateLegacyCrashValue(raw: unknown, subject: string): CrashCorrelationRule {
+  const value = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const list = Array.isArray(value.folders) ? value.folders : Array.isArray(value.mods) ? value.mods : []
+  const folders = [
+    ...new Set(list.filter((f): f is string => typeof f === 'string').map((f) => f.trim()).filter(Boolean))
+  ].sort((a, b) => a.localeCompare(b))
+  const fromSubject = subject.startsWith('crash:') ? subject.slice('crash:'.length) : ''
+  const stored = typeof value.address === 'string' ? value.address.trim() : ''
+  const address = stored || (fromSubject && fromSubject !== 'unknown' ? fromSubject : '')
+  return {
+    address: address || null,
+    folders,
+    profileId: typeof value.profileId === 'number' ? value.profileId : null
+  }
+}

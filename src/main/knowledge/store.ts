@@ -2,6 +2,7 @@ import { getDb } from '../db'
 import {
   decideLearn,
   isLegacyCrashRule,
+  migrateLegacyCrashValue,
   rankRules,
   SOURCE_WEIGHT,
   type KnowledgeRule,
@@ -70,7 +71,10 @@ function toRule<T>(r: Row): KnowledgeRule<T> {
  *
  * This runs from the store rather than from a schema migration on purpose: the
  * rows' SHAPE did not change, only which kind they belong to, and a user who
- * upgrades must not lose them either way.
+ * upgrades must not lose them either way. The payload IS brought up to date -
+ * the old writer had no `profileId` - by `migrateLegacyCrashValue`, which fills
+ * it with `null` rather than inventing a profile for a crash recorded before
+ * the app tracked one.
  */
 let upgraded = false
 function ensureUpgraded(): void {
@@ -78,22 +82,32 @@ function ensureUpgraded(): void {
   upgraded = true
   const db = getDb()
   const legacy = (
-    db.prepare("SELECT id, kind, source, subject FROM knowledge_rule WHERE kind = 'redundancy' AND source = 'crash'").all() as {
+    db
+      .prepare("SELECT id, kind, source, subject, value_json FROM knowledge_rule WHERE kind = 'redundancy' AND source = 'crash'")
+      .all() as {
       id: number
       kind: string
       source: string
       subject: string
+      value_json: string
     }[]
   ).filter(isLegacyCrashRule)
   if (legacy.length === 0) return
   // OR IGNORE: a correlation already relearned under the new kind keeps the
   // newer row, and the stale one is dropped rather than colliding on the
   // (kind, subject, subject_kind, source) uniqueness.
-  const move = db.prepare("UPDATE OR IGNORE knowledge_rule SET kind = 'crash-correlation' WHERE id = ?")
+  const move = db.prepare("UPDATE OR IGNORE knowledge_rule SET kind = 'crash-correlation', value_json = ? WHERE id = ?")
   const drop = db.prepare("DELETE FROM knowledge_rule WHERE id = ? AND kind = 'redundancy'")
   db.transaction(() => {
     for (const row of legacy) {
-      move.run(row.id)
+      let parsed: unknown = null
+      try {
+        parsed = JSON.parse(row.value_json)
+      } catch {
+        // A payload that will not parse is still a real crash row; the subject
+        // alone carries enough to rebuild it.
+      }
+      move.run(JSON.stringify(migrateLegacyCrashValue(parsed, row.subject)), row.id)
       drop.run(row.id)
     }
   })()

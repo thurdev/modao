@@ -27,6 +27,7 @@ import {
   learnLayout,
   signatureForArchive
 } from '../knowledge/learn'
+import type { ModSignature } from '../knowledge/signature'
 import { t } from '../util/i18n'
 import {
   dematerialise,
@@ -52,6 +53,16 @@ interface PlanState {
   profileId: number
   docs: string[]
   game: GameInstall
+  /**
+   * What this archive IS, computed once from the whole extracted tree.
+   *
+   * Everything the knowledge store is asked about this plan is keyed on it, so
+   * everything learned from this plan has to be keyed on it too. Recomputing an
+   * identity later from `plan.files` describes a DIFFERENT archive - variant
+   * selection and classification both drop files - and a rule filed under that
+   * one is never read again. Kept on the state so there is exactly one of it.
+   */
+  signature: ModSignature | null
 }
 
 const PLANS = new Map<string, PlanState>()
@@ -95,7 +106,8 @@ export async function createPlan(input: CreatePlanInput): Promise<InstallPlan> {
     readmes,
     profileId: input.profileId,
     docs: [],
-    game
+    game,
+    signature: null
   }
   PLANS.set(planId, state)
 
@@ -215,6 +227,9 @@ async function buildPlan(planId: string, meta: BuildMeta): Promise<InstallPlan> 
   // What this archive is, and what the app already knows about archives like it.
   const archiveFiles = (await walk(extractRoot)).map((f) => f.rel)
   const signature = signatureForArchive(archiveFiles, readmes[0]?.raw ?? null)
+  // Held for `applyPlan`: what is learned after the install has to be filed
+  // under the same identity this plan was looked up under.
+  state.signature = signature
   learnFromReadme(signature, readmes)
   const { pluginEvidence } = await import('../formats/strings')
   for (const file of archiveFiles) {
@@ -447,14 +462,20 @@ export async function applyPlan(
   if (plan.requiresVariantChoice) throw new Error('Choose a variant before installing.')
   // The layout the user accepted is the layout to expect next time an archive
   // of this shape turns up.
-  learnLayout(
-    signatureForArchive(
-      plan.files.map((f) => f.sourcePath),
-      plan.readmes[0]?.raw ?? null
-    ),
-    plan.files,
-    'inference'
-  )
+  //
+  // Keyed on the signature `buildPlan` computed from the WHOLE extracted
+  // archive, never on one recomputed from `plan.files`: an archive with a
+  // variant group installs a fraction of its own files, so a post-selection
+  // identity describes a different archive and the rule was being filed under a
+  // key `knownAbout` never queries - learned, stored, and never read again.
+  //
+  // The files the user retargeted by hand are named, so `learnLayout` can file
+  // those at user weight and only the rest as an inference. Learning the two at
+  // one weight is what made a correction indistinguishable from a guess.
+  const learnedUnder =
+    state.signature ??
+    signatureForArchive((await walk(state.extractRoot)).map((f) => f.rel), plan.readmes[0]?.raw ?? null)
+  learnLayout(learnedUnder, plan.files, 'inference', Object.keys(state.overrides))
   // Dependencies never block: they are reported on the plan and offered for
   // install, and the user decides. Only a plan that cannot be carried out at
   // all - nothing to install, a variant unchosen - stops here.

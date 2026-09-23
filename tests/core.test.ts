@@ -3371,6 +3371,7 @@ import {
   decideLearn,
   isLegacyCrashRule,
   layoutConflictWarning,
+  migrateLegacyCrashValue,
   layoutConflictsByRule,
   postInstallRecipes,
   priorityOverrideRule,
@@ -3717,6 +3718,96 @@ check(
     !isLegacyCrashRule({ kind: 'redundancy', source: 'readme', subject: 'crash:0x004C0C3A' }) &&
     !isLegacyCrashRule({ kind: 'redundancy', source: 'crash', subject: 'sig:abcdef' }) &&
     !isLegacyCrashRule({ kind: 'crash-correlation', source: 'crash', subject: 'crash:0x004C0C3A' })
+)
+
+// --- item 18: an install is learned under the key the next plan looks up -----
+// `buildPlan` keys `knownAbout` on the signature of the WHOLE extracted
+// archive; `applyPlan` used to learn against a signature recomputed from
+// `plan.files`, which for any archive with a variant group is a different file
+// list and therefore a different archive. The rule was written, stored, and
+// never read again - a silent no-op with the same shape as the uncalled writers
+// this task existed to fix. These pin both halves: that the two signatures
+// really do diverge for that archive, and that only the whole-archive one is
+// reachable through `subjectsOf`, which is the sole way into the store.
+import { signatureForArchive, subjectsOf } from '../src/main/knowledge/signature'
+
+const variantReadme = 'Escolha a resolução: 4K recomendado para placas modernas.'
+// Everything the archive ships - what `buildPlan` walks and keys on.
+const wholeArchive = [
+  'readme.txt',
+  'ProperShaders/1080p/ProperShaders.ini',
+  'ProperShaders/1440p/ProperShaders.ini',
+  'ProperShaders/4K/ProperShaders.ini'
+]
+// What survives once the user picks 4K - what `applyPlan` holds in `plan.files`.
+const afterVariantChoice = ['readme.txt', 'ProperShaders/4K/ProperShaders.ini']
+
+const planSignature = signatureForArchive(wholeArchive, variantReadme)
+const postSelectionSignature = signatureForArchive(afterVariantChoice, variantReadme)
+
+check(
+  'knowledge: for an archive with a variant group the plan signature and a post-selection one are different archives',
+  planSignature.exact !== postSelectionSignature.exact && subjectsOf(planSignature).length === 2
+)
+
+const nextInstallStore = fakeKnowledgeStore()
+// What `applyPlan` writes now: keyed on the signature the PLAN was built with.
+nextInstallStore.learn<LayoutRule>({
+  kind: 'install-layout',
+  subject: planSignature.exact,
+  subjectKind: 'exact',
+  source: 'inference',
+  evidence: '2 file(s) placed by the classifier and accepted',
+  value: { placements: [], modFolder: 'Proper Shaders' }
+})
+check(
+  'knowledge: a layout rule applyPlan writes is found by knownAbout on the next install of the same archive',
+  (() => {
+    // This is exactly what `knownAbout` does: rulesFor(kind, subjectsOf(sig)).
+    const found = nextInstallStore.rulesFor<LayoutRule>('install-layout', subjectsOf(planSignature))
+    return found.length === 1 && found[0].value.modFolder === 'Proper Shaders'
+  })()
+)
+
+const regressedStore = fakeKnowledgeStore()
+// What it used to write: keyed on the post-selection file list.
+regressedStore.learn<LayoutRule>({
+  kind: 'install-layout',
+  subject: postSelectionSignature.exact,
+  subjectKind: 'exact',
+  source: 'inference',
+  evidence: '2 file(s) placed by the classifier and accepted',
+  value: { placements: [], modFolder: 'Proper Shaders' }
+})
+check(
+  'knowledge: keyed the old way that same rule is invisible to the next install - the regression this guards',
+  regressedStore.rulesFor<LayoutRule>('install-layout', subjectsOf(planSignature)).length === 0 &&
+    regressedStore.rows.length === 1
+)
+check(
+  'knowledge: an archive with no variant group was never affected, which is why this went unnoticed',
+  signatureForArchive(afterVariantChoice, variantReadme).exact ===
+    signatureForArchive([...afterVariantChoice].reverse(), variantReadme).exact
+)
+
+// The legacy crash payload gains the field it never had, without inventing one.
+check(
+  'knowledge: a migrated crash row gets a profileId of null rather than a guessed profile',
+  (() => {
+    const migrated = migrateLegacyCrashValue({ folders: ['Zebra Mod', 'Cool Cars', ' Cool Cars '] }, 'crash:0x004C0C3A')
+    const empty = migrateLegacyCrashValue(null, 'crash:unknown')
+    const kept = migrateLegacyCrashValue({ address: '0x00618F80', folders: [], profileId: 4 }, 'crash:0x004C0C3A')
+    return (
+      migrated.profileId === null &&
+      migrated.address === '0x004C0C3A' &&
+      migrated.folders.join(',') === 'Cool Cars,Zebra Mod' &&
+      empty.address === null &&
+      empty.folders.length === 0 &&
+      empty.profileId === null &&
+      kept.address === '0x00618F80' &&
+      kept.profileId === 4
+    )
+  })()
 )
 
 fs.rmSync(tmp, { recursive: true, force: true })

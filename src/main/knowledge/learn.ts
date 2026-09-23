@@ -23,9 +23,9 @@ import {
 } from '@shared/knowledgeRules'
 import type { PersistedVariantGroup } from '@shared/variantGroups'
 import { learn, rulesFor, type KnowledgeRule } from './store'
-import { signatureForArchive, type ModSignature } from './signature'
+import { signatureForArchive, subjectsOf, type ModSignature } from './signature'
 
-export { signatureForArchive }
+export { signatureForArchive, subjectsOf }
 export type { LayoutRule, DependencyRule, VerdictRule, VariantGroupRule, PostInstallRule, PriorityOverrideRule }
 
 /**
@@ -37,11 +37,6 @@ export type { LayoutRule, DependencyRule, VerdictRule, VariantGroupRule, PostIns
  * is inferred from nothing, and each rule carries the evidence it came from so
  * it can be shown - and argued with.
  */
-
-/** Both keys a rule can be stored against, most specific first. */
-export function subjectsOf(signature: ModSignature): string[] {
-  return [signature.exact, signature.shape]
-}
 
 /**
  * Records what the readme said. The author's own words are the strongest
