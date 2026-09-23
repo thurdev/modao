@@ -2027,6 +2027,36 @@ export async function runE2E(): Promise<number> {
     diff(beforeGuardSwitch, await snapshotDir(game))
   )
 
+  // --- copilot review: "the latest restorable switch" is not "this switch" ---
+  // The blocked-switch dialog reports ONE failed switch by name and offers to
+  // put it back. It is rendered from the app shell, so it survives navigation -
+  // and a profile can be switched again from the header while it is still open.
+  // Asking for the latest restorable switch instead of the one being reported
+  // therefore rolls back the WRONG transaction and calls it the failure the
+  // user was reading about. These two calls are shown diverging on purpose.
+  const dlgA = await createProfile({ name: 'Dialog Journal A' })
+  await activateProfile(dlgA.id)
+  const dlgJournalA = listJournals(10, 'profile-switch')[0]
+  const dlgB = await createProfile({ name: 'Dialog Journal B' })
+  await activateProfile(dlgB.id)
+  const dlgJournalB = listJournals(10, 'profile-switch')[0]
+  check(
+    'switch dialog: a newer switch displaces the older one as "the latest restorable switch"',
+    dlgJournalB.id !== dlgJournalA.id && lastRestorableSwitch()?.id === dlgJournalB.id,
+    { older: dlgJournalA.id, newer: dlgJournalB.id, latest: lastRestorableSwitch()?.id }
+  )
+  await restorePreviousState(dlgJournalA.id)
+  check(
+    'switch dialog: restoring BY ID rolls back the switch that was named, not the newest one',
+    (await listProfiles()).find((p) => p.isActive)?.id === dlgJournalA.fromProfileId &&
+      (await listProfiles()).find((p) => p.isActive)?.id !== dlgJournalA.id,
+    {
+      active: (await listProfiles()).find((p) => p.isActive)?.id,
+      namedJournalGoesBackTo: dlgJournalA.fromProfileId,
+      noArgWouldHaveGoneBackTo: dlgJournalB.fromProfileId
+    }
+  )
+
   // --- final review C1: uninstalling an ADOPTED install must not delete the
   // user's own files ----------------------------------------------------------
   // Adoption records what is already in the game folder: store_key NULL, every

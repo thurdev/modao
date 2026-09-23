@@ -4343,6 +4343,25 @@ check(
   )
 }
 
+// --- the blocked-switch dialog restores the switch it is reporting -----------
+// The recovery itself is exercised end to end (smokeE2E: "switch dialog"), but
+// what the DIALOG asks for cannot be: there is no React harness here. The wiring
+// is one argument, and dropping it turns "put this switch back" into "put the
+// newest switch back" - a different transaction whenever a profile was switched
+// again while this dialog sat open, which it is built to survive. So the call
+// is read out of the source and required to name a journal.
+{
+  const source = fs.readFileSync(path.join(process.cwd(), 'src', 'renderer', 'screens', 'Profiles.tsx'), 'utf8')
+  const dialog = source.slice(source.indexOf('export function SwitchBlockedDialog'))
+  check(
+    'switch dialog: the blocked-switch recovery names a journal instead of asking for the latest switch',
+    dialog.length > 0 &&
+      /api\.restorePreviousSwitch\(\s*[A-Za-z_$][\w$]*/.test(dialog) &&
+      !/api\.restorePreviousSwitch\(\s*\)/.test(dialog),
+    dialog.slice(dialog.indexOf('restorePreviousSwitch') - 40, dialog.indexOf('restorePreviousSwitch') + 60)
+  )
+}
+
 fs.rmSync(tmp, { recursive: true, force: true })
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`)
 process.exit(failures === 0 ? 0 : 1)

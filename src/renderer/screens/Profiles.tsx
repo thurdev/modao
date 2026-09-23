@@ -93,10 +93,14 @@ export function ProfilesScreen(): JSX.Element {
     }
   }
 
-  async function restorePrevious(): Promise<void> {
+  // Same rule as the blocked-switch dialog below: the journal is NAMED. This
+  // modal is opened by a switch that succeeded and stays open while the user
+  // reads it, and the header can switch profiles again underneath it - so "the
+  // latest restorable switch" is not reliably the one this modal is about.
+  async function restorePrevious(journalId: number): Promise<void> {
     setRestoring(true)
     try {
-      const result = await api.restorePreviousSwitch()
+      const result = await api.restorePreviousSwitch(journalId)
       await Promise.all([refreshProfiles(), checkOrphanSaves()])
       setSwitchLog(null)
       pushToast('success', `Restored ${result.restored} file(s) from the pre-switch backup.`)
@@ -360,7 +364,7 @@ export function ProfilesScreen(): JSX.Element {
                   <Button
                     variant="danger"
                     disabled={restoring}
-                    onClick={() => void restorePrevious()}
+                    onClick={() => void restorePrevious(switchLog.journalId as number)}
                     icon={<Icon.undo width={13} height={13} />}
                   >
                     {restoring ? t('profiles.restoring') : t('profiles.restorePrevious')}
@@ -670,10 +674,24 @@ export function SwitchBlockedDialog(): JSX.Element | null {
 
   if (!failure) return null
 
-  async function restore(): Promise<void> {
+  // The id is a PARAMETER rather than a read of `failure` inside the body:
+  // that is what makes it impossible to call this without naming the journal
+  // the dialog is reporting.
+  async function restore(journalId: number): Promise<void> {
     setRestoring(true)
     try {
-      const result = await api.restorePreviousSwitch()
+      // THE JOURNAL THIS DIALOG IS REPORTING, by id. Asking for "the latest
+      // restorable switch" instead was a different question with the same
+      // answer only while nothing else happened in between: the dialog is
+      // rendered from the app shell and survives navigation, so a profile can
+      // be switched again - from the header, on any screen - while it is still
+      // open, and the button would then roll back that newer switch and report
+      // it as the failure the user was reading about.
+      //
+      // `restorePreviousState` still refuses anything that is not a profile
+      // switch, by id as well as by recency: a variant swap writes into the
+      // same table and can never be restored here, whichever route reaches it.
+      const result = await api.restorePreviousSwitch(journalId)
       await Promise.all([refreshProfiles(), checkUnmanaged()])
       setSwitchFailure(null)
       pushToast('success', t('messages.profile.restoredFiles', { count: result.restored }))
@@ -697,7 +715,7 @@ export function SwitchBlockedDialog(): JSX.Element | null {
             <Button
               variant="danger"
               disabled={restoring}
-              onClick={() => void restore()}
+              onClick={() => void restore(failure.journalId as number)}
               icon={<Icon.undo width={13} height={13} />}
             >
               {restoring ? t('profiles.restoring') : t('profiles.restorePrevious')}
