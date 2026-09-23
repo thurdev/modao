@@ -79,10 +79,15 @@ export const install = {
       noInstructionLine:
         'Nenhuma linha de instrução de instalação foi reconhecida. O plano abaixo vem da inspeção do próprio arquivo.',
       folderNamedInReadme: 'Pasta citada no leiame: {folder}',
+      activationTitle: 'Como ativar no jogo',
+      activationHint: 'O leiame diz para digitar isto durante o jogo. Sem isso o mod fica instalado e parado.',
+      confirmUnparsedReadme: 'Li o leiame bruto e quero instalar assim mesmo',
+      confirmUnparsedReadmeFirst: 'Confirme que leu o leiame para continuar',
       linksInReadme: 'Links no leiame:',
       dependencyPlan: 'Plano de dependências',
       mustNotCoexist: 'não pode coexistir',
       oneOf: 'um destes',
+      provides: 'já vem junto',
       requires: 'requer',
       installedSuffix: ' (instalado)',
       or: 'ou',
@@ -92,7 +97,10 @@ export const install = {
       showEveryFile: 'Mostrar todos os arquivos',
       replacesMod: 'substitui {mod}',
       overwritesLabel: 'sobrescreve',
-      gameRoot: '<raiz do jogo>'
+      gameRoot: '<raiz do jogo>',
+      addOnsTitle: 'Extras opcionais',
+      addOnsHint: 'Sozinhas, estas pastas não fazem nada — ligue para mesclá-las no mod a que pertencem.',
+      addOnAsOwnMod: 'mesclada na pasta do mod'
     },
     access: {
       writeConfirmed: 'Acesso de escrita confirmado.',
@@ -184,10 +192,15 @@ export const install = {
       noInstructionLine:
         'No install instruction line was recognised. The plan below comes from inspecting the archive itself.',
       folderNamedInReadme: 'Folder named in the readme: {folder}',
+      activationTitle: 'How to switch it on in-game',
+      activationHint: 'The readme says to type this while playing. Without it the mod sits installed and idle.',
+      confirmUnparsedReadme: 'I read the raw readme and want to install anyway',
+      confirmUnparsedReadmeFirst: 'Confirm you read the readme to continue',
       linksInReadme: 'Links in the readme:',
       dependencyPlan: 'Dependency plan',
       mustNotCoexist: 'must not coexist',
       oneOf: 'one of',
+      provides: 'ships with it',
       requires: 'requires',
       installedSuffix: ' (installed)',
       or: 'or',
@@ -197,7 +210,10 @@ export const install = {
       showEveryFile: 'Show every file',
       replacesMod: 'replaces {mod}',
       overwritesLabel: 'overwrites',
-      gameRoot: '<game root>'
+      gameRoot: '<game root>',
+      addOnsTitle: 'Optional add-ons',
+      addOnsHint: 'Installed alone these folders do nothing — enable one to merge it into the mod it belongs to.',
+      addOnAsOwnMod: 'merged into the mod folder'
     },
     access: {
       writeConfirmed: 'Write access confirmed.',

@@ -3,8 +3,10 @@ import { promisify } from 'node:util'
 import type { CrashIncident, CrashReport } from '@shared/types'
 import { getDb } from '../db'
 import { lookup } from './crashlist'
-import { groupIncidents, parseModuleName, resolveCrashAddress } from '@shared/crash'
+import { groupIncidents, parseModuleName } from '@shared/crash'
+import { addressingForStorage, addressingFromStoredRow } from '@shared/crashRecord'
 import { activeGame } from '../game/detect'
+import { learnCrashCorrelation } from '../knowledge/learn'
 
 const execFileAsync = promisify(execFile)
 
@@ -96,6 +98,20 @@ export function parseCrashEvent(ev: RawCrashEvent): ParsedCrash | null {
   }
 }
 
+/**
+ * The mod folders enabled for a profile at the moment a crash is recorded -
+ * exactly the mod set that could have produced it. `null` (no profile named)
+ * yields nothing rather than guessing at every profile's folders at once.
+ */
+function enabledFoldersFor(profileId: number | null): string[] {
+  if (profileId === null) return []
+  return (
+    getDb()
+      .prepare("SELECT folder_name FROM install WHERE profile_id = ? AND enabled = 1 AND folder_name IS NOT NULL")
+      .all(profileId) as { folder_name: string }[]
+  ).map((r) => r.folder_name)
+}
+
 export interface ScanResult {
   found: number
   added: number
@@ -121,11 +137,14 @@ export async function scanCrashes(profileId: number | null): Promise<ScanResult>
 
     // Only a fault inside gta_sa.exe has an absolute address CrashList can
     // answer for; a DLL offset looked up against the exe index is a wrong answer
-    // stated confidently.
-    const addressing =
-      parsed.kind === 'exception'
-        ? resolveCrashAddress(parsed.module, parsed.faultOffset)
-        : { kind: 'none' as const, display: '', lookupAddress: null, note: null }
+    // stated confidently. The decision itself lives in @shared/crashRecord, where
+    // it can be tested without Electron.
+    const addressing = addressingForStorage({
+      from: 'eventlog',
+      kind: parsed.kind,
+      module: parsed.module,
+      faultOffset: parsed.faultOffset
+    })
     const match = addressing.lookupAddress ? await lookup(addressing.lookupAddress) : null
     const cause = match?.cause ?? (match?.nearest ? `${match.nearest.cause} (nearest known address ${match.nearest.address})` : null)
 
@@ -139,20 +158,28 @@ export async function scanCrashes(profileId: number | null): Promise<ScanResult>
       .run(
         profileId,
         parsed.occurredAt,
-        parsed.faultOffset,
-        parsed.module,
+        addressing.faultOffset,
+        // Same rule as the Mod Loader path below: the module that is stored is
+        // the one the addressing was decided from, never a second reading of
+        // the source.
+        addressing.module,
         parsed.exceptionCode,
-        addressing.display,
+        addressing.crashAddress,
         cause,
         match?.solution ?? null,
         parsed.kind,
         parsed.raw,
         parsed.processId,
-        parsed.moduleUnloaded ? 1 : 0,
-        addressing.kind,
-        addressing.note
+        addressing.moduleUnloaded ? 1 : 0,
+        addressing.addressKind,
+        addressing.addressNote
       )
-    if (info.changes > 0) added++
+    if (info.changes > 0) {
+      added++
+      // A crash correlated with the mod set that was enabled when it happened -
+      // grounded in the install table's own `enabled` column, never guessed.
+      learnCrashCorrelation(enabledFoldersFor(profileId), addressing.crashAddress || null, profileId)
+    }
   }
 
   added += fromModLoader.added
@@ -195,13 +222,17 @@ export function listCrashes(profileId: number | null): CrashReport[] {
     address_note: string | null
   }[]
   return rows.map((r) => {
-    // Rows written before the module-aware scan have no addressing recorded;
-    // derive it here rather than showing the old exe-only guess.
-    const addressing =
-      r.kind === 'hang'
-        ? { kind: 'none' as const, display: '', lookupAddress: null, note: null }
-        : resolveCrashAddress(r.module, r.fault_offset)
-    const kind = (r.address_kind as CrashReport['addressKind'] | null) ?? addressing.kind
+    // Reading a row back must never recompute an address that was already
+    // computed on the way in - see addressingFromStoredRow in
+    // @shared/crashRecord, which is where that rule is stated and tested.
+    const read = addressingFromStoredRow({
+      kind: r.kind,
+      module: r.module,
+      faultOffset: r.fault_offset,
+      crashAddress: r.crash_address,
+      addressKind: r.address_kind,
+      addressNote: r.address_note
+    })
     return {
       id: r.id,
       profileId: r.profile_id,
@@ -212,11 +243,11 @@ export function listCrashes(profileId: number | null): CrashReport[] {
       moduleUnloaded: r.module_unloaded === null ? parseModuleName(r.module).unloaded : !!r.module_unloaded,
       processId: r.process_id ?? '',
       exceptionCode: r.exception_code,
-      crashAddress: kind === 'exe' ? r.crash_address || addressing.display : addressing.display,
-      addressKind: kind,
-      addressNote: r.address_note ?? addressing.note,
-      matchedCause: kind === 'exe' ? r.matched_cause : null,
-      matchedSolution: kind === 'exe' ? r.matched_solution : null,
+      crashAddress: read.crashAddress,
+      addressKind: read.addressKind,
+      addressNote: read.addressNote,
+      matchedCause: read.addressKind === 'exe' ? r.matched_cause : null,
+      matchedSolution: read.addressKind === 'exe' ? r.matched_solution : null,
       resolved: !!r.resolved,
       kind: r.kind === 'hang' ? 'hang' : 'exception',
       raw: r.raw
@@ -253,10 +284,26 @@ async function scanModLoaderCrash(profileId: number | null): Promise<{ added: nu
   if (!crash) return { added: 0, note: null }
 
   const occurredAt = crash.occurredAt ?? new Date().toISOString()
-  const addressing = crash.module ? resolveCrashAddress(crash.module, crash.address ?? '') : null
+  // modloader.log records the address the process faulted at - the image base
+  // is already in it (crash.addressIsAbsolute). Treating it as a fault offset
+  // would add 0x400000 to a number that has it, turning the real 0x005B8E55
+  // into a meaningless 0x009B8E55, which is exactly what the field report saw.
+  // addressingForStorage is the one place that distinction is made, and it is
+  // tested directly.
+  const addressing = addressingForStorage({ from: 'modloader', module: crash.module, address: crash.address })
+  // The Event-Log path looks its address up in CrashList (see the loop above);
+  // this one used to insert matched_cause/matched_solution as null
+  // unconditionally, so the SAME address found by Windows resolved to a cause
+  // and found by Mod Loader did not. addressing.addressKind is only ever
+  // 'exe' when there is an address CrashList can be asked about at all.
+  const match = addressing.lookupAddress ? await lookup(addressing.lookupAddress) : null
+  const cause = match?.cause ?? (match?.nearest ? `${match.nearest.cause} (nearest known address ${match.nearest.address})` : null)
+  const registerEntries = Object.entries(crash.registers)
   const detail = [
     crash.reason,
+    registerEntries.length ? `Registers:\n${registerEntries.map(([k, v]) => `${k}=${v}`).join(' ')}` : '',
     crash.lastStreamedFile ? `Last file opened for streaming: ${crash.lastStreamedFile}` : '',
+    crash.stack.length ? `Stack dump:\n${crash.stack.join('\n')}` : '',
     crash.backtrace.length ? `Backtrace:\n${crash.backtrace.join('\n')}` : ''
   ]
     .filter(Boolean)
@@ -267,23 +314,36 @@ async function scanModLoaderCrash(profileId: number | null): Promise<{ added: nu
       `INSERT OR IGNORE INTO crash_report
          (profile_id, occurred_at, fault_offset, module, exception_code, crash_address, matched_cause, matched_solution,
           kind, raw, resolved, process_id, module_unloaded, address_kind, address_note)
-       VALUES (?,?,?,?,?,?,?,?,?,?,0,?,0,?,?)`
+       VALUES (?,?,?,?,?,?,?,?,?,?,0,?,?,?,?)`
     )
     .run(
       profileId,
       occurredAt,
-      crash.address ?? '',
-      crash.module ?? 'gta_sa.exe',
+      // Empty: this source reports no offset, and storing the absolute address
+      // in a column named for an offset is what made listCrashes re-derive
+      // base + already-based-address on every read.
+      addressing.faultOffset,
+      // The module AS THE ADDRESSING DECIDED IT, not the raw dump value. A dump
+      // with no module line used to be classified from the bare null - "unknown
+      // foreign module", so the absolute address was never looked up in
+      // CrashList - and then stored here as gta_sa.exe anyway, a row whose own
+      // module column contradicted the decision that produced it.
+      addressing.module,
       '',
-      addressing?.display ?? crash.address ?? '',
-      null,
-      null,
+      addressing.crashAddress,
+      cause,
+      match?.solution ?? null,
       'exception',
       detail,
       'modloader.log',
-      addressing?.kind ?? 'none',
-      addressing?.note ?? null
+      addressing.moduleUnloaded ? 1 : 0,
+      addressing.addressKind,
+      addressing.addressNote
     )
+
+  if (info.changes > 0) {
+    learnCrashCorrelation(enabledFoldersFor(profileId), addressing.crashAddress || null, profileId)
+  }
 
   return {
     added: info.changes > 0 ? 1 : 0,

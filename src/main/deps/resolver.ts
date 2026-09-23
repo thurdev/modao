@@ -1,31 +1,62 @@
+import fs from 'node:fs'
 import type { DependencyNode, GameInstall } from '@shared/types'
 import { getDb } from '../db'
+import { satisfiesRange } from '@shared/versionRange'
+import {
+  buildDependencyNodes,
+  dependencyLaunchBlockers,
+  type ArtifactProvider,
+  type GraphDependencyRow,
+  type InstalledMod
+} from '@shared/dependencyGraph'
+import type { LaunchBlocker } from '@shared/launchGate'
+import { t } from '../util/i18n'
 
 interface DepRow {
   id: number
-  mod_id: number
+  mod_id: number | null
+  mod_slug: string | null
   requires_mod_id: number | null
   requires_slug: string | null
-  kind: 'requires' | 'conflicts' | 'alt'
+  kind: string
   version_range: string | null
   alt_group: string | null
   note: string | null
 }
 
+/** A slug no mod can have, so a vanished subject row matches nothing. */
+const NO_SLUG = '!no-such-slug!'
+
 export interface ResolveInput {
   modId: number
   profileId: number
   game: GameInstall
+  /**
+   * Optional: the profile's requirement evidence, when the caller already
+   * built it. `profileDependencyProblems` resolves every installed mod in a
+   * row, and the evidence is the same list every time.
+   */
+  evidence?: readonly string[]
 }
 
 /**
  * Builds the dependency plan for one mod against one profile.
- * Supports alternatives (A or B), version ranges, and anti-dependencies -
- * mods that must not coexist, such as Proper Shaders and SkyGfx.
+ *
+ * The SQL is here; the reasoning is in `@shared/dependencyGraph`, which the
+ * unit suite can import without Electron. Every query below is scoped to the
+ * profile passed in - a dependency satisfied in another profile counts for
+ * nothing, because the game only loads what is materialised now.
  */
-export function resolveDependencies({ modId, profileId, game }: ResolveInput): DependencyNode[] {
+export function resolveDependencies({ modId, profileId, game, evidence }: ResolveInput): DependencyNode[] {
   const db = getDb()
-  const rows = db.prepare('SELECT * FROM dependency WHERE mod_id = ?').all(modId) as DepRow[]
+  const subject = db.prepare('SELECT id, slug, title FROM mod WHERE id = ?').get(modId) as
+    | { id: number; slug: string; title: string }
+    | undefined
+  // Edges are addressed by slug as well as by id, so an edge for a mod the
+  // catalogue has never heard of still binds the moment that mod is installed.
+  const rows = db
+    .prepare('SELECT * FROM dependency WHERE mod_id = ? OR (mod_slug IS NOT NULL AND mod_slug = ?)')
+    .all(modId, subject?.slug ?? NO_SLUG) as DepRow[]
   if (rows.length === 0) return []
 
   const installed = db
@@ -38,86 +69,122 @@ export function resolveDependencies({ modId, profileId, game }: ResolveInput): D
     )
     .all(profileId) as { id: number; slug: string; title: string; version_label: string; enabled: number }[]
 
-  const bySlug = new Map(installed.map((i) => [i.slug, i]))
-  const out: DependencyNode[] = []
-
-  const altGroups = new Map<string, DepRow[]>()
-  for (const r of rows) {
-    if (r.kind === 'alt' && r.alt_group) {
-      const list = altGroups.get(r.alt_group) ?? []
-      list.push(r)
-      altGroups.set(r.alt_group, list)
-    }
-  }
-
-  for (const [group, members] of altGroups) {
-    const alternatives = members.map((m) => {
-      const info = lookupMod(m)
-      const inst = info.slug ? bySlug.get(info.slug) : undefined
-      return { slug: info.slug, title: info.title, satisfied: !!inst }
-    })
-    const satisfied = alternatives.some((a) => a.satisfied)
-    out.push({
-      modId: null,
-      slug: group,
-      title: alternatives.map((a) => a.title).join(' or '),
-      kind: 'alt',
-      versionRange: members[0].version_range,
-      satisfied,
-      alternatives,
-      resolution: satisfied ? 'already-installed' : 'missing',
-      note: members[0].note ?? 'Any one of these satisfies the requirement.'
-    })
-  }
-
-  for (const r of rows) {
-    if (r.kind === 'alt') continue
+  const graphRows: GraphDependencyRow[] = rows.map((r) => {
     const info = lookupMod(r)
-    const inst = info.slug ? bySlug.get(info.slug) : undefined
-
-    if (r.kind === 'conflicts') {
-      out.push({
-        modId: info.id,
-        slug: info.slug,
-        title: info.title,
-        kind: 'conflicts',
-        versionRange: r.version_range,
-        satisfied: !inst,
-        resolution: inst ? 'blocking' : 'ok',
-        note: r.note ?? (inst ? `${info.title} is installed and cannot coexist with this mod.` : null)
-      })
-      continue
-    }
-
-    // Requirements that are about the framework rather than a catalogue mod.
-    const frameworkNote = checkFramework(info.slug, r.version_range, game)
-    if (frameworkNote) {
-      out.push({
-        modId: info.id,
-        slug: info.slug,
-        title: info.title,
-        kind: 'requires',
-        versionRange: r.version_range,
-        satisfied: frameworkNote.satisfied,
-        resolution: frameworkNote.satisfied ? 'ok' : 'blocking',
-        note: frameworkNote.message
-      })
-      continue
-    }
-
-    out.push({
-      modId: info.id,
-      slug: info.slug,
-      title: info.title,
-      kind: 'requires',
+    return {
+      kind: r.kind,
+      targetModId: info.id,
+      targetSlug: info.slug,
+      targetTitle: info.title,
       versionRange: r.version_range,
-      satisfied: !!inst && satisfiesRange(inst.version_label, r.version_range),
-      resolution: !inst ? 'missing' : satisfiesRange(inst.version_label, r.version_range) ? 'already-installed' : 'missing',
-      note:
-        inst && !satisfiesRange(inst.version_label, r.version_range)
-          ? `Installed ${info.title} ${inst.version_label} does not satisfy ${r.version_range}.`
-          : r.note
-    })
+      altGroup: r.alt_group,
+      note: r.note
+    }
+  })
+
+  const mods: InstalledMod[] = installed.map((i) => ({
+    id: i.id,
+    slug: i.slug,
+    title: i.title,
+    versionLabel: i.version_label,
+    enabled: !!i.enabled
+  }))
+
+  const artifacts = graphRows.filter((r) => r.kind === 'provides' || r.kind === 'requires').map((r) => r.targetSlug)
+
+  return buildDependencyNodes({
+    subjectSlug: subject?.slug ?? `mod-${modId}`,
+    subjectTitle: subject?.title ?? `Mod ${modId}`,
+    rows: graphRows,
+    installed: mods,
+    providers: artifactProviders(profileId, artifacts),
+    evidence: evidence ?? profileEvidence(profileId, game),
+    game
+  })
+}
+
+/**
+ * Every name this profile can answer a requirement with.
+ *
+ * The same widening the install engine has always done: the files a mod
+ * installed, the folders they sit in, the mod titles themselves, and plugins
+ * loose in the ASI directory - the game loads those whether or not a profile
+ * claims them. Nothing here reaches outside this profile or this game folder.
+ */
+export function profileEvidence(profileId: number, game: GameInstall): string[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT f.relative_path p, m.title t FROM install_file f
+         JOIN install i ON i.id = f.install_id
+         JOIN mod_version mv ON mv.id = i.mod_version_id
+         JOIN mod m ON m.id = mv.mod_id
+        WHERE i.profile_id = ? AND i.enabled = 1`
+    )
+    .all(profileId) as { p: string; t: string }[]
+
+  const haves: string[] = []
+  for (const r of rows) {
+    haves.push(r.p, r.t)
+    for (const segment of r.p.split(/[\\/]/)) haves.push(segment)
+  }
+
+  const asiDir = game.asiDirectory ?? game.path
+  try {
+    for (const f of fs.readdirSync(asiDir)) {
+      if (/\.(asi|dll|cleo)$/i.test(f)) haves.push(f)
+    }
+  } catch {
+    // No ASI directory is not evidence of anything.
+  }
+  if (game.asiLoader) haves.push(game.asiLoader)
+  return haves
+}
+
+/**
+ * Who, in THIS profile, supplies each of these files?
+ *
+ * Two answers count. A mod may DECLARE it ships the file - the seeded
+ * `sa-vehfuncs provides gsx.asi` - and a mod may simply have put the file on
+ * disk, which the `provides` table already records per install. The second is
+ * what catches a vehicle pack that quietly carried its own gsx.asi.
+ */
+function artifactProviders(profileId: number, artifacts: readonly string[]): ArtifactProvider[] {
+  const wanted = [...new Set(artifacts.map((a) => a.trim()).filter((a) => a.length > 0))]
+  if (wanted.length === 0) return []
+  const db = getDb()
+  const out: ArtifactProvider[] = []
+
+  const declared = db
+    .prepare(
+      `SELECT DISTINCT d.requires_slug AS artifact, m.slug AS slug, m.title AS title
+         FROM dependency d
+         JOIN mod m ON m.slug = COALESCE(d.mod_slug, (SELECT slug FROM mod WHERE id = d.mod_id))
+         JOIN mod_version mv ON mv.mod_id = m.id
+         JOIN install i ON i.mod_version_id = mv.id
+        WHERE d.kind = 'provides' AND i.profile_id = ? AND i.enabled = 1`
+    )
+    .all(profileId) as { artifact: string | null; slug: string; title: string }[]
+  for (const row of declared) {
+    if (row.artifact && wanted.some((w) => w.toLowerCase() === row.artifact!.toLowerCase())) {
+      out.push({ artifact: row.artifact, modSlug: row.slug, modTitle: row.title })
+    }
+  }
+
+  // Files that are actually on disk for this profile, matched by name.
+  const onDisk = db.prepare(
+    `SELECT DISTINCT m.slug AS slug, m.title AS title, p.relative_path AS path
+       FROM provides p
+       JOIN install i ON i.id = p.install_id
+       JOIN mod_version mv ON mv.id = i.mod_version_id
+       JOIN mod m ON m.id = mv.mod_id
+      WHERE i.profile_id = ? AND i.enabled = 1
+        AND (lower(p.relative_path) = lower(?) OR lower(p.relative_path) LIKE lower(?))`
+  )
+  for (const artifact of wanted) {
+    // Only file-shaped targets; "cleoplus" is a mod, "gsx.asi" is a file.
+    if (!/\.[a-z0-9]{2,4}$/i.test(artifact)) continue
+    const rows = onDisk.all(profileId, artifact, `%/${artifact}`) as { slug: string; title: string; path: string }[]
+    for (const r of rows) out.push({ artifact, modSlug: r.slug, modTitle: r.title })
   }
 
   return out
@@ -142,80 +209,12 @@ function lookupMod(r: DepRow): { id: number | null; slug: string; title: string 
 }
 
 /**
- * CLEO+ against CLEO 4.3 fails with
- * "The ordinal 22 could not be located in the dynamic link library CLEO+.cleo",
- * a fatal dialog at startup. Version-gate it rather than letting it install.
+ * Scene version strings are messy on purpose, and the pre-launch CLEO gate has
+ * to answer the same question without reaching a database - so the comparison
+ * lives in @shared/versionRange now and is re-exported here for every caller
+ * that already imports it from the resolver.
  */
-function checkFramework(
-  slug: string,
-  range: string | null,
-  game: GameInstall
-): { satisfied: boolean; message: string } | null {
-  if (slug === 'cleo' || slug === 'cleo4' || slug === 'cleo-library') {
-    const have = game.cleoVersion
-    if (!have) {
-      return { satisfied: false, message: 'CLEO is not installed in this game folder.' }
-    }
-    const ok = satisfiesRange(have, range)
-    return {
-      satisfied: ok,
-      message: ok
-        ? `CLEO ${have} detected, satisfies ${range ?? 'any version'}.`
-        : `CLEO ${have} detected but ${range} is required. CLEO+ against CLEO 4.3 fails at startup with "The ordinal 22 could not be located in the dynamic link library CLEO+.cleo".`
-    }
-  }
-  if (slug === 'asi-loader' || slug === 'ultimate-asi-loader') {
-    const ok = !!game.asiLoader
-    return {
-      satisfied: ok,
-      message: ok
-        ? `ASI loader present (${game.asiLoader}); .asi plugins load from ${game.asiDirectory}.`
-        : 'No ASI loader found in the game folder - .asi plugins will not load.'
-    }
-  }
-  if (slug === 'modloader' || slug === 'mod-loader') {
-    return {
-      satisfied: game.hasModLoader,
-      message: game.hasModLoader
-        ? `Mod Loader ${game.modLoaderVersion ?? ''} detected.`.trim()
-        : 'Mod Loader is not installed in this game folder.'
-    }
-  }
-  return null
-}
-
-/** Handles ">= 4.4", "4.4+", "4.4 - 5.0" and bare versions. Scene version strings are messy on purpose. */
-export function satisfiesRange(version: string | null, range: string | null): boolean {
-  if (!range) return true
-  if (!version) return false
-  const v = parseVersion(version)
-  if (!v) return true // unparseable installed version: do not block, warn elsewhere
-  const trimmed = range.trim()
-  const ge = /^>=?\s*([\d.]+)$/.exec(trimmed) ?? /^([\d.]+)\s*\+$/.exec(trimmed)
-  if (ge) return compare(v, parseVersion(ge[1])!) >= 0
-  const between = /^([\d.]+)\s*-\s*([\d.]+)$/.exec(trimmed)
-  if (between) {
-    return compare(v, parseVersion(between[1])!) >= 0 && compare(v, parseVersion(between[2])!) <= 0
-  }
-  const lt = /^<\s*([\d.]+)$/.exec(trimmed)
-  if (lt) return compare(v, parseVersion(lt[1])!) < 0
-  const exact = parseVersion(trimmed)
-  return exact ? compare(v, exact) === 0 : true
-}
-
-function parseVersion(s: string): number[] | null {
-  const m = /(\d+(?:\.\d+)*)/.exec(s)
-  if (!m) return null
-  return m[1].split('.').map((n) => Number.parseInt(n, 10))
-}
-
-function compare(a: number[], b: number[]): number {
-  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    const d = (a[i] ?? 0) - (b[i] ?? 0)
-    if (d !== 0) return d
-  }
-  return 0
-}
+export { satisfiesRange }
 
 /** Anti-dependencies that hold for the whole profile, checked before launch. */
 export function profileDependencyProblems(profileId: number, game: GameInstall): DependencyNode[] {
@@ -229,10 +228,37 @@ export function profileDependencyProblems(profileId: number, game: GameInstall):
     )
     .all(profileId) as { id: number }[]
   const out: DependencyNode[] = []
+  // Built once: it is the same answer for every mod in the profile, and this
+  // runs on the path to the Play button.
+  const evidence = profileEvidence(profileId, game)
   for (const m of installedMods) {
-    for (const node of resolveDependencies({ modId: m.id, profileId, game })) {
+    for (const node of resolveDependencies({ modId: m.id, profileId, game, evidence })) {
       if (node.resolution === 'missing' || node.resolution === 'blocking') out.push(node)
     }
   }
   return out
+}
+
+/**
+ * The profile's unresolved edges, phrased as launch refusals.
+ *
+ * This is the second reason a launch is refused, and it is handed to the gate
+ * in `@shared/launchGate` as an extra blocker rather than becoming a gate of
+ * its own: the spec asks for one blocking class, and two gates is how one of
+ * them stops being maintained. The wording comes from the catalogue; the
+ * substitution and the "what needs what" are pure and live in the graph.
+ *
+ * A graph that cannot be read is not a finding - the same rule the health run
+ * already follows, because a broken check must not become a locked Play button.
+ */
+export function dependencyLaunchRefusals(profileId: number, game: GameInstall): LaunchBlocker[] {
+  try {
+    return dependencyLaunchBlockers(profileDependencyProblems(profileId, game), {
+      requires: t('messages.game.depRequires'),
+      conflicts: t('messages.game.depConflicts'),
+      provides: t('messages.game.depProvides')
+    })
+  } catch {
+    return []
+  }
 }

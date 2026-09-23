@@ -1,8 +1,10 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import iconv from 'iconv-lite'
-import type { DeclaredDependency, DestinationClass, ReadmeInstruction, ReadmeParse } from '@shared/types'
+import type { DeclaredDependency, DestinationClass, PlanWarning, ReadmeInstruction, ReadmeParse } from '@shared/types'
+import { extractActivationCodes } from '@shared/activation'
 import { walk } from '../util/fsx'
+import { t } from '../util/i18n'
 
 const README_PATTERNS = [
   /^leiame.*\.txt$/i,
@@ -117,8 +119,46 @@ export function parseReadmeText(file: string, text: string, encoding: string): R
     instructions,
     requirementUrls,
     declared,
+    activationCodes: extractActivationCodes(text),
     confidence: instructions.length === 0 ? 0 : Math.min(1, 0.55 + 0.15 * instructions.length)
   }
+}
+
+/**
+ * An archive that ships a readme nobody could parse.
+ *
+ * The spec's rule is that such an archive is never installed without asking
+ * first: the author wrote instructions, the app failed to read them, and
+ * proceeding means the placement is a guess dressed as a plan. Silent guessing
+ * is exactly how this app has put files in the wrong place before, so the plan
+ * carries an explicit warning and the dialog will not install until the user
+ * says to go ahead anyway.
+ *
+ * Pure, and takes the parses rather than a path, so it is exercised by the unit
+ * suite and decided in one place instead of at each call site.
+ */
+export function unparsedReadmeWarning(readmes: ReadmeParse[]): PlanWarning | null {
+  if (readmes.length === 0) return null
+  if (readmes.some((r) => r.confidence > 0)) return null
+  const names = readmes.map((r) => path.basename(r.file)).join(', ')
+  return {
+    severity: 'warn',
+    code: 'readme-unparsed',
+    message: t('messages.install.readmeUnparsed', { file: names }),
+    detail: t('messages.install.readmeUnparsedDetail')
+  }
+}
+
+/**
+ * Whether a plan carries the unparsed-readme warning, and therefore may not be
+ * applied until the caller says the user was asked.
+ *
+ * It reads the warning the plan already carries rather than re-deriving the
+ * condition, so the thing the dialog shows and the thing `applyPlan` enforces
+ * can never drift apart.
+ */
+export function needsReadmeAcknowledgement(warnings: PlanWarning[]): boolean {
+  return warnings.some((w) => w.code === 'readme-unparsed')
 }
 
 /**

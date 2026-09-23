@@ -1,4 +1,5 @@
 import type { IpcChannel } from '@shared/ipc'
+import type { LaunchBlocker } from '@shared/launchGate'
 import type {
   AppSettings,
   CacheKind,
@@ -10,6 +11,7 @@ import type {
   CatalogMod,
   CrashIncident,
   CrashReport,
+  DeepAnalysisResult,
   FileConflict,
   GameInstall,
   HealthReport,
@@ -30,6 +32,19 @@ import type {
   SaveSnapshot,
   TxdAnalysis
 } from '@shared/types'
+
+/**
+ * What a profile switch came back with. `ok: false` means it was refused after
+ * materialising because the game folder does not hold what the profile says it
+ * holds - nothing was activated, and `verification.blockingProblems` says why.
+ */
+export type ActivateOutcome = {
+  profile: Profile | null
+  elapsedMs: number
+  log: string[]
+  journalId: number | null
+  verification: SwitchVerification | null
+} & ({ ok: true } | { ok: false; verification: SwitchVerification; previousProfileName: string | null })
 
 interface Bridge {
   invoke(channel: IpcChannel, ...args: unknown[]): Promise<unknown>
@@ -93,7 +108,8 @@ export const api = {
     call<{ profileId: number; adopted: number; report: string[] }>('game:adoptInto', profileId),
   unmanaged: (profileId: number) => call<UnmanagedReport>('game:unmanaged', profileId),
   removeGame: (id: number) => call<void>('game:remove', id),
-  launch: () => call<{ launched: boolean; message: string }>('game:launch'),
+  launch: (force?: boolean) =>
+    call<{ launched: boolean; message: string; blockers?: LaunchBlocker[] }>('game:launch', force),
 
   profiles: () => call<Profile[]>('profiles:list'),
   activeProfile: () => call<Profile | null>('profiles:active'),
@@ -102,14 +118,15 @@ export const api = {
   updateProfile: (id: number, patch: { name?: string; color?: string; notes?: string }) =>
     call<Profile>('profiles:update', id, patch),
   removeProfile: (id: number) => call<void>('profiles:remove', id),
+  /**
+   * `ok: false` is a switch that materialised and then failed reconciliation:
+   * the profile was NOT activated, the previous one still is, and `verification`
+   * names every mod that did not reach the game folder. It comes back as a
+   * value rather than a thrown message so the caller can show the report and
+   * offer the rollback.
+   */
   activateProfile: (id: number) =>
-    call<{
-      profile: Profile
-      elapsedMs: number
-      log: string[]
-      journalId: number | null
-      verification: SwitchVerification | null
-    }>('profiles:activate', id),
+    call<ActivateOutcome>('profiles:activate', id),
   /** What a switch would do, file by file. Changes nothing. */
   switchPlan: (id: number) => call<SwitchPlan>('profiles:switchPlan', id),
   verifyProfile: (id: number) => call<SwitchVerification>('profiles:verify', id),
@@ -128,11 +145,15 @@ export const api = {
   library: (profileId: number) => call<InstalledMod[]>('library:list', profileId),
   setEnabled: (installId: number, enabled: boolean) => call<void>('library:setEnabled', installId, enabled),
   setPriority: (installId: number, priority: number) => call<void>('library:setPriority', installId, priority),
-  uninstall: (installId: number) => call<{ restored: number; quarantined: string[] }>('library:uninstall', installId),
+  setLoadFirst: (installId: number, loadFirst: boolean) => call<void>('library:setLoadFirst', installId, loadFirst),
+  uninstall: (installId: number) =>
+    call<{ restored: number; quarantined: string[]; quarantineDir: string; kept: string[] }>('library:uninstall', installId),
   rollbackPreview: (installId: number) => call<{ relativePath: string; action: string }[]>('library:rollbackPreview', installId),
   readme: (installId: number) => call<string | null>('library:readme', installId),
   setSubModEnabled: (installId: number, rel: string, enabled: boolean) =>
     call<void>('library:subModSetEnabled', installId, rel, enabled),
+  setVariant: (installId: number, groupId: string, optionId: string) =>
+    call<void>('library:setVariant', installId, groupId, optionId),
 
   catalog: (query: {
     search?: string
@@ -154,10 +175,18 @@ export const api = {
   planFromSlug: (slug: string, profileId: number) => call<InstallPlan>('install:planFromSlug', slug, profileId),
   planFromFile: (profileId: number) => call<InstallPlan | null>('install:planFromFile', profileId),
   choose: (planId: string, groupId: string, optionId: string) => call<InstallPlan>('install:choose', planId, groupId, optionId),
+  chooseAddOn: (planId: string, addOnId: string, enabled: boolean) =>
+    call<InstallPlan>('install:chooseAddOn', planId, addOnId, enabled),
   setDestination: (planId: string, sourcePath: string, destination: string) =>
     call<InstallPlan>('install:setDestination', planId, sourcePath, destination),
-  applyPlan: (planId: string, profileId: number) =>
-    call<{ installId: number; written: number; backedUp: number }>('install:apply', planId, profileId),
+  /** `acknowledgedUnparsedReadme` answers the readme-unparsed warning; without it the main process refuses. */
+  applyPlan: (planId: string, profileId: number, acknowledgedUnparsedReadme: boolean) =>
+    call<{ installId: number; written: number; backedUp: number }>(
+      'install:apply',
+      planId,
+      profileId,
+      acknowledgedUnparsedReadme
+    ),
   discardPlan: (planId: string) => call<void>('install:discard', planId),
 
   conflicts: (profileId: number) => call<FileConflict[]>('conflicts:list', profileId),
@@ -180,7 +209,7 @@ export const api = {
   importExistingSaves: (profileId: number, label: string) =>
     call<{ snapshotId: number; slots: number }>('saves:importExisting', profileId, label),
 
-  health: (profileId: number) => call<HealthReport>('health:run', profileId),
+  health: (profileId: number | null) => call<HealthReport>('health:run', profileId),
   crashes: (profileId: number) => call<CrashReport[]>('health:crashes', profileId),
   /** The same records grouped into one entry per dead process. */
   crashIncidents: (profileId: number) => call<CrashIncident[]>('health:incidents', profileId),
@@ -189,8 +218,11 @@ export const api = {
   resolveCrash: (id: number, resolved: boolean) => call<void>('health:resolveCrash', id, resolved),
   lookupAddress: (address: string) =>
     call<{ address: string; cause: string | null; solution: string | null }>('health:lookupAddress', address),
+  deepAnalyze: (address: string) => call<DeepAnalysisResult>('health:deepAnalyze', address),
   fixStreamingMemory: (memoryMb?: number) =>
     call<{ file: string; backup: string; from: number | null; to: number }>('health:fixStreamingMemory', memoryMb),
+  reuniteOrphans: (profileId: number | null) =>
+    call<{ moved: string[]; quarantined: string[]; refused: string[] }>('health:reuniteOrphans', profileId),
   modLoaderReport: (profileId: number) => call<ModLoaderLogReport | null>('health:modLoaderReport', profileId),
   logs: (profileId: number) => call<LogEntry[]>('health:logs', profileId),
   bisectStart: (profileId: number) => call<BisectSession>('health:bisectStart', profileId),

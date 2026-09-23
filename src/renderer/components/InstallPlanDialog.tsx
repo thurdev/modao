@@ -26,6 +26,9 @@ export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | 
   const pushToast = useApp((s) => s.pushToast)
   const [showReadme, setShowReadme] = useState(false)
   const [showFiles, setShowFiles] = useState(false)
+  // An archive whose readme could not be parsed is never installed on a shrug:
+  // the user has to say, explicitly, that they read it and want to go ahead.
+  const [readmeAck, setReadmeAck] = useState(false)
 
   const grouped = useMemo(() => {
     const map = new Map<DestinationClass, PlannedFile[]>()
@@ -41,12 +44,30 @@ export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | 
 
   const blockers = plan.warnings.filter((w) => w.severity === 'error')
   const overwrites = plan.files.filter((f) => f.overwrites)
-  const canApply = !plan.requiresVariantChoice && blockers.length === 0 && plan.files.length > 0 && !!profile
+  const unparsedReadme = plan.warnings.some((w) => w.code === 'readme-unparsed')
+  const needsReadmeAck = unparsedReadme && !readmeAck
+  // pt-BR and en readmes state the same code twice; it is one code.
+  const activationCodes = [
+    ...new Map(plan.readmes.flatMap((r) => r.activationCodes).map((a) => [a.code.toUpperCase(), a])).values()
+  ]
+  const canApply =
+    !plan.requiresVariantChoice && blockers.length === 0 && plan.files.length > 0 && !!profile && !needsReadmeAck
 
   async function choose(groupId: string, optionId: string): Promise<void> {
     setBusy(true)
     try {
       setPlan(await api.choose(plan!.planId, groupId, optionId))
+    } catch (e) {
+      pushToast('error', (e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function chooseAddOn(addOnId: string, enabled: boolean): Promise<void> {
+    setBusy(true)
+    try {
+      setPlan(await api.chooseAddOn(plan!.planId, addOnId, enabled))
     } catch (e) {
       pushToast('error', (e as Error).message)
     } finally {
@@ -69,7 +90,7 @@ export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | 
     if (!profile) return
     setBusy(true)
     try {
-      await api.applyPlan(plan!.planId, profile.id)
+      await api.applyPlan(plan!.planId, profile.id, readmeAck)
       setPlan(null)
       props.onDone()
     } catch (e) {
@@ -126,7 +147,9 @@ export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | 
               ? t('install.plan.pickVariant')
               : blockers.length
                 ? blockers[0].message
-                : t('install.plan.nothingWritten')}
+                : needsReadmeAck
+                  ? t('install.plan.confirmUnparsedReadmeFirst')
+                  : t('install.plan.nothingWritten')}
           </span>
           <Button variant="primary" disabled={!canApply || busy} onClick={apply}>
             {busy ? t('install.plan.working') : t('install.plan.installButton', { count: plan.files.length })}
@@ -188,6 +211,26 @@ export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | 
                 <div>
                   <strong>{w.message}</strong>
                   {w.detail ? <div className="faint">{w.detail}</div> : null}
+                  {w.code === 'readme-unparsed' ? (
+                    <div className="row wrap" style={{ gap: 8, marginTop: 8 }}>
+                      <label className="choice" data-selected={readmeAck} style={{ flex: 1, minWidth: 240 }}>
+                        <input
+                          type="checkbox"
+                          checked={readmeAck}
+                          onChange={(e) => setReadmeAck(e.target.checked)}
+                        />
+                        <span style={{ flex: 1, minWidth: 0 }}>{t('install.plan.confirmUnparsedReadme')}</span>
+                      </label>
+                      <Button
+                        size="sm"
+                        variant="quiet"
+                        icon={<Icon.doc width={13} height={13} />}
+                        onClick={() => setShowReadme((v) => !v)}
+                      >
+                        {showReadme ? t('install.plan.hideReadme') : t('install.plan.rawReadme')}
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ))}
@@ -230,6 +273,40 @@ export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | 
           </motion.section>
         ))}
 
+        {plan.addOns.length > 0 ? (
+          <motion.section variants={itemVariants} className="panel">
+            <header>
+              <Badge>{t('install.plan.addOnsTitle')}</Badge>
+              <span className="faint" style={{ fontWeight: 400 }}>
+                {t('install.plan.addOnsHint')}
+              </span>
+            </header>
+            <div className="panel-body col">
+              {plan.addOns.map((a) => {
+                const enabled = plan.files.some((f) => f.sourcePath.startsWith(`${a.path}/`))
+                return (
+                  <label key={a.id} className="choice" data-selected={enabled}>
+                    <input
+                      type="checkbox"
+                      checked={enabled}
+                      disabled={busy}
+                      onChange={(e) => void chooseAddOn(a.id, e.target.checked)}
+                    />
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <strong>{a.label}</strong>
+                      <span className="faint">
+                        {' '}
+                        {t('install.plan.fileCountSize', { count: a.fileCount, size: formatBytes(a.size) })}
+                        {enabled ? ` — ${t('install.plan.addOnAsOwnMod')}` : ''}
+                      </span>
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+          </motion.section>
+        ) : null}
+
         {plan.readmes.length > 0 ? (
           <motion.section variants={itemVariants} className="panel">
             <header>
@@ -258,6 +335,24 @@ export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | 
                   </div>
                 ))
               )}
+              {activationCodes.length > 0 ? (
+                <div className="col" style={{ gap: 4 }}>
+                  <div className="row wrap" style={{ gap: 8 }}>
+                    <Badge tone="ok">{t('install.plan.activationTitle')}</Badge>
+                    {activationCodes.map((a) => (
+                      <code key={a.code} className="mono">
+                        {a.code}
+                      </code>
+                    ))}
+                  </div>
+                  <span className="faint">{t('install.plan.activationHint')}</span>
+                  {activationCodes.map((a) => (
+                    <div key={`${a.code}-line`} className="faint mono">
+                      “{a.line}”
+                    </div>
+                  ))}
+                </div>
+              ) : null}
               {plan.readmes[0].requirementUrls.length > 0 ? (
                 <div className="faint row wrap" style={{ gap: 8 }}>
                   {t('install.plan.linksInReadme')}
@@ -294,7 +389,13 @@ export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | 
               {plan.dependencies.map((d, i) => (
                 <div key={i} className="row top" style={{ gap: 9 }}>
                   <Badge tone={d.resolution === 'blocking' ? 'danger' : d.satisfied ? 'ok' : 'warn'}>
-                    {d.kind === 'conflicts' ? t('install.plan.mustNotCoexist') : d.kind === 'alt' ? t('install.plan.oneOf') : t('install.plan.requires')}
+                    {d.kind === 'conflicts'
+                      ? t('install.plan.mustNotCoexist')
+                      : d.kind === 'alt'
+                        ? t('install.plan.oneOf')
+                        : d.kind === 'provides'
+                          ? t('install.plan.provides')
+                          : t('install.plan.requires')}
                   </Badge>
                   <div style={{ minWidth: 0 }}>
                     <strong>{d.title}</strong>

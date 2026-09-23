@@ -14,7 +14,7 @@ import { getDb } from '../db'
 import { Paths } from '../util/paths'
 import { exists, sha256File, slugify, walk } from '../util/fsx'
 import { archiveOrDirectory, effectiveRoot } from './archive'
-import { findReadmes, parseReadme } from './readme'
+import { findReadmes, needsReadmeAcknowledgement, parseReadme, unparsedReadmeWarning } from './readme'
 import { classifyTree, type OverlayMatch } from './classify'
 import { providesKey } from '../conflicts'
 import { flattenName, requirementMet } from '@shared/requirements'
@@ -25,23 +25,46 @@ import {
   learnFromBinary,
   learnFromReadme,
   learnLayout,
+  learnedEarlyHooks,
   signatureForArchive
 } from '../knowledge/learn'
+import type { ModSignature } from '../knowledge/signature'
 import { t } from '../util/i18n'
-import { dematerialise, ingest, materialise, ownedKey, quarantineEdited, storeKey } from '../store/contentStore'
+import {
+  dematerialise,
+  ingest,
+  ingestVariantOptions,
+  materialise,
+  ownedKey,
+  quarantineEdited,
+  quarantineUnstored,
+  storeKey
+} from '../store/contentStore'
+import { buildPersistedVariantGroups } from '@shared/variantGroups'
 import { requireActiveGame } from '../game/detect'
-import { syncProfileIni } from '../profiles/materialize'
+import { normaliseInstallSpelling, syncProfileIni } from '../profiles/materialize'
 
 interface PlanState {
   plan: InstallPlan
   extractRoot: string
   stagingDir: string
   selections: Record<string, string>
+  addOnSelections: Record<string, boolean>
   overrides: Record<string, DestinationClass>
   readmes: ReadmeParse[]
   profileId: number
   docs: string[]
   game: GameInstall
+  /**
+   * What this archive IS, computed once from the whole extracted tree.
+   *
+   * Everything the knowledge store is asked about this plan is keyed on it, so
+   * everything learned from this plan has to be keyed on it too. Recomputing an
+   * identity later from `plan.files` describes a DIFFERENT archive - variant
+   * selection and classification both drop files - and a rule filed under that
+   * one is never read again. Kept on the state so there is exactly one of it.
+   */
+  signature: ModSignature | null
 }
 
 const PLANS = new Map<string, PlanState>()
@@ -80,11 +103,13 @@ export async function createPlan(input: CreatePlanInput): Promise<InstallPlan> {
     extractRoot,
     stagingDir,
     selections: {},
+    addOnSelections: {},
     overrides: {},
     readmes,
     profileId: input.profileId,
     docs: [],
-    game
+    game,
+    signature: null
   }
   PLANS.set(planId, state)
 
@@ -127,9 +152,13 @@ async function buildPlan(planId: string, meta: BuildMeta): Promise<InstallPlan> 
       asiRelative,
       readmes,
       fallbackName,
-      findOverlayTarget: (rel, base) => findOverlay(profileId, rel, base)
+      findOverlayTarget: (rel, base) => findOverlay(profileId, rel, base),
+      // The seed list of early-hooking plugins, grown by what people have
+      // corrected by hand. Empty until something has been learned.
+      learnedEarlyHooks: learnedEarlyHooks()
     },
-    state.selections
+    state.selections,
+    state.addOnSelections
   )
 
   const files = classified.files.map((f) =>
@@ -203,13 +232,21 @@ async function buildPlan(planId: string, meta: BuildMeta): Promise<InstallPlan> 
   // What this archive is, and what the app already knows about archives like it.
   const archiveFiles = (await walk(extractRoot)).map((f) => f.rel)
   const signature = signatureForArchive(archiveFiles, readmes[0]?.raw ?? null)
+  // Held for `applyPlan`: what is learned after the install has to be filed
+  // under the same identity this plan was looked up under.
+  state.signature = signature
   learnFromReadme(signature, readmes)
+  const { pluginEvidence } = await import('../formats/strings')
   for (const file of archiveFiles) {
     if (!/\.asi$/i.test(file)) continue
-    const buf = await fsp.readFile(path.join(extractRoot, file)).catch(() => null)
-    if (!buf) continue
-    const { pluginEvidence } = await import('../formats/strings')
-    const evidence = pluginEvidence(buf)
+    // Classification already read the plugins whose placement depended on it;
+    // reading the same binary a second time buys nothing.
+    let evidence = classified.asiEvidence[file]
+    if (!evidence) {
+      const buf = await fsp.readFile(path.join(extractRoot, file)).catch(() => null)
+      if (!buf) continue
+      evidence = pluginEvidence(buf)
+    }
     learnFromBinary(signature, path.basename(file), evidence.probes, evidence.rootFolder)
   }
   const known = knownAbout(signature)
@@ -218,6 +255,12 @@ async function buildPlan(planId: string, meta: BuildMeta): Promise<InstallPlan> 
 
   if (readmes.length === 0) {
     warnings.push({ severity: 'info', code: 'no-readme', message: 'This archive ships no readme; the plan comes from file inspection alone.' })
+  } else {
+    // A readme that exists and says nothing the parser understood is worse than
+    // no readme at all: the instructions are there and were missed. The plan
+    // says so, and the dialog holds the install until the user confirms.
+    const unparsed = unparsedReadmeWarning(readmes)
+    if (unparsed) warnings.push(unparsed)
   }
 
   const plan: InstallPlan = {
@@ -231,6 +274,7 @@ async function buildPlan(planId: string, meta: BuildMeta): Promise<InstallPlan> 
     extractRoot,
     readmes,
     variants: classified.variants,
+    addOns: classified.addOns,
     files,
     dependencies,
     missingRequirements,
@@ -342,6 +386,14 @@ export async function choose(planId: string, groupId: string, optionId: string):
   return rebuild(planId)
 }
 
+/** Enables or drops an add-on folder offered beside the plan (merged into its own mod folder when enabled). */
+export async function chooseAddOn(planId: string, addOnId: string, enabled: boolean): Promise<InstallPlan> {
+  const s = PLANS.get(planId)
+  if (!s) throw new Error('This install plan has expired. Start the install again.')
+  s.addOnSelections[addOnId] = enabled
+  return rebuild(planId)
+}
+
 export async function setDestination(planId: string, sourcePath: string, destination: DestinationClass): Promise<InstallPlan> {
   const s = PLANS.get(planId)
   if (!s) throw new Error('This install plan has expired. Start the install again.')
@@ -377,6 +429,21 @@ export interface ApplyResult {
   mode: string
 }
 
+export interface ApplyPlanOptions {
+  /**
+   * The user was shown the "this archive's readme could not be parsed" warning
+   * and said to install anyway.
+   *
+   * Required, not optional, and required on the argument itself rather than
+   * defaulted: the spec's rule is that such an archive is never installed
+   * without asking first, and a checkbox in one renderer component is not that
+   * rule - every other caller installed silently. Making the field mandatory
+   * means a new call site has to state an answer instead of inheriting one.
+   */
+  acknowledgedUnparsedReadme: boolean
+  acceptMissingDependencies?: boolean
+}
+
 /**
  * Applies a plan as a single reversible transaction: every file written is
  * recorded, everything displaced is backed up, and nothing is ever deleted.
@@ -384,25 +451,36 @@ export interface ApplyResult {
 export async function applyPlan(
   planId: string,
   profileId: number,
-  onProgress?: (phase: string, current: number, total: number) => void,
-  opts: { acceptMissingDependencies?: boolean } = {}
+  opts: ApplyPlanOptions,
+  onProgress?: (phase: string, current: number, total: number) => void
 ): Promise<ApplyResult> {
   const state = PLANS.get(planId)
   if (!state) throw new Error('This install plan has expired. Start the install again.')
   const plan = state.plan
   const game = state.game
 
+  // Ask first, whoever is calling. The warning is on the plan; without an
+  // explicit acknowledgement the install refuses rather than guessing.
+  if (needsReadmeAcknowledgement(plan.warnings) && !opts.acknowledgedUnparsedReadme) {
+    throw new Error(t('messages.install.readmeUnparsedRefusal'))
+  }
   if (plan.requiresVariantChoice) throw new Error('Choose a variant before installing.')
   // The layout the user accepted is the layout to expect next time an archive
   // of this shape turns up.
-  learnLayout(
-    signatureForArchive(
-      plan.files.map((f) => f.sourcePath),
-      plan.readmes[0]?.raw ?? null
-    ),
-    plan.files,
-    'inference'
-  )
+  //
+  // Keyed on the signature `buildPlan` computed from the WHOLE extracted
+  // archive, never on one recomputed from `plan.files`: an archive with a
+  // variant group installs a fraction of its own files, so a post-selection
+  // identity describes a different archive and the rule was being filed under a
+  // key `knownAbout` never queries - learned, stored, and never read again.
+  //
+  // The files the user retargeted by hand are named, so `learnLayout` can file
+  // those at user weight and only the rest as an inference. Learning the two at
+  // one weight is what made a correction indistinguishable from a guess.
+  const learnedUnder =
+    state.signature ??
+    signatureForArchive((await walk(state.extractRoot)).map((f) => f.rel), plan.readmes[0]?.raw ?? null)
+  learnLayout(learnedUnder, plan.files, 'inference', Object.keys(state.overrides))
   // Dependencies never block: they are reported on the plan and offered for
   // install, and the user decides. Only a plan that cannot be carried out at
   // all - nothing to install, a variant unchosen - stops here.
@@ -425,16 +503,30 @@ export async function applyPlan(
 
   onProgress?.('store', 0, plan.files.length)
   const stored = await ingest(key, plan.extractRoot, plan.files, (d, t) => onProgress?.('store', d, t))
+  // Every option of every variant group is snapshotted too, not only the one
+  // that was chosen, so switching later never needs the archive again.
+  await ingestVariantOptions(key, plan.extractRoot, plan.variants)
+  const variantGroupsJson = JSON.stringify(
+    buildPersistedVariantGroups(plan.variants, state.selections, stored)
+  )
 
   const folderName = primaryFolder(stored)
   const readmeText = state.readmes[0]?.raw ?? null
+
+  // "This has to load first" is a statement about LOAD ORDER, which is
+  // alphabetical by mod folder name - so it is answered with the "$" prefix the
+  // classifier's own warning names, and never with a priority number. Priority
+  // decides who wins a duplicated file and would do nothing at all here.
+  // The user can take it off again in the Library; nothing else sets this.
+  const loadFirst = !!folderName && plan.warnings.some((w) => w.code === 'asi-load-order')
 
   const installId = db.transaction(() => {
     const info = db
       .prepare(
         `INSERT INTO install (profile_id, mod_version_id, installed_at, destination_class, variant_choice,
-                              enabled, priority, store_key, folder_name, readme_text, source_archive)
-         VALUES (?,?,?,?,?,1,?,?,?,?,?)`
+                              enabled, priority, load_first, store_key, folder_name, readme_text, source_archive,
+                              variant_groups_json)
+         VALUES (?,?,?,?,?,1,?,?,?,?,?,?,?)`
       )
       .run(
         profileId,
@@ -443,10 +535,12 @@ export async function applyPlan(
         dominantClass(stored),
         variantChoice,
         50,
+        loadFirst ? 1 : 0,
         key,
         folderName,
         readmeText,
-        plan.archivePath
+        plan.archivePath,
+        variantGroupsJson
       )
     const id = Number(info.lastInsertRowid)
     const fileStmt = db.prepare(
@@ -567,8 +661,14 @@ function ensureLocalModVersion(plan: InstallPlan): number {
 
 export interface UninstallResult {
   restored: number
+  /** Copies taken into quarantine before anything was removed. */
   quarantined: string[]
-  /** Paths left in place because another install in this profile also owns them. */
+  /** Where those copies are, so the user can be told where to find them. */
+  quarantineDir: string
+  /**
+   * Paths left in place: another install in this profile also owns them, or no
+   * verified copy of them could be taken, which makes them not ours to remove.
+   */
   kept: string[]
 }
 
@@ -585,12 +685,30 @@ export async function uninstall(installId: number): Promise<UninstallResult> {
     .prepare('SELECT relative_path, backup_path, sha256 FROM install_file WHERE install_id = ?')
     .all(installId) as { relative_path: string; backup_path: string | null; sha256: string | null }[]
 
+  // Everything below addresses the game folder by the path on the record, and
+  // knows nothing about Mod Loader's ". " disable prefix or its "$" load-first
+  // prefix. So a mod that is currently switched off - or spelled to load first -
+  // gets its plain name back first; otherwise uninstall would find nothing at
+  // modloader\<Mod>, remove nothing, delete the rows, and leave the whole folder
+  // behind with no record of what it was.
+  await normaliseInstallSpelling(installId)
+
+  const tracked = files.map((f) => ({ relativePath: f.relative_path, sha256: f.sha256 }))
+  const quarantineDir = path.join(Paths.quarantine(), String(installId))
+
   // The user (or another tool) may have changed a file after we wrote it: keep it.
-  const quarantined = await quarantineEdited(
-    game.path,
-    files.map((f) => ({ relativePath: f.relative_path, sha256: f.sha256 })),
-    path.join(Paths.quarantine(), String(installId))
-  )
+  const edited = await quarantineEdited(game.path, tracked, quarantineDir)
+
+  // And an ADOPTED install has no store copy at all: adoption indexes the files
+  // where they already are and records no hash, so the game folder holds the
+  // only copy of every one of them. `quarantineEdited` cannot speak for those -
+  // with nothing recorded, "changed" cannot be established - and uninstall used
+  // to remove them anyway. That is item 01's failure behind a different button,
+  // in the install shape this audit was written about, where every mod is
+  // adopted. Copy them out and verify the copy first.
+  const unstored = await quarantineUnstored(game.path, tracked, quarantineDir)
+  const quarantined = [...edited, ...unstored.quarantined]
+  const unsafe = new Set(unstored.failed.map((f) => f.relativePath))
 
   // A file another install in this profile also owns is not this install's to
   // remove. Two copies of the same pack, one disabled, share every path: the
@@ -603,8 +721,14 @@ export async function uninstall(installId: number): Promise<UninstallResult> {
   const { restored } = await dematerialise(
     game,
     mine.map((f) => f.relative_path),
-    mine.filter((f) => f.backup_path).map((f) => ({ relativePath: f.relative_path, backupPath: f.backup_path! }))
+    mine.filter((f) => f.backup_path).map((f) => ({ relativePath: f.relative_path, backupPath: f.backup_path! })),
+    // Every path here is this install's alone (shared ones were filtered out
+    // above) and its bytes are somewhere else: in the store when the install has
+    // one, in quarantine when it does not. The only paths refused are the ones
+    // whose copy did not verify - those stay in the game folder, untouched.
+    { mayRemoveFile: (rel) => !unsafe.has(rel) }
   )
+  const keptUnsafe = mine.filter((f) => unsafe.has(f.relative_path)).map((f) => f.relative_path)
 
   db.transaction(() => {
     db.prepare('DELETE FROM provides WHERE install_id = ?').run(installId)
@@ -614,13 +738,19 @@ export async function uninstall(installId: number): Promise<UninstallResult> {
       installId,
       install.profile_id,
       'uninstall',
-      JSON.stringify({ restored, quarantined, keptForOtherInstalls: shared.map((f) => f.relative_path) }),
+      JSON.stringify({
+        restored,
+        quarantined,
+        quarantineDir,
+        keptForOtherInstalls: shared.map((f) => f.relative_path),
+        keptUnverified: unstored.failed
+      }),
       new Date().toISOString()
     )
   })()
 
   await syncProfileIni(install.profile_id)
-  return { restored, quarantined, kept: shared.map((f) => f.relative_path) }
+  return { restored, quarantined, quarantineDir, kept: [...shared.map((f) => f.relative_path), ...keptUnsafe] }
 }
 
 /**

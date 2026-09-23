@@ -1,9 +1,13 @@
 import crypto from 'node:crypto'
 import path from 'node:path'
 import type { BisectSession } from '@shared/types'
+import { outdatedSignature, planBisectStart, type OutdatedBuild, type ReleaseFetcher } from '@shared/upstream'
 import { getDb } from '../db'
 import { requireActiveGame } from '../game/detect'
 import { applyIgnoreState, readIgnoreState, readIniFile, writeIniFile, type IgnoreState } from '../game/modloaderIni'
+import { t } from '../util/i18n'
+import { log } from '../util/log'
+import { fetchLatestRelease, scanUpstream } from './upstream'
 
 /**
  * Guided bisect: halve the enabled mod set, launch, record the result, repeat.
@@ -46,9 +50,55 @@ function folderOf(profileId: number, installId: number): string | null {
   return row?.folder_name ?? null
 }
 
-export async function startBisect(profileId: number): Promise<BisectSession> {
+/**
+ * Findings already told to a profile, keyed by `outdatedSignature`: the
+ * install, the repo and the release it was behind on. Per finding, not per
+ * profile - a mod already reported is waved through the next time, but a
+ * *different* mod going stale later in the same session is a new finding and
+ * gets its own refusal. (An earlier version of this used a single
+ * per-profile boolean, which suppressed the refusal for the rest of the
+ * session, including for a mod that had never been reported.)
+ */
+const OUTDATED_TOLD = new Map<number, Set<string>>()
+
+function toldFindings(profileId: number): Set<string> {
+  let found = OUTDATED_TOLD.get(profileId)
+  if (!found) {
+    found = new Set()
+    OUTDATED_TOLD.set(profileId, found)
+  }
+  return found
+}
+
+export async function startBisect(
+  profileId: number,
+  fetchRelease: ReleaseFetcher = fetchLatestRelease
+): Promise<BisectSession> {
   const installs = enabledInstalls(profileId)
   if (installs.length < 2) throw new Error('Bisect needs at least two enabled mods.')
+
+  // The precondition the field report paid for: an old build is one download,
+  // a bisect is an evening. planBisectStart fuses the check with the first
+  // halving into one call, so the halving cannot happen ahead of the gate -
+  // there is no "testing" list to read until this returns `kind: 'start'`.
+  // A network that does not answer leaves `outdated` empty rather than
+  // guessing, same as before.
+  let outdated: OutdatedBuild[] = []
+  try {
+    outdated = (await scanUpstream(profileId, fetchRelease)).outdated
+  } catch (e) {
+    log('bisect could not run the outdated-build check; continuing', { error: (e as Error).message })
+  }
+  const told = toldFindings(profileId)
+  const plan = planBisectStart(
+    installs.map((i) => i.id),
+    outdated,
+    told
+  )
+  if (plan.kind === 'refuse') {
+    for (const entry of plan.outdated) told.add(outdatedSignature(entry))
+    throw new Error(t(plan.refusal.key, plan.refusal.params))
+  }
 
   const game = requireActiveGame()
   const iniPath = path.join(game.path, 'modloader', 'modloader.ini')
@@ -58,19 +108,21 @@ export async function startBisect(profileId: number): Promise<BisectSession> {
     id: crypto.randomUUID(),
     profileId,
     status: 'running',
-    step: 0,
-    candidates: installs.map((i) => i.id),
-    testing: [],
+    step: plan.first.step,
+    candidates: plan.first.candidates,
+    testing: plan.first.testing,
     knownGood: [],
     knownBad: [],
     culprit: null,
-    history: []
+    history: [],
+    // Carried on the session so the panel can keep saying "rule these out
+    // first" for as long as the bisect runs, not only at the moment it started.
+    outdated: plan.outdated
   }
   // Remember what the user had, not what the app assumes they had: restoring
   // "everything on" would silently re-enable mods they turned off themselves.
   ORIGINAL_STATE.set(session.id, { ignore: readIgnoreState(ini), iniPath })
   SESSIONS.set(session.id, session)
-  nextStep(session)
   await applyBisectStep(session.id)
   return session
 }

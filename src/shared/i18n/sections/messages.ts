@@ -20,7 +20,8 @@ export const messages = {
     profile: {
       forgotMissing: '{count} mod(s) que não existem mais foram removidos deste perfil. Nenhum arquivo foi apagado do disco.',
       gone: 'Perfil #{id} não existe mais. Escolha um perfil e tente de novo.',
-      switchNotVerified: '{profile} foi ativado, mas não passou na verificação: {problem}',
+      switchNotVerified: '{profile} foi ativado, mas há observações: {problem}',
+      switchBlocked: '{profile} NÃO foi ativado: {problem}',
       seeSwitchReport: 'veja o relatório da troca',
       switchedActive: '{profile} ativo em {seconds}s',
       restoredFiles: '{count} arquivo(s) restaurado(s) do backup pré-troca.',
@@ -36,6 +37,11 @@ export const messages = {
       adoptedIntoProfile: '{count} mod(s) adotado(s), já presente(s) na pasta do jogo — nenhum arquivo foi movido.',
       nothingNewInFolder: 'Nada de novo encontrado na pasta do jogo; este perfil já rastreia tudo que está lá.',
       exeNotFound: 'O executável de {game} não está em {path}.',
+      launchBlocked:
+        'O Modão não abriu o jogo: {names}. A checagem antes de jogar encontrou uma falha, e o que ela descreve é um crash que já aconteceu com outra pessoa. Abra a tela de Saúde para resolver — ou, de lá, para abrir assim mesmo.',
+      depRequires: '{mod} precisa de {dep}, e este perfil não atende esse requisito',
+      depConflicts: '{mod} não pode rodar junto com {dep}, e os dois estão neste perfil',
+      depProvides: '{dep} está vindo de {mod} e também de outro mod; deixe só uma cópia',
       activeElsewhere: 'O perfil "{profile}" está ativo em {path}. Troque para um perfil de outra instalação antes de remover esta.'
     },
     crashes: {
@@ -44,13 +50,21 @@ export const messages = {
         'Nenhum registro de crash para o gta_sa.exe depois dessa sessão. Se o jogo parou de responder em vez de fechar, essa ausência já é o diagnóstico: travamento não deixa registro de exceção.'
     },
     library: {
-      uninstalled: 'Desinstalado: {count} arquivo(s) restaurado(s).'
+      uninstalled: 'Desinstalado: {count} arquivo(s) restaurado(s).',
+      uninstalledQuarantined:
+        '{count} arquivo(s) que só existiam na pasta do jogo (mod adotado, ou arquivo que você editou) foram copiados para a quarentena antes de serem removidos, em {path}. Nada foi apagado sem cópia.'
+    },
+    bisect: {
+      outdatedFirst:
+        'Antes de bisseccionar: {count} mod(s) deste perfil estão numa versão mais antiga que a release mais recente do autor. O primeiro é {title} — instalado com {installed} bytes, a última release de {repo} tem {latest}. Uma build velha custa um download; uma bissecção custa uma noite. Atualize por {url} e teste de novo. Se ainda assim quiser bisseccionar, clique outra vez.'
     },
     elevation: {
       restarting: 'O Modão está reiniciando com direitos de administrador.'
     },
     access: {
-      cannotWrite: 'O Modão não consegue escrever em {path}.'
+      cannotWrite: 'O Modão não consegue escrever em {path}.',
+      gameRunning:
+        'O {exe} está aberto agora. O Mod Loader fica de olho na pasta modloader\\ e recarrega na hora o que mudar, então mexer aí com o jogo rodando trava ele (CrashList 0x007F3825 — textura descarregada no meio do jogo). Feche o jogo e tente de novo; nada foi alterado.'
     },
     app: {
       nonHttpUrl: 'Não é permitido abrir uma URL que não seja http.'
@@ -79,6 +93,15 @@ export const messages = {
       pickArchiveTitle: 'Escolher um arquivo de mod',
       archiveFilterName: 'Arquivos de mod',
       installedSummary: 'Instalado {written} arquivo(s) ({mode}); {backedUp} arquivo(s) sobrescrito(s) salvo(s) em backup.',
+      readmeUnparsed: 'O leiame ({file}) veio junto, mas nenhuma instrução dele foi entendida.',
+      readmeUnparsedDetail:
+        'O autor escreveu instruções e o Modão não conseguiu lê-las, então o plano abaixo é palpite a partir do formato do arquivo. Leia o leiame bruto e confirme antes de instalar.',
+      readmeUnparsedRefusal:
+        'Este arquivo traz um leiame que o Modão não conseguiu ler, e nada foi instalado. Leia o leiame bruto no plano e confirme que quer instalar assim mesmo.',
+      archivePasswordProtected:
+        '{file} está protegido por senha, e a senha do MixMods ({password}) não abriu. O arquivo não está corrompido — baixar de novo não vai adiantar. Veja na página do mod qual é a senha, extraia com o 7-Zip e instale a partir do arquivo extraído.',
+      archiveRarUnsupported:
+        'O Modão não abre .rar ({file}): o extrator que vem junto faz .7z e .zip, e nenhum outro. Extraia com o 7-Zip ou o WinRAR, compacte a pasta como .zip e instale esse .zip.',
       mode: {
         junction: 'junção',
         hardlink: 'hard link',
@@ -118,7 +141,8 @@ export const messages = {
       forgotMissing:
         '{count} mod(s) that no longer exist were removed from this profile. No file was deleted from disk.',
       gone: 'Profile #{id} no longer exists. Pick a profile and try again.',
-      switchNotVerified: '{profile} was switched in but did not verify: {problem}',
+      switchNotVerified: '{profile} was switched in, with notes: {problem}',
+      switchBlocked: '{profile} was NOT activated: {problem}',
       seeSwitchReport: 'see the switch report',
       switchedActive: '{profile} active in {seconds}s',
       restoredFiles: 'Restored {count} file(s) from the pre-switch backup.',
@@ -134,6 +158,11 @@ export const messages = {
       adoptedIntoProfile: '{count} mod(s) adopted, already in the game folder — no file was moved.',
       nothingNewInFolder: 'Nothing new found in the game folder; this profile already tracks everything there.',
       exeNotFound: 'The executable for {game} is not in {path}.',
+      launchBlocked:
+        'Modão did not launch the game: {names}. The pre-launch check found a failure, and what it describes is a crash that already happened to somebody else. Open the Health screen to fix it - or, from there, to launch anyway.',
+      depRequires: '{mod} needs {dep}, and this profile does not satisfy that',
+      depConflicts: '{mod} cannot run alongside {dep}, and both are in this profile',
+      depProvides: '{dep} is supplied by {mod} and by another mod as well; keep one copy',
       activeElsewhere: 'The profile "{profile}" is active on {path}. Switch to a profile on another install before removing this one.'
     },
     crashes: {
@@ -142,13 +171,21 @@ export const messages = {
         'No crash record for gta_sa.exe after that session. If the game stopped responding rather than closing, that absence is the diagnosis: a hang leaves no exception entry.'
     },
     library: {
-      uninstalled: 'Uninstalled: {count} displaced file(s) restored.'
+      uninstalled: 'Uninstalled: {count} displaced file(s) restored.',
+      uninstalledQuarantined:
+        '{count} file(s) that existed only in the game folder (an adopted mod, or a file you edited) were copied to quarantine before they were removed, in {path}. Nothing was deleted without a copy.'
+    },
+    bisect: {
+      outdatedFirst:
+        'Before bisecting: {count} mod(s) in this profile are older than the newest release their author published. The first is {title} - installed at {installed} bytes, the latest {repo} release is {latest}. An old build costs one download; a bisect costs an evening. Update it from {url} and test again. If you still want to bisect, click again.'
     },
     elevation: {
       restarting: 'Modão is restarting with administrator rights.'
     },
     access: {
-      cannotWrite: 'Modão cannot write to {path}.'
+      cannotWrite: 'Modão cannot write to {path}.',
+      gameRunning:
+        '{exe} is running right now. Mod Loader watches modloader\\ and hot-reloads whatever changes, so writing to it with the game open crashes the game (CrashList 0x007F3825 — a texture unloaded mid-session). Close the game and try again; nothing was changed.'
     },
     app: {
       nonHttpUrl: 'Refusing to open a non-http URL.'
@@ -176,6 +213,15 @@ export const messages = {
       pickArchiveTitle: 'Select a mod archive',
       archiveFilterName: 'Mod archives',
       installedSummary: 'Installed {written} file(s) ({mode}); {backedUp} displaced file(s) backed up.',
+      readmeUnparsed: 'A readme ({file}) shipped with this archive, but none of its instructions were understood.',
+      readmeUnparsedDetail:
+        'The author wrote instructions and Modão could not read them, so the plan below is a guess from the archive shape. Read the raw readme and confirm before installing.',
+      readmeUnparsedRefusal:
+        'This archive ships a readme Modão could not read, and nothing was installed. Read the raw readme on the plan and confirm you want to install anyway.',
+      archivePasswordProtected:
+        '{file} is password protected, and the MixMods password ({password}) did not open it. The file is not corrupt - downloading it again will not help. Check the mod page for the password, extract it with 7-Zip, and install from what comes out.',
+      archiveRarUnsupported:
+        'Modão cannot open .rar files ({file}): the extractor it ships handles .7z and .zip, and nothing else. Extract it with 7-Zip or WinRAR, zip the folder up, and install that .zip.',
       mode: {
         junction: 'junction',
         hardlink: 'hard link',

@@ -11,19 +11,41 @@ import {
   createProfile,
   listProfiles,
   restorePreviousState,
+  SwitchVerificationError,
   unmanagedContent
 } from './profiles/manager'
-import { listJournals, planSwitch, verifySnapshot } from './profiles/switchTx'
+import {
+  lastRestorableSwitch,
+  listJournals,
+  openJournal,
+  planSwitch,
+  recordManifest,
+  snapshotFiles,
+  verifySnapshot
+} from './profiles/switchTx'
 import { storeDir } from './store/contentStore'
 import { detectExistingSaves, listSnapshots } from './profiles/saves'
 import { clearCache, storageReport } from './ipc'
 import { Paths } from './util/paths'
 import { applyPlan, createPlan, choose, uninstall } from './install/engine'
-import { listInstalled, setPriority, setSubModEnabled } from './library'
+import {
+  listInstalled,
+  recoverStaleVariantSwaps,
+  setEnabled,
+  setLoadFirst,
+  setPriority,
+  setSubModEnabled,
+  switchVariant
+} from './library'
 import { listConflicts } from './conflicts'
 import { readIniFile, readKeys, getSection } from './game/modloaderIni'
-import { walk, sha256File } from './util/fsx'
+import { walk, sha256File, createJunction, isLink, removeLinkOrDir } from './util/fsx'
 import { V1_US_SIZE, V1_US_TIMESTAMP } from './game/pe'
+import { reuniteOrphans, runHealthCheck } from './diagnostics/health'
+import { duplicateAssetCheck, scanGameTree, scanGameTreeAssets, stackedAdjusterCheck } from './diagnostics/duplicateAssets'
+import { t } from './util/i18n'
+import { ArchiveError, extractArchive, MIXMODS_PASSWORD, sevenZipPath } from './install/archive'
+import { spawn } from 'node:child_process'
 import type { InstalledMod, SubMod } from '@shared/types'
 
 /**
@@ -168,7 +190,7 @@ export async function runE2E(): Promise<number> {
     chosen.files.map((f) => f.targetRelative)
   )
 
-  const applied = await applyPlan(chosen.planId, adopted.profileId)
+  const applied = await applyPlan(chosen.planId, adopted.profileId, { acknowledgedUnparsedReadme: false })
   check('install wrote the files', applied.written === 1, applied)
   const installedFile = path.join(game, 'modloader', 'Loadscreens 2K Definitive', 'models', 'LOADSCS.txd')
   check('file materialised into the game folder', fs.existsSync(installedFile))
@@ -190,6 +212,399 @@ export async function runE2E(): Promise<number> {
   check('priority written into the profile block in modloader.ini', block['Loadscreens 2K Definitive'] === '80', block)
   check('Mod Loader profile pointer written', readKeys(getSection(ini, 'Folder.Config'))['Profile'] === 'Adopted')
   check('user comment in modloader.ini preserved', (await fsp.readFile(path.join(game, 'modloader', 'modloader.ini'), 'latin1')).includes('; hand written by the user'))
+
+  // --- field audit item 09: every variant option stays switchable in the store,
+  // without ever touching the archive again -----------------------------------
+  const beforeShaders = await snapshotDir(game)
+  const shadersSource = path.join(tmp, 'Proper Shaders')
+  for (const preset of ['(3a- medium - DEFAULT)', '(5 - very high)']) {
+    await fsp.mkdir(path.join(shadersSource, 'Proper Shaders', preset), { recursive: true })
+    await fsp.writeFile(path.join(shadersSource, 'Proper Shaders', preset, 'ProperShaders.ini'), preset)
+  }
+  const shadersPlan = await createPlan({
+    archivePath: shadersSource,
+    profileId: adopted.profileId,
+    modId: null,
+    modVersionId: null,
+    title: 'Proper Shaders',
+    author: 'V!Rus_Káin',
+    sourceUrl: null
+  })
+  const shadersOption = shadersPlan.variants[0].options.find((o) => o.label.includes('DEFAULT'))!
+  const shadersChosenPlan = await choose(shadersPlan.planId, shadersPlan.variants[0].id, shadersOption.id)
+  const shadersApplied = await applyPlan(shadersChosenPlan.planId, adopted.profileId, { acknowledgedUnparsedReadme: false })
+  check('field audit 09: the quality preset installed', shadersApplied.written >= 1, shadersApplied)
+
+  const shadersFile = path.join(game, 'ProperShaders.ini')
+  check('field audit 09: the DEFAULT preset content was written', (await fsp.readFile(shadersFile, 'utf8')) === '(3a- medium - DEFAULT)')
+
+  // The archive is gone. Nothing that follows may need it again.
+  await fsp.rm(shadersSource, { recursive: true, force: true })
+
+  const shadersMod = listInstalled(adopted.profileId).find((m) => m.title === 'Proper Shaders')!
+  const shadersGroup = shadersMod.variantGroups[0]
+  check(
+    'field audit 09: both presets remain recorded on the install, not just the chosen one',
+    shadersGroup?.options.length === 2 && shadersGroup.chosenOptionId === shadersOption.id,
+    shadersGroup
+  )
+
+  const veryHigh = shadersGroup!.options.find((o) => o.label.includes('very high'))!
+  await switchVariant(shadersMod.installId, shadersGroup!.id, veryHigh.id)
+  check(
+    'field audit 09: switching writes the other preset, with the archive long gone',
+    (await fsp.readFile(shadersFile, 'utf8')) === '(5 - very high)'
+  )
+  const shadersModAfter = listInstalled(adopted.profileId).find((m) => m.title === 'Proper Shaders')!
+  check(
+    'field audit 09: the install record now shows the new choice',
+    shadersModAfter.variantGroups[0]?.chosenOptionId === veryHigh.id,
+    shadersModAfter.variantGroups[0]
+  )
+
+  // Switching rewrote a file Modão had already recorded a hash for. If the
+  // switch left that hash stale the file reads as user-edited, uninstall
+  // quarantines it instead of removing it, and it survives in the game folder
+  // - which is exactly how this landed as two byte-for-byte uninstall
+  // failures further down. Assert the switch stayed honest, here, where the
+  // cause is visible.
+  const shadersUninstalled = await uninstall(shadersMod.installId)
+  check(
+    'field audit 09: uninstalling after a switch removes the switched file instead of quarantining it',
+    shadersUninstalled.quarantined.length === 0 && !fs.existsSync(shadersFile),
+    shadersUninstalled
+  )
+  check(
+    'field audit 09: the variant install leaves the game folder byte-for-byte as it found it',
+    sameTree(beforeShaders, await snapshotDir(game)),
+    diff(beforeShaders, await snapshotDir(game))
+  )
+
+  // --- field audit 09, the dangerous half: a group found by a NAME RULE whose
+  // options ship DIFFERENTLY NAMED files. Proper Shaders is safe by
+  // construction - every preset holds one ProperShaders.ini, so replacing the
+  // file of that name is the whole switch. Here the outgoing file has no
+  // counterpart in the incoming option, and a switch that only wrote the new
+  // one would leave both on disk: two options live at once, which is the bug
+  // item 09 exists to remove, wearing a different hat.
+  const beforeHud = await snapshotDir(game)
+  const hudSource = path.join(tmp, 'HUD Pack')
+  await fsp.mkdir(path.join(hudSource, 'HUD 2K', 'models'), { recursive: true })
+  await fsp.mkdir(path.join(hudSource, 'HUD 4K', 'models'), { recursive: true })
+  await fsp.writeFile(path.join(hudSource, 'HUD 2K', 'models', 'hud2k.txd'), 'two kay')
+  await fsp.writeFile(path.join(hudSource, 'HUD 4K', 'models', 'hud4k.txd'), 'four kay')
+
+  const hudPlan = await createPlan({
+    archivePath: hudSource,
+    profileId: adopted.profileId,
+    modId: null,
+    modVersionId: null,
+    title: 'HUD Pack',
+    author: 'Unknown',
+    sourceUrl: null
+  })
+  const hudGroupPlan = hudPlan.variants[0]
+  check(
+    'field audit 09: differently-named options are still one exclusive group',
+    hudGroupPlan?.options.length === 2,
+    hudPlan.variants
+  )
+  const hud2k = hudGroupPlan.options.find((o) => o.label.includes('2K'))!
+  const hud4k = hudGroupPlan.options.find((o) => o.label.includes('4K'))!
+  const hudApplied = await applyPlan((await choose(hudPlan.planId, hudGroupPlan.id, hud2k.id)).planId, adopted.profileId, { acknowledgedUnparsedReadme: false })
+  const hudOld = path.join(game, 'modloader', 'HUD 2K', 'models', 'hud2k.txd')
+  const hudNew = path.join(game, 'modloader', 'HUD 2K', 'models', 'hud4k.txd')
+  check('field audit 09: the 2K option installed', fs.existsSync(hudOld), hudApplied)
+
+  await fsp.rm(hudSource, { recursive: true, force: true })
+  const hudMod = listInstalled(adopted.profileId).find((m) => m.installId === hudApplied.installId)!
+
+  // A swap that fails halfway must leave the install exactly as it was. The
+  // failure injected here is a real filesystem obstruction rather than a test
+  // hook: a DIRECTORY sitting where the incoming option's file has to be
+  // written, so the copy into the store throws AFTER the outgoing bytes have
+  // already been removed - the window that used to be unguarded.
+  const hudKey = (getDb().prepare('SELECT store_key FROM install WHERE id = ?').get(hudApplied.installId) as { store_key: string })
+    .store_key
+  const hudBlocked = path.join(storeDir(hudKey), 'modloader', 'HUD 2K', 'models', 'hud4k.txd')
+  await fsp.mkdir(hudBlocked, { recursive: true })
+  let swapError: string | null = null
+  try {
+    await switchVariant(hudMod.installId, hudMod.variantGroups[0].id, hud4k.id)
+  } catch (e) {
+    swapError = (e as Error).message
+  }
+  check(
+    'field audit 09: a swap that fails midway throws instead of reporting success',
+    !!swapError && swapError.includes('put "HUD 2K" back'),
+    swapError
+  )
+  check(
+    'field audit 09: the rolled-back swap left the old option live in the game folder',
+    fs.existsSync(hudOld) && (await fsp.readFile(hudOld, 'utf8')) === 'two kay',
+    swapError
+  )
+  const hudRolledBack = listInstalled(adopted.profileId).find((m) => m.installId === hudApplied.installId)!
+  check(
+    'field audit 09: the rolled-back swap left the records on the old option',
+    hudRolledBack.fileCount === 1 && hudRolledBack.variantGroups[0]?.chosenOptionId === hud2k.id,
+    { fileCount: hudRolledBack.fileCount, group: hudRolledBack.variantGroups[0] }
+  )
+  const trackedAfterRollback = getDb()
+    .prepare('SELECT relative_path FROM install_file WHERE install_id = ?')
+    .all(hudApplied.installId) as { relative_path: string }[]
+  check(
+    'field audit 09: every file the rolled-back install still claims is really on disk',
+    trackedAfterRollback.length === 1 &&
+      trackedAfterRollback.every((f) => fs.existsSync(path.join(game, f.relative_path))),
+    trackedAfterRollback
+  )
+  check(
+    'field audit 09: the failed swap quarantined nothing - it had nothing of the user in it',
+    !fs.existsSync(path.join(Paths.quarantine(), 'variant', String(hudApplied.installId))),
+    Paths.quarantine()
+  )
+  await fsp.rm(hudBlocked, { recursive: true, force: true })
+
+  await switchVariant(hudMod.installId, hudMod.variantGroups[0].id, hud4k.id)
+  check(
+    'field audit 09: switching to a differently-named option removes the file the old one installed',
+    !fs.existsSync(hudOld),
+    (await walk(path.join(game, 'modloader', 'HUD 2K'))).map((f) => f.rel)
+  )
+  check(
+    'field audit 09: and writes the new one in its place',
+    fs.existsSync(hudNew) && (await fsp.readFile(hudNew, 'utf8')) === 'four kay'
+  )
+  const hudAfter = listInstalled(adopted.profileId).find((m) => m.installId === hudApplied.installId)!
+  check(
+    'field audit 09: the install tracks exactly the files of the option now live',
+    hudAfter.fileCount === 1 && hudAfter.variantGroups[0]?.chosenOptionId === hud4k.id,
+    { fileCount: hudAfter.fileCount, group: hudAfter.variantGroups[0] }
+  )
+
+  const hudUninstalled = await uninstall(hudMod.installId)
+  check(
+    'field audit 09: uninstalling a differently-named switch quarantines nothing either',
+    hudUninstalled.quarantined.length === 0,
+    hudUninstalled
+  )
+  check(
+    'field audit 09: and the game folder comes back byte-for-byte',
+    sameTree(beforeHud, await snapshotDir(game)),
+    diff(beforeHud, await snapshotDir(game))
+  )
+
+  // --- field audit 09, hardlink/copy coverage: a differently-named variant
+  // group whose files land as loose files at the game root - `root-file`, not
+  // `modloader-folder` - so `followsStore` is false and the swap has to remove
+  // the outgoing file from the game folder itself rather than get it for free
+  // from a junction's live view of the store. The HUD block above never
+  // exercises that removal-and-restore code at all: it is entirely a junction.
+  const beforeSettings = await snapshotDir(game)
+  const settingsSource = path.join(tmp, 'Settings Pack')
+  await fsp.mkdir(path.join(settingsSource, 'Settings 2K'), { recursive: true })
+  await fsp.mkdir(path.join(settingsSource, 'Settings 4K'), { recursive: true })
+  await fsp.writeFile(path.join(settingsSource, 'Settings 2K', 'settings_2k.ini'), 'two kay settings')
+  await fsp.writeFile(path.join(settingsSource, 'Settings 4K', 'settings_4k.ini'), 'four kay settings')
+
+  const settingsPlan = await createPlan({
+    archivePath: settingsSource,
+    profileId: adopted.profileId,
+    modId: null,
+    modVersionId: null,
+    title: 'Settings Pack',
+    author: 'Unknown',
+    sourceUrl: null
+  })
+  const settingsGroupPlan = settingsPlan.variants[0]
+  const settings2k = settingsGroupPlan.options.find((o) => o.label.includes('2K'))!
+  const settings4k = settingsGroupPlan.options.find((o) => o.label.includes('4K'))!
+  const settingsApplied = await applyPlan(
+    (await choose(settingsPlan.planId, settingsGroupPlan.id, settings2k.id)).planId,
+    adopted.profileId,
+    { acknowledgedUnparsedReadme: false }
+  )
+  const settingsOld = path.join(game, 'settings_2k.ini')
+  const settingsNew = path.join(game, 'settings_4k.ini')
+  check('field audit 09: the loose-file variant installed outside modloader\\', fs.existsSync(settingsOld), settingsApplied)
+  const settingsFileRow = getDb()
+    .prepare('SELECT destination_class FROM install_file WHERE install_id = ?')
+    .get(settingsApplied.installId) as { destination_class: string } | undefined
+  check(
+    'field audit 09: it materialised as a root file, not a junctioned folder',
+    settingsFileRow?.destination_class === 'root-file' && !isLink(path.join(game, 'modloader', 'Settings 2K')),
+    settingsFileRow
+  )
+
+  await fsp.rm(settingsSource, { recursive: true, force: true })
+  const settingsMod = listInstalled(adopted.profileId).find((m) => m.installId === settingsApplied.installId)!
+
+  // The same real filesystem obstruction as the junction case: a directory
+  // sitting where the incoming file has to land in the store, so the copy
+  // throws after the outgoing bytes are already gone.
+  const settingsKey = (
+    getDb().prepare('SELECT store_key FROM install WHERE id = ?').get(settingsApplied.installId) as { store_key: string }
+  ).store_key
+  const settingsBlocked = path.join(storeDir(settingsKey), 'settings_4k.ini')
+  await fsp.mkdir(settingsBlocked, { recursive: true })
+  let settingsSwapError: string | null = null
+  try {
+    await switchVariant(settingsMod.installId, settingsMod.variantGroups[0].id, settings4k.id)
+  } catch (e) {
+    settingsSwapError = (e as Error).message
+  }
+  check(
+    'field audit 09: a loose-file swap that fails midway also throws instead of reporting success',
+    !!settingsSwapError && settingsSwapError.includes('put "Settings 2K" back'),
+    settingsSwapError
+  )
+  check(
+    'field audit 09: the rolled-back loose-file swap left the old file live in the game folder, byte-for-byte',
+    fs.existsSync(settingsOld) && (await fsp.readFile(settingsOld, 'utf8')) === 'two kay settings',
+    settingsSwapError
+  )
+  check('field audit 09: and never wrote the incoming file into the game folder', !fs.existsSync(settingsNew))
+  const settingsRolledBack = listInstalled(adopted.profileId).find((m) => m.installId === settingsApplied.installId)!
+  check(
+    'field audit 09: the rolled-back loose-file swap left the records on the old option',
+    settingsRolledBack.fileCount === 1 && settingsRolledBack.variantGroups[0]?.chosenOptionId === settings2k.id,
+    { fileCount: settingsRolledBack.fileCount, group: settingsRolledBack.variantGroups[0] }
+  )
+  await fsp.rm(settingsBlocked, { recursive: true, force: true })
+
+  await switchVariant(settingsMod.installId, settingsMod.variantGroups[0].id, settings4k.id)
+  check('field audit 09: the real loose-file swap removes the old file', !fs.existsSync(settingsOld))
+  check(
+    'field audit 09: and writes the new one in its place',
+    fs.existsSync(settingsNew) && (await fsp.readFile(settingsNew, 'utf8')) === 'four kay settings'
+  )
+
+  const settingsUninstalled = await uninstall(settingsMod.installId)
+  check(
+    'field audit 09: uninstalling the loose-file switch quarantines nothing',
+    settingsUninstalled.quarantined.length === 0,
+    settingsUninstalled
+  )
+  check(
+    'field audit 09: and the game folder comes back byte-for-byte',
+    sameTree(beforeSettings, await snapshotDir(game)),
+    diff(beforeSettings, await snapshotDir(game))
+  )
+
+  // --- field audit 09, crash-safe recovery: a variant swap now journals
+  // itself the way a profile switch does. A junctioned mod folder is a live
+  // view of the store, so the instant the store shows the incoming bytes the
+  // game folder does too - before any row says so. `switchVariant`'s own
+  // try/catch cannot help a process that is simply gone; only a journal
+  // written to disk before the store moves can put things back. This drives
+  // the swap's own staging primitives by hand and stops exactly where a kill
+  // would land - the store already swapped, nothing else - then proves
+  // `recoverStaleVariantSwaps` (the boot-time recovery `bootstrap()` runs)
+  // finds it and repairs the disagreement without ever needing to touch the
+  // install row, which a kill never catches mid-write.
+  const beforeIcons = await snapshotDir(game)
+  // Named "Icons 2K"/"Icons 4K", not "Small"/"Large": the resolution rule in
+  // @shared/variantGroups matches the folder NAME, and only the name - the
+  // files sit inside a "data\" subfolder (so the chosen option still
+  // materialises as a real modloader-folder junction), which means there is
+  // no direct file for `sameContentGroup`'s name-set fallback to compare, and
+  // without a rule match the two folders would never be grouped at all.
+  const iconsSource = path.join(tmp, 'Icons Pack')
+  await fsp.mkdir(path.join(iconsSource, 'Icons 2K', 'data'), { recursive: true })
+  await fsp.mkdir(path.join(iconsSource, 'Icons 4K', 'data'), { recursive: true })
+  await fsp.writeFile(path.join(iconsSource, 'Icons 2K', 'data', 'icon.dat'), 'small icons')
+  await fsp.writeFile(path.join(iconsSource, 'Icons 4K', 'data', 'icon.dat'), 'large icons')
+  const iconsPlan = await createPlan({
+    archivePath: iconsSource,
+    profileId: adopted.profileId,
+    modId: null,
+    modVersionId: null,
+    title: 'Icons Pack',
+    author: 'Unknown',
+    sourceUrl: null
+  })
+  const iconsGroupPlan = iconsPlan.variants[0]
+  const iconsSmall = iconsGroupPlan.options.find((o) => o.label.includes('2K'))!
+  const iconsLarge = iconsGroupPlan.options.find((o) => o.label.includes('4K'))!
+  const iconsApplied = await applyPlan(
+    (await choose(iconsPlan.planId, iconsGroupPlan.id, iconsSmall.id)).planId,
+    adopted.profileId,
+    { acknowledgedUnparsedReadme: false }
+  )
+  await fsp.rm(iconsSource, { recursive: true, force: true })
+  const iconTarget = (
+    getDb().prepare('SELECT relative_path FROM install_file WHERE install_id = ?').get(iconsApplied.installId) as {
+      relative_path: string
+    }
+  ).relative_path
+  const iconAbs = path.join(game, iconTarget)
+  check(
+    'field audit 09: the icon variant materialised as a junctioned folder',
+    isLink(path.join(game, 'modloader', 'Icons 2K')),
+    iconTarget
+  )
+  check('field audit 09: the small icon is live', (await fsp.readFile(iconAbs, 'utf8')) === 'small icons')
+
+  const iconsKey = (
+    getDb().prepare('SELECT store_key FROM install WHERE id = ?').get(iconsApplied.installId) as { store_key: string }
+  ).store_key
+  const iconsGroupId = listInstalled(adopted.profileId).find((m) => m.installId === iconsApplied.installId)!.variantGroups[0].id
+
+  // Drive the swap's own STAGE primitives by hand and stop right after the
+  // store write: the exact point a kill leaves the junction showing the
+  // incoming bytes with the install row still naming the outgoing option.
+  // Opened exactly as `switchVariant` opens one: kind 'variant-swap', and no
+  // profile being left. Anything else would not be the row the boot recovery
+  // looks for - and would be a row "Restore previous state" could pick up.
+  const iconsJournal = openJournal(null, adopted.profileId, 'variant-swap')
+  const iconsRollback = await snapshotFiles(storeDir(iconsKey), [iconTarget], path.join(iconsJournal.snapshotDir, 'outgoing'))
+  recordManifest(iconsJournal.id, iconsRollback)
+  getDb().prepare('UPDATE switch_journal SET variant_swap_json = ? WHERE id = ?').run(
+    JSON.stringify({
+      installId: iconsApplied.installId,
+      groupId: iconsGroupId,
+      fromOptionId: iconsSmall.id,
+      toOptionId: iconsLarge.id,
+      outgoingTargets: [iconTarget],
+      incomingTargets: [iconTarget]
+    }),
+    iconsJournal.id
+  )
+  const iconsStorePath = path.join(storeDir(iconsKey), iconTarget)
+  await fsp.rm(iconsStorePath, { force: true })
+  await fsp.copyFile(path.join(storeDir(iconsKey), '.variants', iconsLarge.id, 'data', 'icon.dat'), iconsStorePath)
+  check(
+    'field audit 09: the junction already shows the incoming bytes before any row has changed',
+    (await fsp.readFile(iconAbs, 'utf8')) === 'large icons' &&
+      listInstalled(adopted.profileId).find((m) => m.installId === iconsApplied.installId)!.variantGroups[0]?.chosenOptionId ===
+        iconsSmall.id
+  )
+
+  const iconsRecovery = await recoverStaleVariantSwaps()
+  check(
+    'field audit 09: a stale variant-swap journal is found and repaired at boot',
+    iconsRecovery.recovered === 1 && iconsRecovery.problems.length === 0,
+    iconsRecovery
+  )
+  check(
+    'field audit 09: recovery puts the outgoing bytes back, closing the window a kill would have left open',
+    (await fsp.readFile(iconAbs, 'utf8')) === 'small icons'
+  )
+  check(
+    'field audit 09: the install record it repaired was never wrong to begin with',
+    listInstalled(adopted.profileId).find((m) => m.installId === iconsApplied.installId)!.variantGroups[0]?.chosenOptionId ===
+      iconsSmall.id
+  )
+  const iconsJournalAfter = listJournals(50).find((j) => j.id === iconsJournal.id)!
+  check('field audit 09: the journal is marked restored, not left open', iconsJournalAfter.state === 'restored', iconsJournalAfter)
+
+  await uninstall(iconsApplied.installId)
+  check(
+    'field audit 09: and the game folder comes back byte-for-byte after the icon variant is removed',
+    sameTree(beforeIcons, await snapshotDir(game)),
+    diff(beforeIcons, await snapshotDir(game))
+  )
 
   // --- profiles and saves -----------------------------------------------------
   await fsp.writeFile(path.join(saves, 'GTASAsf1.b'), 'adopted profile save')
@@ -301,7 +716,7 @@ export async function runE2E(): Promise<number> {
     packPlan.files.some((f) => f.destination === 'asi-plugin') && packPlan.files.some((f) => f.destination === 'modloader-folder'),
     packPlan.files.map((f) => `${f.destination} ${f.targetRelative}`)
   )
-  const packApplied = await applyPlan(packPlan.planId, adopted.profileId)
+  const packApplied = await applyPlan(packPlan.planId, adopted.profileId, { acknowledgedUnparsedReadme: false })
   const packInstall = listInstalled(adopted.profileId).find((m) => m.installId === packApplied.installId)!
   const subOf = (mod: InstalledMod, rel: string): SubMod | undefined => mod.subMods.find((s) => s.relativePath === rel)
   check(
@@ -316,8 +731,47 @@ export async function runE2E(): Promise<number> {
   const afterDisable = listInstalled(adopted.profileId).find((m) => m.installId === packApplied.installId)!
   check('a disabled sub-mod reports enabled: false', subOf(afterDisable, 'data')?.enabled === false, afterDisable.subMods)
   check('its sibling is untouched', subOf(afterDisable, 'models')?.enabled === true, afterDisable.subMods)
-  check('disabling a sub-mod removes only that folder from the game', !fs.existsSync(subFile))
+  check('disabling a sub-mod takes only that folder out of Mod Loader reach', !fs.existsSync(subFile))
+  // Mod Loader's own non-destructive disable: the folder is RENAMED to ". data",
+  // which it skips. Nothing is removed - this used to be an fsp.rm that deleted
+  // straight through the junction into Modao's only copy of the payload.
+  const disabledSubFile = path.join(game, 'modloader', 'Sub Mod Pack', '. data', 'handling.dat')
+  check(
+    'and it is a rename to ". data", not a removal - every byte is still on disk',
+    fs.existsSync(disabledSubFile) && (await fsp.readFile(disabledSubFile, 'utf8')) === 'handling lines',
+    await fsp.readdir(path.join(game, 'modloader', 'Sub Mod Pack'))
+  )
   check('the rest of the mod stays materialised', fs.existsSync(path.join(game, 'modloader', 'Sub Mod Pack', 'models', 'wheel.dff')))
+
+  // --- copilot review: the pre-launch cache cannot outlive this rename -------
+  // The cached report's fingerprint reads install rows and stream.ini. This
+  // operation moves neither - it writes `submod_state` and renames a folder -
+  // but `duplicate-asi` and `stacked-adjuster` read the DISK and are fail-level,
+  // so enabling a sub-mod holding a second limit adjuster introduces a launch
+  // blocker the stored report knows nothing about. Within the two-minute TTL,
+  // Play would be answered from before the rename.
+  {
+    const cacheMod = await import('./diagnostics/healthCache')
+    await cacheMod.freshHealthReport(adopted.profileId, game)
+    check(
+      'submod cache: a report is stored before the rename, so there is something to go stale',
+      cacheMod.storedHealthReport().report !== null,
+      null
+    )
+    await setSubModEnabled(packApplied.installId, 'models', false)
+    check(
+      'submod cache: disabling a sub-mod drops the stored report instead of letting Play reuse it',
+      cacheMod.storedHealthReport().report === null && cacheMod.storedHealthReport().stamp === null,
+      cacheMod.storedHealthReport().stamp
+    )
+    await cacheMod.freshHealthReport(adopted.profileId, game)
+    await setSubModEnabled(packApplied.installId, 'models', true)
+    check(
+      'submod cache: and enabling one drops it too - that is the direction that adds a blocker',
+      cacheMod.storedHealthReport().report === null,
+      cacheMod.storedHealthReport().stamp
+    )
+  }
 
   await setSubModEnabled(packApplied.installId, 'data', true)
   const afterReEnable = listInstalled(adopted.profileId).find((m) => m.installId === packApplied.installId)!
@@ -326,6 +780,56 @@ export async function runE2E(): Promise<number> {
     're-enabling puts the files back with their own bytes',
     fs.existsSync(subFile) && (await fsp.readFile(subFile, 'utf8')) === 'handling lines',
     (await walk(path.join(game, 'modloader', 'Sub Mod Pack'))).map((f) => f.rel)
+  )
+
+
+  // --- field audit 12 + 20: the whole-mod toggle is a rename, and load order ---
+  //
+  // The sub-mod toggle above is one level down; this is the one the Library's
+  // switch calls. Disabling used to `dematerialise` - it removed the
+  // materialised files and trusted the store to put them back, which is nothing
+  // at all for an adopted install and a re-link of gigabytes for every other.
+  // Now it renames the folder to ". <name>", which Mod Loader skips.
+  const beforeToggle = await snapshotDir(game)
+  await setEnabled(packApplied.installId, false)
+  check(
+    'field audit 20: disabling a mod renames its folder to ". Sub Mod Pack" instead of removing it',
+    fs.existsSync(path.join(game, 'modloader', '. Sub Mod Pack', 'models', 'wheel.dff')) &&
+      !fs.existsSync(path.join(game, 'modloader', 'Sub Mod Pack')),
+    await fsp.readdir(path.join(game, 'modloader'))
+  )
+  check(
+    'field audit 20: the priority line follows the folder name Mod Loader will actually see',
+    (await fsp.readFile(path.join(game, 'modloader', 'modloader.ini'), 'latin1')).includes('. Sub Mod Pack=0'),
+    (await fsp.readFile(path.join(game, 'modloader', 'modloader.ini'), 'latin1'))
+      .split(/\r?\n/)
+      .filter((l) => /Sub Mod Pack/.test(l))
+  )
+  await setEnabled(packApplied.installId, true)
+  check(
+    'field audit 20: enabling it again round-trips the whole game folder, byte for byte',
+    sameTree(beforeToggle, await snapshotDir(game)),
+    diff(beforeToggle, await snapshotDir(game))
+  )
+
+  // Load order is a separate mechanism from priority, and has its own lever.
+  await setLoadFirst(packApplied.installId, true)
+  check(
+    'field audit 12: "load first" is the "$" prefix on the mod folder, not a priority number',
+    fs.existsSync(path.join(game, 'modloader', '$Sub Mod Pack', 'models', 'wheel.dff')),
+    await fsp.readdir(path.join(game, 'modloader'))
+  )
+  const loadFirstRow = listInstalled(adopted.profileId).find((m) => m.installId === packApplied.installId)!
+  check(
+    'field audit 12: and it is reported as load order, with priority left exactly where it was',
+    loadFirstRow.loadFirst && loadFirstRow.loadOrderRank === 1 && loadFirstRow.priority === 50,
+    { rank: loadFirstRow.loadOrderRank, priority: loadFirstRow.priority }
+  )
+  await setLoadFirst(packApplied.installId, false)
+  check(
+    'field audit 12: taking the prefix off puts the folder back under its own name',
+    sameTree(beforeToggle, await snapshotDir(game)),
+    diff(beforeToggle, await snapshotDir(game))
   )
 
   await uninstall(packApplied.installId)
@@ -517,6 +1021,272 @@ export async function runE2E(): Promise<number> {
     (await listProfiles()).find((p) => p.isActive)?.id === risky.id
   )
 
+  // --- an unmanaged file at a path the incoming profile writes ---------------
+  // Unmanaged.asi above collides with nothing, which is exactly why the
+  // destructive path stayed invisible for so long: it only opens when the
+  // arriving profile wants a path the user already occupies. This is the field
+  // failure in miniature - the user's own scripts\MixSets.asi, and a profile
+  // that installs a MixSets.asi of its own on top of it.
+  await activateProfile(empty.id)
+  const ownMixSets = 'a MixSets.asi the user downloaded and dropped in by hand'
+  const ownMixSetsPath = path.join(game, 'scripts', 'MixSets.asi')
+  await fsp.writeFile(ownMixSetsPath, ownMixSets)
+  const ownMixSetsHash = await sha256File(ownMixSetsPath)
+
+  // The same collision one level up: a real modloader\<Folder>\ the user built
+  // by hand, where the arriving profile puts a junction of the same name.
+  // `createJunction` calls removeLinkOrDir, which is a recursive force remove,
+  // so the whole tree went without ever being named.
+  const handFolder = path.join(game, 'modloader', 'Animações de Kung Fu melhoradas')
+  const handRel = 'modloader/Animações de Kung Fu melhoradas/by-hand.ifp'
+  await fsp.mkdir(handFolder, { recursive: true })
+  await fsp.writeFile(path.join(handFolder, 'by-hand.ifp'), 'animations the user made themselves')
+  const handHash = await sha256File(path.join(handFolder, 'by-hand.ifp'))
+  // And a file nested deeper, at the name the mod's own payload uses. Both are
+  // untracked, so both have to come out file by file rather than the folder
+  // being judged once and taken whole.
+  const strayRel = 'modloader/Animações de Kung Fu melhoradas/extra/kungfu.ifp'
+  await fsp.mkdir(path.join(handFolder, 'extra'), { recursive: true })
+  await fsp.writeFile(path.join(handFolder, 'extra', 'kungfu.ifp'), 'a stray the user left inside that folder')
+  const strayHash = await sha256File(path.join(handFolder, 'extra', 'kungfu.ifp'))
+
+  const collide = await planSwitch(risky.id)
+  check(
+    'a colliding unmanaged file is still reported as unmanaged',
+    collide.unmanaged.includes('scripts/MixSets.asi'),
+    collide.unmanaged
+  )
+  check(
+    'the dry run names the unmanaged file the switch would overwrite',
+    collide.willBeOverwritten.includes('scripts/MixSets.asi'),
+    collide.willBeOverwritten
+  )
+  check(
+    'a real mod folder an incoming junction would replace is reported too',
+    collide.unmanaged.includes(handRel) && collide.willBeOverwritten.includes(handRel),
+    collide.willBeOverwritten
+  )
+  check(
+    'every file inside it is reported, one by one',
+    collide.unmanaged.includes(strayRel) && collide.willBeOverwritten.includes(strayRel),
+    collide.willBeOverwritten
+  )
+
+  const collided = await activateProfile(risky.id)
+  check('the colliding switch still verified', collided.verification?.ok === true, collided.verification?.problems)
+  check(
+    'the mod took the path it needed',
+    fs.existsSync(ownMixSetsPath) && (await sha256File(ownMixSetsPath)) === riskyBytes.get('scripts/MixSets.asi'),
+    await sha256File(ownMixSetsPath)
+  )
+  check(
+    'the file the user had there is listed as quarantined',
+    collided.quarantined.includes('scripts/MixSets.asi'),
+    collided.quarantined
+  )
+  const displacedCopies = (await walk(path.join(Paths.quarantine(), 'displaced'))).filter((f) =>
+    f.abs.toLowerCase().endsWith('mixsets.asi')
+  )
+  const displacedHashes = await Promise.all(displacedCopies.map((f) => sha256File(f.abs)))
+  check(
+    'the user’s own bytes are in quarantine, not gone',
+    displacedHashes.includes(ownMixSetsHash),
+    displacedCopies.map((f) => f.abs)
+  )
+  const collideJournal = (await listJournals()).find((j) => j.id === collided.journalId)!
+  const collideEntry = collideJournal.manifest.find((m) => m.relativePath === 'scripts/MixSets.asi')
+  check(
+    'the overwritten file is in the switch snapshot as well',
+    !!collideEntry && fs.existsSync(collideEntry.backupPath) && (await sha256File(collideEntry.backupPath)) === ownMixSetsHash,
+    collideEntry
+  )
+
+  // The folder half of the same story.
+  check(
+    'the junction did take the folder',
+    fs.existsSync(path.join(game, 'modloader', 'Animações de Kung Fu melhoradas', 'kungfu.ifp')),
+    await fsp.readdir(path.join(game, 'modloader'))
+  )
+  check(
+    'the displaced folder is listed as quarantined',
+    collided.quarantined.includes('modloader/Animações de Kung Fu melhoradas'),
+    collided.quarantined
+  )
+  const handCopies = (await walk(path.join(Paths.quarantine(), 'displaced'))).filter((f) =>
+    f.abs.toLowerCase().endsWith('by-hand.ifp')
+  )
+  const handHashes = await Promise.all(handCopies.map((f) => sha256File(f.abs)))
+  check(
+    'the hand-made folder is in quarantine, not recursively removed',
+    handHashes.includes(handHash),
+    handCopies.map((f) => f.abs)
+  )
+  const handEntry = collideJournal.manifest.find((m) => m.relativePath === handRel)
+  check(
+    'the displaced folder is in the switch snapshot, file by file',
+    !!handEntry && fs.existsSync(handEntry.backupPath) && (await sha256File(handEntry.backupPath)) === handHash,
+    handEntry
+  )
+  const strayEntry = collideJournal.manifest.find((m) => m.relativePath === strayRel)
+  check(
+    'the stray nested inside it is in the snapshot too',
+    !!strayEntry && fs.existsSync(strayEntry.backupPath) && (await sha256File(strayEntry.backupPath)) === strayHash,
+    strayEntry
+  )
+  const strayCopies = (await walk(path.join(Paths.quarantine(), 'displaced'))).filter((f) =>
+    f.abs.toLowerCase().includes('extra')
+  )
+  check(
+    'and the stray is in quarantine with its own bytes',
+    (await Promise.all(strayCopies.map((f) => sha256File(f.abs)))).includes(strayHash),
+    strayCopies.map((f) => f.abs)
+  )
+
+  // And leaving the profile again hands the path back to its owner.
+  await activateProfile(empty.id)
+  check(
+    'the displaced file is put back when the profile that took its path leaves',
+    fs.existsSync(ownMixSetsPath) && (await sha256File(ownMixSetsPath)) === ownMixSetsHash,
+    fs.existsSync(ownMixSetsPath) ? await sha256File(ownMixSetsPath) : 'missing'
+  )
+  await fsp.rm(ownMixSetsPath, { force: true })
+  await activateProfile(risky.id)
+  check(
+    'the profile is whole again after all of that',
+    riskyFiles.every((rel) => fs.existsSync(path.join(game, ...rel.split('/')))),
+    riskyFiles.filter((rel) => !fs.existsSync(path.join(game, ...rel.split('/'))))
+  )
+
+  // "Restore previous state" while a profile that owns real files is active.
+  // It used to vacate that profile with no snapshot set at all, so every
+  // tracked real file was deleted outright - and an adopted one had no store
+  // copy, no recorded hash and no quarantine entry to come back from. The
+  // earlier restore test above cannot see this: it restores out of an empty
+  // profile, where there is nothing to delete.
+  const undone = await restorePreviousState()
+  check(
+    'the undo backs the active profile up before it vacates it',
+    undone.log.some((l) => l.includes('before removing them')),
+    undone.log
+  )
+  check(
+    'the undo left the profile from before the switch active',
+    (await listProfiles()).find((p) => p.isActive)?.id === empty.id,
+    (await listProfiles()).find((p) => p.isActive)?.name
+  )
+  await activateProfile(risky.id)
+  for (const rel of riskyFiles) {
+    const abs = path.join(game, ...rel.split('/'))
+    check(
+      `${rel} survived being vacated by the undo`,
+      fs.existsSync(abs) && (await sha256File(abs)) === riskyBytes.get(rel),
+      abs
+    )
+  }
+
+  // --- a mod that passes the plan and then does not arrive -------------------
+  // The field failure: a mod was in the profile's mod set, was not materialised
+  // by the switch, and nothing said so - the user found out in the game. The
+  // pre-switch refusal above cannot catch this one, because the payload is
+  // still there when the plan is made. So take it away after the plan has
+  // passed and before the files are placed, which is exactly what a payload
+  // deleted by a cleaner, a sync client or a failing disk looks like.
+  const ghost = await createProfile({ name: 'Mod que some' })
+  await activateProfile(ghost.id)
+  const ghostSource = path.join(tmp, 'beta-gang')
+  await fsp.mkdir(path.join(ghostSource, 'modloader', 'Beta Gang Members'), { recursive: true })
+  await fsp.writeFile(path.join(ghostSource, 'modloader', 'Beta Gang Members', 'members.dat'), 'beta gang bytes')
+  const ghostPlan = await createPlan({
+    archivePath: ghostSource,
+    profileId: ghost.id,
+    modId: null,
+    modVersionId: null,
+    title: 'Beta Gang Members',
+    author: 'Junior_Djjr',
+    sourceUrl: null
+  })
+  const ghostInstall = await applyPlan(ghostPlan.planId, ghost.id, { acknowledgedUnparsedReadme: false })
+  const ghostRow = getDb().prepare('SELECT store_key, folder_name FROM install WHERE id = ?').get(ghostInstall.installId) as {
+    store_key: string | null
+    folder_name: string | null
+  }
+  const ghostLabel = ghostRow.folder_name ?? 'Beta Gang Members'
+  const ghostFiles = (
+    getDb().prepare('SELECT relative_path FROM install_file WHERE install_id = ?').all(ghostInstall.installId) as {
+      relative_path: string
+    }[]
+  ).map((r) => r.relative_path)
+
+  // Back to the profile the user is really on, so the failing switch is a
+  // switch away from a profile with files of its own - the state the rollback
+  // has to put back.
+  await activateProfile(risky.id)
+
+  let vanished: unknown = null
+  await activateProfile(ghost.id, (phase, done) => {
+    // Between the plan and the placing: the store still held the payload when
+    // planSwitch looked, and does not by the time materialise reads it.
+    if (phase === 'link' && done === 0 && ghostRow.store_key) {
+      for (const rel of ghostFiles) fs.rmSync(path.join(storeDir(ghostRow.store_key), ...rel.split('/')), { force: true })
+    }
+  }).catch((e) => {
+    vanished = e
+  })
+
+  check('a mod that did not reach the game folder blocks the switch', vanished instanceof SwitchVerificationError, vanished)
+  const vanishReport = vanished instanceof SwitchVerificationError ? vanished.verification : null
+  check(
+    'the blocking failure names the mod that did not arrive',
+    !!vanishReport &&
+      vanishReport.missingMods.some((m) => m.label === ghostLabel) &&
+      vanishReport.blockingProblems.join(' ').includes(ghostLabel),
+    vanishReport?.blockingProblems
+  )
+  check(
+    'and it is an error the UI must show, not a line in a log',
+    vanished instanceof Error && vanished.message.includes(ghostLabel),
+    vanished instanceof Error ? vanished.message : vanished
+  )
+  check(
+    'the profile that did not reconcile was NOT recorded active',
+    (await listProfiles()).find((p) => p.isActive)?.id === risky.id,
+    (await listProfiles()).find((p) => p.isActive)?.name
+  )
+  const ghostJournalId = vanished instanceof SwitchVerificationError ? vanished.journalId : -1
+  const ghostJournal = (await listJournals()).find((j) => j.id === ghostJournalId)
+  check(
+    'the refused switch is journalled as failed, with the report attached',
+    ghostJournal?.state === 'failed' && ghostJournal.verification !== null,
+    ghostJournal?.state
+  )
+
+  // The way out the user is offered has to undo a switch that never became
+  // active: the profile that landed is not the profile the DB calls active.
+  const ghostUndo = await restorePreviousState()
+  check(
+    'the rollback vacates the profile that landed without ever activating',
+    !fs.existsSync(path.join(game, 'modloader', ghostLabel)),
+    ghostUndo.log
+  )
+  check(
+    'the rollback says it removed that profile, not the one the DB called active',
+    ghostUndo.log.some((l) => l.includes('Mod que some')),
+    ghostUndo.log
+  )
+  check(
+    'the profile from before the refused switch is active again',
+    (await listProfiles()).find((p) => p.isActive)?.id === risky.id,
+    (await listProfiles()).find((p) => p.isActive)?.name
+  )
+  for (const rel of riskyFiles) {
+    const abs = path.join(game, ...rel.split('/'))
+    check(
+      `${rel} came back after undoing the refused switch`,
+      fs.existsSync(abs) && (await sha256File(abs)) === riskyBytes.get(rel),
+      abs
+    )
+  }
+
   // A mod whose payload has gone must block the switch rather than vanish.
   const orphan = await createProfile({ name: 'Broken payload', copyFrom: risky.id })
   const orphanInstall = listInstalled(orphan.id).find((m) => m.title.startsWith('Anima'))!
@@ -570,7 +1340,7 @@ export async function runE2E(): Promise<number> {
     packPlanA.warnings.some((w) => w.code === 'game-executable'),
     packPlanA.warnings.map((w) => w.code)
   )
-  const packA = await applyPlan(packPlanA.planId, risky.id)
+  const packA = await applyPlan(packPlanA.planId, risky.id, { acknowledgedUnparsedReadme: false })
   check(
     'pack: the game executable is untouched by the install',
     (await sha256File(path.join(game, 'gta_sa.exe'))) === exeBefore
@@ -592,7 +1362,7 @@ export async function runE2E(): Promise<number> {
     author: 'Someone',
     sourceUrl: null
   })
-  const other = await applyPlan(otherPlan.planId, risky.id)
+  const other = await applyPlan(otherPlan.planId, risky.id, { acknowledgedUnparsedReadme: false })
   check('pack: a second mod shipping the same loader is installed alongside', other.installId !== packA.installId)
 
   const sharedFile = path.join(game, 'vorbisFile.dll')
@@ -635,7 +1405,7 @@ export async function runE2E(): Promise<number> {
     author: 'Junior_Djjr',
     sourceUrl: null
   })
-  const story = await applyPlan(storyPlan.planId, risky.id)
+  const story = await applyPlan(storyPlan.planId, risky.id, { acknowledgedUnparsedReadme: false })
   const countNamed = (needle: string): number =>
     listInstalled(risky.id).filter((m) => m.title.toLowerCase().includes(needle.toLowerCase())).length
 
@@ -664,11 +1434,854 @@ export async function runE2E(): Promise<number> {
     author: 'Junior_Djjr',
     sourceUrl: null
   })
-  const again = await applyPlan(againPlan.planId, risky.id)
+  const again = await applyPlan(againPlan.planId, risky.id, { acknowledgedUnparsedReadme: false })
   check('one entry: installing it again still leaves one entry', countNamed('Story Mode') === 1, listInstalled(risky.id).map((m) => m.title))
   check('one entry: and the file survived the replacement', fs.existsSync(path.join(game, 'scripts', 'TrilogyChaosMod.SA.asi')))
   void story
   void again
+
+  // --- item 08: duplicate .asi through a junction, found by hash -------------
+  // The field report: III.VC.SA.LimitAdjuster.asi lived in BOTH scripts\ and a
+  // junctioned modloader\Open Limit Adjuster\, byte-identical. Two instances
+  // patched the same limits and fought - the ped-model limit never took, and
+  // the game crashed. A plain recursive scan reported "no duplicates" the
+  // whole time because it never followed the junction; fsx.walk does, but
+  // nothing pointed it at the game tree until now.
+  const oaSource = path.join(tmp, 'Open Limit Adjuster payload')
+  await fsp.mkdir(oaSource, { recursive: true })
+  const adjusterBytes = fakePe(4096, 0x60000000, 0x2102)
+  await fsp.writeFile(path.join(oaSource, 'III.VC.SA.LimitAdjuster.asi'), adjusterBytes)
+  await createJunction(path.join(game, 'modloader', 'Open Limit Adjuster'), oaSource)
+  await fsp.writeFile(path.join(game, 'scripts', 'III.VC.SA.LimitAdjuster.asi'), adjusterBytes)
+
+  const dupReport = await runHealthCheck(risky.id)
+  const dupCheck = dupReport.checks.find((c) => c.id === 'duplicate-asi')
+  check('duplicate .asi: the copy reached only through a junction is not skipped', dupCheck?.status === 'fail', dupCheck)
+  check(
+    'duplicate .asi: both paths are named - the scripts\\ copy and the junctioned modloader\\ one',
+    !!dupCheck?.items?.some(
+      (i) =>
+        i.includes(path.join('scripts', 'III.VC.SA.LimitAdjuster.asi')) &&
+        i.includes(path.join('modloader', 'Open Limit Adjuster', 'III.VC.SA.LimitAdjuster.asi'))
+    ),
+    dupCheck?.items
+  )
+
+  // --- item 08: a second, DIFFERENT limit adjuster stacked on the first ------
+  // The field install also had SimpleLimitAdjuster_Enex active alongside Open
+  // Limit Adjuster; the CrashList warns explicitly that stacking limit
+  // adjusters crashes the game. limitAdjusterNames() is a single boolean regex
+  // used everywhere via .some() - this exercises the distinct-count path.
+  await fsp.writeFile(path.join(game, 'scripts', 'SimpleLimitAdjuster_Enex.asi'), fakePe(2048, 0x60000000, 0x2102))
+  const stackedReport = await runHealthCheck(risky.id)
+  const stackedCheck = stackedReport.checks.find((c) => c.id === 'stacked-adjuster')
+  check('stacked adjusters: two different products in one profile are flagged', stackedCheck?.status === 'fail', stackedCheck)
+  check(
+    'stacked adjusters: both products are named',
+    !!stackedCheck?.items?.some((i) => i.includes('Open Limit Adjuster')) &&
+      !!stackedCheck?.items?.some((i) => i.includes('SimpleLimitAdjuster')),
+    stackedCheck?.items
+  )
+
+  // Cleaned up so nothing after this point inherits a game folder with two
+  // limit adjusters fighting in it.
+  await removeLinkOrDir(path.join(game, 'modloader', 'Open Limit Adjuster'))
+  await fsp.rm(path.join(game, 'scripts', 'III.VC.SA.LimitAdjuster.asi'), { force: true })
+  await fsp.rm(path.join(game, 'scripts', 'SimpleLimitAdjuster_Enex.asi'), { force: true })
+
+  // --- item 08 review: two junctions onto ONE store folder --------------
+  // storeKey() is slug+version+variant, so two installs of the same mod+version
+  // share a single store folder and materialise as two junctions onto it. The
+  // walk's cycle guard used to be a global log of every realpath visited, which
+  // entered the first junction and returned immediately on the second - the
+  // file was live at two game-relative paths and reported at neither.
+  const twinSource = path.join(tmp, 'twin store payload')
+  await fsp.mkdir(twinSource, { recursive: true })
+  await fsp.writeFile(path.join(twinSource, 'TwinPlugin.asi'), fakePe(3072, 0x60000000, 0x2102))
+  await createJunction(path.join(game, 'modloader', 'Alpha Mod'), twinSource)
+  await createJunction(path.join(game, 'modloader', 'Beta Mod'), twinSource)
+  const twinReport = await runHealthCheck(risky.id)
+  const twinCheck = twinReport.checks.find((c) => c.id === 'duplicate-asi')
+  check('two junctions, one target: the second junction is walked, not collapsed into the first', twinCheck?.status === 'fail', twinCheck)
+  check(
+    'two junctions, one target: both game-relative paths are named',
+    !!twinCheck?.items?.some(
+      (i) =>
+        i.includes(path.join('modloader', 'Alpha Mod', 'TwinPlugin.asi')) &&
+        i.includes(path.join('modloader', 'Beta Mod', 'TwinPlugin.asi'))
+    ),
+    twinCheck?.items
+  )
+  await removeLinkOrDir(path.join(game, 'modloader', 'Alpha Mod'))
+  await removeLinkOrDir(path.join(game, 'modloader', 'Beta Mod'))
+
+  // --- copilot review: content that is on disk but not loaded ---------------
+  // Two features reviewed apart meet in this walk. Disabling a mod is Mod
+  // Loader's ". " folder rename - nothing is deleted, which is the point - and
+  // every unchosen variant option is kept in a hidden .variants\ snapshot.
+  // Both sit under modloader\, both are walked, and neither is loaded. Counting
+  // them let a duplicate-.asi or stacked-adjuster FAIL - a launch blocker on
+  // this branch - be raised over the copy the user had switched off.
+  const inertBytes = fakePe(2816, 0x60000000, 0x2102)
+  const liveMod = path.join(game, 'modloader', 'Live Mod')
+  const offMod = path.join(game, 'modloader', '. Switched Off Mod')
+  await fsp.mkdir(path.join(liveMod, '.variants', 'option-b'), { recursive: true })
+  await fsp.mkdir(offMod, { recursive: true })
+  await fsp.writeFile(path.join(liveMod, 'InertTwin.asi'), inertBytes)
+  await fsp.writeFile(path.join(liveMod, '.variants', 'option-b', 'InertTwin.asi'), inertBytes)
+  await fsp.writeFile(path.join(offMod, 'InertTwin.asi'), inertBytes)
+  await fsp.writeFile(path.join(offMod, 'SimpleLimitAdjuster_Enex.asi'), inertBytes)
+  await fsp.writeFile(path.join(liveMod, 'III.VC.SA.LimitAdjuster.asi'), inertBytes)
+  const inertDup = await duplicateAssetCheck(installed)
+  check(
+    'not loaded: a disabled mod and an unchosen variant snapshot are not duplicates of the live copy',
+    inertDup.status === 'pass' && !inertDup.items?.some((i) => i.includes('InertTwin.asi')),
+    inertDup
+  )
+  const inertStacked = await stackedAdjusterCheck(installed)
+  check(
+    'not loaded: an adjuster inside a disabled mod is not stacked on the live one',
+    inertStacked.status === 'pass',
+    inertStacked
+  )
+  // The same fixture with the mod switched back ON: proof the paths above were
+  // excluded for being unloadable and not because the scan missed them.
+  const onMod = path.join(game, 'modloader', 'Switched Off Mod')
+  await fsp.rename(offMod, onMod)
+  const enabledDup = await duplicateAssetCheck(installed)
+  const enabledStacked = await stackedAdjusterCheck(installed)
+  check(
+    'not loaded: enabling that same mod reports the duplicate and the stack at once',
+    enabledDup.status === 'fail' &&
+      !!enabledDup.items?.some((i) => i.includes('InertTwin.asi')) &&
+      enabledStacked.status === 'fail',
+    { dup: enabledDup.items, stacked: enabledStacked.summary }
+  )
+  check(
+    'not loaded: and the variant snapshot stays out of it even then',
+    !enabledDup.items?.some((i) => i.includes('.variants')),
+    enabledDup.items
+  )
+  await fsp.rm(liveMod, { recursive: true, force: true })
+  await fsp.rm(onMod, { recursive: true, force: true })
+
+  // --- item 08 review: no ASI directory detected, plugins loose in the root --
+  // The inverse of the field install. modloader.asi absent or undetected and
+  // the .asi files sitting in the game root: scanning only scripts\, cleo\ and
+  // modloader\ looked everywhere except where the plugins actually were and
+  // reported a clean bill of health. `asiDirectory ?? path`, as everywhere else.
+  const looseName = 'LooseRootPlugin.asi'
+  const looseBytes = fakePe(2560, 0x60000000, 0x2102)
+  await fsp.writeFile(path.join(game, looseName), looseBytes)
+  await fsp.writeFile(path.join(game, 'scripts', looseName), looseBytes)
+  const detectedCheck = await duplicateAssetCheck(installed)
+  check(
+    'loose root: with scripts\\ detected as the ASI directory the root copy is out of scope - it is the fallback that has to find it',
+    !detectedCheck.items?.some((i) => i.includes(looseName)),
+    detectedCheck.items
+  )
+  const looseGame = { ...installed, asiDirectory: null }
+  const looseRels = (await scanGameTreeAssets(looseGame)).map((f) => f.rel)
+  check(
+    'loose root: with no ASI directory detected the game root is scanned',
+    looseRels.includes(looseName) && looseRels.includes(path.join('scripts', looseName)),
+    looseRels.filter((r) => r.includes('LooseRoot'))
+  )
+  const looseCheck = await duplicateAssetCheck(looseGame)
+  check(
+    'loose root: and the duplicate is reported instead of a clean bill of health',
+    looseCheck.status === 'fail' && !!looseCheck.items?.some((i) => i.includes(path.join('scripts', looseName))),
+    looseCheck
+  )
+  // --- item 08 review: the fallback walk is capped, and a partial scan says so
+  // Making the game root a scan root means recursing a multi-gigabyte install
+  // inside a check the user is waiting on, so the walk has a per-run budget.
+  // What must never happen is a capped run dressing itself up as a clean folder.
+  const cappedScan = await scanGameTree(looseGame, { maxFiles: 2 })
+  check(
+    'cap: the walk stops at the budget instead of scanning the whole install',
+    cappedScan.capped && cappedScan.assets.length <= 2,
+    { capped: cappedScan.capped, found: cappedScan.assets.length }
+  )
+  const cappedCheck = await duplicateAssetCheck(looseGame, { maxFiles: 2 })
+  check(
+    'cap: the partial scan is reported as partial, not as a clean bill of health',
+    (cappedCheck.detail ?? '').includes(t('checks.scanCapped')),
+    cappedCheck
+  )
+  const cappedStacked = await stackedAdjusterCheck(looseGame, { maxFiles: 2 })
+  check(
+    'cap: the stacked-adjuster check says the same about its own partial scan',
+    (cappedStacked.detail ?? '').includes(t('checks.scanCapped')),
+    cappedStacked
+  )
+  // ...and it has to be the STATUS that says so, not only the prose. The note
+  // was threaded into `detail` while the status stayed `pass`, so
+  // `HealthReport.ok` - which reads statuses and nothing else - counted an
+  // unfinished walk as a clean one and the panel put a green badge on it.
+  check(
+    'cap: a walk that stopped early is unknown, not pass - the one thing HealthReport.ok can read',
+    cappedCheck.status === 'unknown' && cappedStacked.status === 'unknown',
+    { dup: cappedCheck.status, stacked: cappedStacked.status }
+  )
+  check(
+    'cap: unknown still blocks nothing - only a fail is a launch blocker',
+    cappedCheck.status !== 'fail' && cappedStacked.status !== 'fail',
+    null
+  )
+  check(
+    'cap: an uncapped scan of the same folder does not claim to be partial',
+    !(looseCheck.detail ?? '').includes(t('checks.scanCapped')),
+    looseCheck.detail
+  )
+  const uncappedStacked = await stackedAdjusterCheck(looseGame)
+  check(
+    'cap: and a finished walk with nothing in it is still a plain pass',
+    uncappedStacked.status === 'pass',
+    uncappedStacked
+  )
+
+  // --- item 17: a readme nobody could parse is never installed silently -----
+  // The ask-first rule has to hold where the install happens, not only in the
+  // plan dialog: every other caller - this suite included - would otherwise
+  // install an archive whose instructions the app failed to read. The readme
+  // below is cp1252 prose with no instruction line in it.
+  const opaque = path.join(tmp, 'opaque-readme-mod')
+  await fsp.mkdir(opaque, { recursive: true })
+  await fsp.writeFile(path.join(opaque, 'OpaqueMod.asi'), fakePe(4096, 0x60000000, 0x2102))
+  await fsp.writeFile(
+    path.join(opaque, 'Leiame (ou morra).txt'),
+    Buffer.from('Obrigado por baixar meu mod!\r\nQualquer dúvida, comente no post.\r\n', 'latin1')
+  )
+  const opaquePlan = await createPlan({
+    archivePath: opaque,
+    profileId: risky.id,
+    modId: null,
+    modVersionId: null,
+    title: 'Opaque Mod',
+    author: 'Desconhecido',
+    sourceUrl: null
+  })
+  check(
+    'ask first: the plan says the readme could not be parsed',
+    opaquePlan.warnings.some((w) => w.code === 'readme-unparsed'),
+    opaquePlan.warnings.map((w) => w.code)
+  )
+  let readmeRefusal: string | null = null
+  try {
+    await applyPlan(opaquePlan.planId, risky.id, { acknowledgedUnparsedReadme: false })
+  } catch (e) {
+    readmeRefusal = (e as Error).message
+  }
+  check('ask first: applying it without an acknowledgement is refused', !!readmeRefusal, readmeRefusal)
+  check(
+    'ask first: and the refusal wrote nothing',
+    !fs.existsSync(path.join(game, 'scripts', 'OpaqueMod.asi')) && !fs.existsSync(path.join(game, 'OpaqueMod.asi')),
+    readmeRefusal
+  )
+  const ackedInstall = await applyPlan(opaquePlan.planId, risky.id, { acknowledgedUnparsedReadme: true })
+  check('ask first: the same plan installs once the user acknowledges it', ackedInstall.written > 0, ackedInstall)
+
+  await fsp.rm(path.join(game, looseName), { force: true })
+  await fsp.rm(path.join(game, 'scripts', looseName), { force: true })
+
+  // --- item 14: a blocking finding actually refuses the launch --------------
+  // The field report's stream.ini asked for 13500 MB of streaming memory on a
+  // 32-bit process. The panel called it blocking and the Play button beside it
+  // started the game anyway. planLaunch IS that wiring - the IPC handler does
+  // nothing but carry out the plan - so this is the fix under test, against a
+  // real game folder and a real database.
+  //
+  // Imported here rather than at the top of the file: this module's import
+  // block is edited by several tasks at once.
+  const { planLaunch } = await import('./game/launch')
+  const { forgetHealthReport, storedHealthReport } = await import('./diagnostics/healthCache')
+
+  const streamIni = path.join(game, 'stream.ini')
+  await fsp.writeFile(streamIni, '[Streaming]\r\nStreaming Memory=13500\r\n', 'latin1')
+  forgetHealthReport()
+
+  const blockedPlan = await planLaunch()
+  const streamBlocker = blockedPlan.verdict.blockers.find((b) => b.id === 'stream-ini')
+  check(
+    'launch: stream.ini at 13500 MB with no limit adjuster refuses the launch',
+    blockedPlan.refusal !== null && !!streamBlocker,
+    blockedPlan.verdict.blockers
+  )
+  check(
+    'launch: the refusal names the finding instead of counting it',
+    (blockedPlan.refusal?.message ?? '').includes('13500'),
+    blockedPlan.refusal?.message
+  )
+
+  // Pressing Play twice must not run sixteen checks twice.
+  const reusedFrom = storedHealthReport().report?.generatedAt
+  await planLaunch()
+  check(
+    'launch: a second Play reuses the stored report instead of re-running every check',
+    !!reusedFrom && storedHealthReport().report?.generatedAt === reusedFrom,
+    { reusedFrom, now: storedHealthReport().report?.generatedAt }
+  )
+
+  // ...and the reuse must never outlive the thing it described. No forgetting
+  // here on purpose: rewriting stream.ini has to invalidate it by itself.
+  await fsp.writeFile(streamIni, '[Streaming]\r\nStreaming Memory=2048\r\n', 'latin1')
+  const fixedPlan = await planLaunch()
+  check(
+    'launch: rewriting stream.ini invalidates the stored report - the refusal lifts at once',
+    fixedPlan.refusal === null && fixedPlan.verdict.allowed,
+    fixedPlan.verdict.blockers
+  )
+
+  // "Launch anyway" is the user answering a refusal they have read.
+  await fsp.writeFile(streamIni, '[Streaming]\r\nStreaming Memory=13500\r\n', 'latin1')
+  const stillBlocked = await planLaunch()
+  const forcedPlan = await planLaunch(true)
+  check(
+    'launch: the override clears the refusal that still stands without it',
+    stillBlocked.refusal !== null && forcedPlan.refusal === null && forcedPlan.verdict.allowed,
+    { blocked: stillBlocked.verdict.blockers, forced: forcedPlan.verdict.blockers }
+  )
+
+  // No active profile is a reachable state, and this stream.ini is just as
+  // fatal without one. It used to skip the gate entirely and launch.
+  const activeBefore = (getDb().prepare('SELECT id FROM profile WHERE is_active = 1').get() as { id: number } | undefined)?.id
+  getDb().prepare('UPDATE profile SET is_active = 0').run()
+  forgetHealthReport()
+  const noProfilePlan = await planLaunch()
+  check(
+    'launch: with no active profile the game-level checks still run, and stream.ini still refuses',
+    noProfilePlan.profileId === null && noProfilePlan.verdict.blockers.some((b) => b.id === 'stream-ini'),
+    { profileId: noProfilePlan.profileId, blockers: noProfilePlan.verdict.blockers }
+  )
+  const noProfileReport = storedHealthReport().report
+  check(
+    'launch: and the profile-scoped checks stand down instead of lying about an empty profile',
+    noProfileReport?.checks.find((c) => c.id === 'textures')?.status === 'skip' &&
+      noProfileReport?.checks.find((c) => c.id === 'stream-ini')?.status === 'fail',
+    noProfileReport?.checks.map((c) => `${c.id}:${c.status}`)
+  )
+  const noProfileScreenReport = await (await import('./diagnostics/healthCache')).freshHealthReport(null, game)
+  check(
+    'launch: and a report can still be produced for the screen the refusal routes to, with no profile at all',
+    noProfileScreenReport.ok === false && noProfileScreenReport.checks.some((c) => c.id === 'stream-ini' && c.status === 'fail'),
+    noProfileScreenReport.checks.map((c) => `${c.id}:${c.status}`)
+  )
+  if (activeBefore) getDb().prepare('UPDATE profile SET is_active = 1 WHERE id = ?').run(activeBefore)
+  await fsp.rm(streamIni, { force: true })
+  forgetHealthReport()
+
+  // --- copilot review: every reader of "the executable" reads the same one ---
+  // Deep Analysis reached for `exeNames[0]` instead of the helper the launch
+  // and the health check share. A Vice City install holding gta_vc.exe - the
+  // SECOND configured name - launches and passes its checks, and this then went
+  // looking for gta-vc.exe, failed to read it and reported that instead of
+  // analysing the executable sitting right there. One helper, asked by all
+  // three, against a real folder holding only the second name.
+  {
+    const { resolveGameExe } = await import('./game/launch')
+    const viceDir = path.join(tmp, 'Vice City second name')
+    await fsp.mkdir(viceDir, { recursive: true })
+    await fsp.writeFile(path.join(viceDir, 'gta_vc.exe'), fakePe(1024, 0x40000000, 0x010e))
+    const viceInstall = { ...activeGame()!, kind: 'vc' as const, path: viceDir, gameName: 'Vice City' }
+    check(
+      'deep analysis: the executable on disk is the one resolved, not the first name configured',
+      resolveGameExe(viceInstall) === path.join(viceDir, 'gta_vc.exe'),
+      resolveGameExe(viceInstall)
+    )
+    await fsp.rm(path.join(viceDir, 'gta_vc.exe'), { force: true })
+    let refused: string | null = null
+    try {
+      resolveGameExe(viceInstall)
+    } catch (e) {
+      refused = (e as Error).message
+    }
+    check(
+      'deep analysis: and a folder with no executable at all is refused with a sentence, not an ENOENT',
+      refused !== null && refused.includes(viceDir),
+      refused
+    )
+  }
+
+  // --- final review I5: a legitimate install is not bricked by the new gate ---
+  // Making every `fail` a launch blocker turned two pre-existing cosmetic fails
+  // into hard refusals. This is the second of them: a vanilla GTA SA with no
+  // Mod Loader in it runs perfectly well, and pressing Play on the install
+  // someone has just added refused it. (The first - the `exe` check reading
+  // exeNames[0] while the launch searched the whole list - is a Vice City
+  // install this synthetic San Andreas folder cannot be, and is held by
+  // resolveExeName's unit tests instead.)
+  const vanilla = path.join(tmp, 'Vanilla San Andreas')
+  await fsp.mkdir(vanilla, { recursive: true })
+  await fsp.writeFile(path.join(vanilla, 'gta_sa.exe'), fakePe(V1_US_SIZE, V1_US_TIMESTAMP, 0x010e))
+  const vanillaGame = await addGame(vanilla, 'Vanilla')
+  const moddedGameId = activeGame()!.id
+  setActiveGame(vanillaGame.id)
+  forgetHealthReport()
+  const vanillaPlan = await planLaunch()
+  const vanillaReport = storedHealthReport().report
+  check(
+    'launch: a vanilla install with no Mod Loader is not refused a launch',
+    vanillaPlan.refusal === null && vanillaPlan.verdict.allowed,
+    vanillaPlan.verdict.blockers
+  )
+  check(
+    'launch: and the missing Mod Loader is still reported, as a warning',
+    vanillaReport?.checks.find((c) => c.id === 'modloader')?.status === 'warn',
+    vanillaReport?.checks.map((c) => `${c.id}:${c.status}`)
+  )
+  setActiveGame(moddedGameId)
+  forgetHealthReport()
+
+  // --- final review C3: a refusal the Health screen cannot show is a refusal
+  // the user cannot answer ----------------------------------------------------
+  // The gate refuses on `blocking` OR `missing` (dependencyLaunchBlockers), but
+  // the health report's own `dependencies` check only failed on `blocking`. So
+  // the spec's motivating case - Proper Shaders with neither SilentPatch nor
+  // Open Limit Adjuster, both merely `missing` - produced a report with no fail
+  // in it: the badge read "Ready to launch", "Launch anyway" is drawn only when
+  // the report is NOT ok, and Play refused every single time with no way
+  // through. Both now answer the same predicate.
+  const depProfileId = (getDb().prepare('SELECT id FROM profile WHERE is_active = 1').get() as { id: number } | undefined)?.id
+  const depSubject = depProfileId ? listInstalled(depProfileId).find((m) => m.enabled) : undefined
+  if (depProfileId && depSubject) {
+    const depModId = (
+      getDb()
+        .prepare('SELECT mv.mod_id id FROM install i JOIN mod_version mv ON mv.id = i.mod_version_id WHERE i.id = ?')
+        .get(depSubject.installId) as { id: number }
+    ).id
+    getDb()
+      .prepare(
+        `INSERT INTO dependency (mod_id, mod_slug, requires_mod_id, requires_slug, kind, version_range, alt_group, note)
+         VALUES (?, NULL, NULL, 'e2e-absent-dependency', 'requires', NULL, NULL, NULL)`
+      )
+      .run(depModId)
+    forgetHealthReport()
+    const depPlan = await planLaunch()
+    const depReport = storedHealthReport().report
+    check(
+      'launch: an unsatisfied hard dependency refuses the launch',
+      depPlan.refusal !== null && depPlan.verdict.blockers.some((b) => b.id.startsWith('dependency:')),
+      depPlan.verdict.blockers
+    )
+    check(
+      'launch: and the report the user is sent to reads as blocked too, so the override is on screen',
+      depReport?.ok === false && depReport?.checks.find((c) => c.id === 'dependencies')?.status === 'fail',
+      depReport?.checks.map((c) => `${c.id}:${c.status}`)
+    )
+    getDb().prepare("DELETE FROM dependency WHERE mod_id = ? AND requires_slug = 'e2e-absent-dependency'").run(depModId)
+    forgetHealthReport()
+  } else {
+    check('launch: an unsatisfied hard dependency refuses the launch', false, 'no enabled install to hang a dependency on')
+  }
+
+  // --- copilot review: a CLEO range declared by a mod outside the catalogue ---
+  // Task 7's migration made `dependency.mod_id` nullable and added `mod_slug`
+  // on purpose, so an edge for a mod the bundled catalogue has never heard of
+  // still binds the moment that mod is installed - and `resolveDependencies`
+  // reads both. The pre-launch CLEO check joined on `mod_id` ALONE, so a
+  // locally installed plugin's declared floor was dropped and the launch gate
+  // waved through the fatal mismatch it exists to catch.
+  if (depProfileId && depSubject) {
+    const gameRow = activeGame()!
+    const subjectSlug = (
+      getDb()
+        .prepare(
+          `SELECT m.slug s FROM install i
+             JOIN mod_version mv ON mv.id = i.mod_version_id
+             JOIN mod m ON m.id = mv.mod_id
+            WHERE i.id = ?`
+        )
+        .get(depSubject.installId) as { s: string } | undefined
+    )?.s
+    if (subjectSlug) {
+      // A name deliberately absent from KNOWN_CLEO_REQUIREMENTS: the only thing
+      // that can produce a verdict for it is the slug-bound row below.
+      const localPlugin = 'cleo/E2ELocalPlugin.cleo'
+      getDb()
+        .prepare('INSERT INTO install_file (install_id, relative_path, sha256, size) VALUES (?, ?, NULL, 0)')
+        .run(depSubject.installId, localPlugin)
+      getDb()
+        .prepare(
+          `INSERT INTO dependency (mod_id, mod_slug, requires_mod_id, requires_slug, kind, version_range, alt_group, note)
+           VALUES (NULL, ?, NULL, 'cleo', 'requires', '>=4.4', NULL, NULL)`
+        )
+        .run(subjectSlug)
+      const cleoBefore = gameRow.cleoVersion
+      getDb().prepare('UPDATE game_install SET cleo_version = ? WHERE id = ?').run('4.3', gameRow.id)
+      forgetHealthReport()
+      const slugReport = await runHealthCheck(depProfileId)
+      const slugCleo = slugReport.checks.find((c) => c.id === 'cleo')
+      check(
+        'cleo gate: a range declared by slug, for a mod outside the catalogue, still reaches the check',
+        slugCleo?.status === 'fail' && !!slugCleo.items?.some((i) => i.includes('E2ELocalPlugin')),
+        { status: slugCleo?.status, items: slugCleo?.items }
+      )
+      check(
+        'cleo gate: and a report carrying it is not ok, so the launch gate can refuse',
+        slugReport.ok === false,
+        slugReport.checks.map((c) => `${c.id}:${c.status}`)
+      )
+      getDb().prepare("DELETE FROM dependency WHERE mod_slug = ? AND requires_slug = 'cleo'").run(subjectSlug)
+      getDb().prepare('DELETE FROM install_file WHERE install_id = ? AND relative_path = ?').run(depSubject.installId, localPlugin)
+      getDb().prepare('UPDATE game_install SET cleo_version = ? WHERE id = ?').run(cleoBefore, gameRow.id)
+      forgetHealthReport()
+    } else {
+      check('cleo gate: a range declared by slug, for a mod outside the catalogue, still reaches the check', false, 'no slug')
+    }
+  }
+
+  // --- a variant swap must never be restorable as a profile switch ------------
+  // Every other `restorePreviousState()` in this suite runs with a real
+  // profile-switch journal as the newest row, so the right journal gets picked
+  // by accident of ordering. The field ordering is the opposite and far more
+  // common: switch profile, then adjust a variant. A variant swap writes into
+  // the same `switch_journal` table, reaches the same terminal state, and
+  // leaves `restored_at` NULL - so before the row carried a `kind` it WAS the
+  // newest restorable switch, and "Restore previous state" dematerialised the
+  // entire active profile and put the swap's two-file manifest in its place,
+  // reporting success. This block deliberately builds that ordering.
+  const guardA = await createProfile({ name: 'Journal Guard A' })
+  await activateProfile(guardA.id)
+
+  const guardPlainSrc = path.join(tmp, 'guard-plain')
+  await fsp.mkdir(path.join(guardPlainSrc, 'Guard Plain', 'models'), { recursive: true })
+  await fsp.writeFile(path.join(guardPlainSrc, 'Guard Plain', 'models', 'guard.dff'), 'guard plain bytes')
+  const guardPlainPlan = await createPlan({
+    archivePath: guardPlainSrc,
+    profileId: guardA.id,
+    modId: null,
+    modVersionId: null,
+    title: 'Guard Plain',
+    author: 'Unknown',
+    sourceUrl: null
+  })
+  await applyPlan(guardPlainPlan.planId, guardA.id, { acknowledgedUnparsedReadme: false })
+  await fsp.rm(guardPlainSrc, { recursive: true, force: true })
+
+  const guardSrc = path.join(tmp, 'guard-variants')
+  await fsp.mkdir(path.join(guardSrc, 'Guard 2K', 'data'), { recursive: true })
+  await fsp.mkdir(path.join(guardSrc, 'Guard 4K', 'data'), { recursive: true })
+  await fsp.writeFile(path.join(guardSrc, 'Guard 2K', 'data', 'guard.dat'), 'guard 2k')
+  await fsp.writeFile(path.join(guardSrc, 'Guard 4K', 'data', 'guard.dat'), 'guard 4k')
+  const guardPlan = await createPlan({
+    archivePath: guardSrc,
+    profileId: guardA.id,
+    modId: null,
+    modVersionId: null,
+    title: 'Guard Pack',
+    author: 'Unknown',
+    sourceUrl: null
+  })
+  const guardGroupPlan = guardPlan.variants[0]
+  const guard2k = guardGroupPlan.options.find((o) => o.label.includes('2K'))!
+  const guard4k = guardGroupPlan.options.find((o) => o.label.includes('4K'))!
+  const guardApplied = await applyPlan(
+    (await choose(guardPlan.planId, guardGroupPlan.id, guard2k.id)).planId,
+    guardA.id,
+    { acknowledgedUnparsedReadme: false }
+  )
+  await fsp.rm(guardSrc, { recursive: true, force: true })
+
+  // The real profile switch - the one "Restore previous state" must roll back.
+  const beforeGuardSwitch = await snapshotDir(game)
+  const guardB = await createProfile({ name: 'Journal Guard B' })
+  await activateProfile(guardB.id)
+  const guardSwitchJournal = listJournals(10, 'profile-switch')[0]
+
+  // ...and now a variant swap, with NO profile switch after it.
+  const guardGroupId = listInstalled(guardA.id).find((m) => m.installId === guardApplied.installId)!.variantGroups[0].id
+  await switchVariant(guardApplied.installId, guardGroupId, guard4k.id)
+  const guardNewest = listJournals(10)[0]
+  check(
+    'field audit 09: the variant swap is the newest journal row, and it is marked as a variant swap',
+    guardNewest.kind === 'variant-swap' && guardNewest.id > guardSwitchJournal.id,
+    { newest: guardNewest.id, kind: guardNewest.kind, switch: guardSwitchJournal.id }
+  )
+  check(
+    'field audit 09: the newest RESTORABLE switch is still the profile switch, not the variant swap',
+    lastRestorableSwitch()?.id === guardSwitchJournal.id,
+    { picked: lastRestorableSwitch()?.id, kind: lastRestorableSwitch()?.kind, expected: guardSwitchJournal.id }
+  )
+  check(
+    'field audit 09: switch history never offers a variant swap as a switch',
+    !listJournals(20, 'profile-switch').some((j) => j.id === guardNewest.id)
+  )
+  let guardRefused = false
+  try {
+    await restorePreviousState(guardNewest.id)
+  } catch {
+    guardRefused = true
+  }
+  check('field audit 09: restoring a variant-swap journal by id is refused outright', guardRefused)
+
+  const guardRestore = await restorePreviousState()
+  check(
+    'field audit 09: "Restore previous state" after a variant swap rolls the PROFILE SWITCH back',
+    (await listProfiles()).find((p) => p.isActive)?.id === guardA.id,
+    guardRestore
+  )
+  check(
+    'field audit 09: and it brings the whole profile back, not the variant swap handful of files',
+    sameTree(beforeGuardSwitch, await snapshotDir(game)),
+    diff(beforeGuardSwitch, await snapshotDir(game))
+  )
+
+  // --- copilot review: "the latest restorable switch" is not "this switch" ---
+  // The blocked-switch dialog reports ONE failed switch by name and offers to
+  // put it back. It is rendered from the app shell, so it survives navigation -
+  // and a profile can be switched again from the header while it is still open.
+  // Asking for the latest restorable switch instead of the one being reported
+  // therefore rolls back the WRONG transaction and calls it the failure the
+  // user was reading about. These two calls are shown diverging on purpose.
+  const dlgA = await createProfile({ name: 'Dialog Journal A' })
+  await activateProfile(dlgA.id)
+  const dlgJournalA = listJournals(10, 'profile-switch')[0]
+  const dlgB = await createProfile({ name: 'Dialog Journal B' })
+  await activateProfile(dlgB.id)
+  const dlgJournalB = listJournals(10, 'profile-switch')[0]
+  check(
+    'switch dialog: a newer switch displaces the older one as "the latest restorable switch"',
+    dlgJournalB.id !== dlgJournalA.id && lastRestorableSwitch()?.id === dlgJournalB.id,
+    { older: dlgJournalA.id, newer: dlgJournalB.id, latest: lastRestorableSwitch()?.id }
+  )
+  await restorePreviousState(dlgJournalA.id)
+  check(
+    'switch dialog: restoring BY ID rolls back the switch that was named, not the newest one',
+    (await listProfiles()).find((p) => p.isActive)?.id === dlgJournalA.fromProfileId &&
+      (await listProfiles()).find((p) => p.isActive)?.id !== dlgJournalA.id,
+    {
+      active: (await listProfiles()).find((p) => p.isActive)?.id,
+      namedJournalGoesBackTo: dlgJournalA.fromProfileId,
+      noArgWouldHaveGoneBackTo: dlgJournalB.fromProfileId
+    }
+  )
+
+  // --- final review C1: uninstalling an ADOPTED install must not delete the
+  // user's own files ----------------------------------------------------------
+  // Adoption records what is already in the game folder: store_key NULL, every
+  // install_file.sha256 NULL, nothing copied anywhere. So the game folder held
+  // the ONLY copy, quarantineEdited skipped every file for want of a hash to
+  // compare, and uninstall removed them with mayRemoveFile: () => true. That is
+  // the 14 .asi plugins and 27 CLEO scripts this audit began with, on a
+  // different button. Both shapes are covered: a mod folder and a loose plugin,
+  // which is the one priority cannot even switch off.
+  const adoptedUninstall = await createProfile({ name: 'Adopted Uninstall' })
+  await activateProfile(adoptedUninstall.id)
+  await fsp.mkdir(path.join(game, 'modloader', 'Hand Placed', 'data'), { recursive: true })
+  const handFile = path.join(game, 'modloader', 'Hand Placed', 'data', 'hand.dat')
+  const looseFile = path.join(game, 'scripts', 'HandPlaced.asi')
+  await fsp.writeFile(handFile, 'bytes that exist nowhere else on this machine')
+  await fsp.writeFile(looseFile, fakePe(4096, 0x60000000, 0x2102))
+  const handDatHash = await sha256File(handFile)
+  const looseHash = await sha256File(looseFile)
+
+  await adoptIntoProfile(adoptedUninstall.id)
+  const adoptedFolder = listInstalled(adoptedUninstall.id).find((m) => m.title === 'Hand Placed')!
+  const adoptedLoose = listInstalled(adoptedUninstall.id).find((m) => m.title === 'HandPlaced.asi')!
+  check(
+    'adopted uninstall: both shapes were adopted, with no store copy and no hash',
+    !!adoptedFolder &&
+      !!adoptedLoose &&
+      (getDb()
+        .prepare('SELECT COUNT(*) n FROM install WHERE id IN (?,?) AND store_key IS NULL')
+        .get(adoptedFolder?.installId ?? -1, adoptedLoose?.installId ?? -1) as { n: number }).n === 2,
+    listInstalled(adoptedUninstall.id).map((m) => m.title)
+  )
+
+  const folderRemoval = await uninstall(adoptedFolder.installId)
+  const looseRemoval = await uninstall(adoptedLoose.installId)
+  const handRescued = path.join(folderRemoval.quarantineDir, 'modloader', 'Hand Placed', 'data', 'hand.dat')
+  const looseRescued = path.join(looseRemoval.quarantineDir, 'scripts', 'HandPlaced.asi')
+  check(
+    'adopted uninstall: the adopted mod folder survives, byte for byte, in quarantine',
+    fs.existsSync(handRescued) && (await sha256File(handRescued)) === handDatHash,
+    { dir: folderRemoval.quarantineDir, quarantined: folderRemoval.quarantined }
+  )
+  check(
+    'adopted uninstall: so does the adopted loose plugin, the shape priority cannot switch off',
+    fs.existsSync(looseRescued) && (await sha256File(looseRescued)) === looseHash,
+    { dir: looseRemoval.quarantineDir, quarantined: looseRemoval.quarantined }
+  )
+  check(
+    'adopted uninstall: and the uninstall says what it put there',
+    folderRemoval.quarantined.includes('modloader/Hand Placed/data/hand.dat') &&
+      looseRemoval.quarantined.includes('scripts/HandPlaced.asi'),
+    { folder: folderRemoval.quarantined, loose: looseRemoval.quarantined }
+  )
+  check(
+    'adopted uninstall: the uninstall still did its job in the game folder',
+    !fs.existsSync(handFile) && !fs.existsSync(looseFile)
+  )
+
+  // --- re-review Important: repairing one profile's orphan must not rewrite
+  // another profile's rows -----------------------------------------------------
+  // reuniteOrphans keyed its UPDATE on relative_path alone. The same mod
+  // installed in two profiles carries the SAME relative_path in both, so
+  // repairing one silently rewrote the other's rows to a layout that profile's
+  // own store has no file at: the install then never materialises, reads as
+  // unresolved on the next switch, and there is no way back but a reinstall.
+  const orphanA = await createProfile({ name: 'Orphan Repair A' })
+  await activateProfile(orphanA.id)
+  const asiDir = activeGame()!.asiDirectory ?? game
+  await fsp.mkdir(path.join(game, 'modloader', 'GInputSA'), { recursive: true })
+  await fsp.mkdir(asiDir, { recursive: true })
+  const orphanPlugin = path.join(game, 'modloader', 'GInputSA', 'GInputSA.asi')
+  await fsp.writeFile(orphanPlugin, fakePe(4096, 0x60000000, 0x2102))
+  await fsp.writeFile(path.join(asiDir, 'GInputSA.ini'), '[Main]\r\nDeadzone=0\r\n')
+  await adoptIntoProfile(orphanA.id)
+  const orphanB = await createProfile({ name: 'Orphan Repair B', copyFrom: orphanA.id })
+  const pluginRows = (profileId: number): string[] =>
+    (
+      getDb()
+        .prepare(
+          `SELECT f.relative_path r FROM install_file f JOIN install i ON i.id = f.install_id
+            WHERE i.profile_id = ? AND lower(f.relative_path) LIKE '%ginputsa.asi'`
+        )
+        .all(profileId) as { r: string }[]
+    ).map((x) => x.r)
+  const providesRows = (profileId: number): string[] =>
+    (
+      getDb()
+        .prepare(
+          `SELECT p.relative_path r FROM provides p JOIN install i ON i.id = p.install_id
+            WHERE i.profile_id = ? AND p.relative_path LIKE '%ginputsa.asi'`
+        )
+        .all(profileId) as { r: string }[]
+    ).map((x) => x.r)
+  check(
+    'orphan repair: both profiles record the plugin at the one same path before anything is repaired',
+    pluginRows(orphanA.id).join(',') === 'modloader/GInputSA/GInputSA.asi' &&
+      pluginRows(orphanB.id).join(',') === 'modloader/GInputSA/GInputSA.asi' &&
+      providesRows(orphanB.id).join(',') === 'ginputsa.asi',
+    { a: pluginRows(orphanA.id), b: pluginRows(orphanB.id), provides: providesRows(orphanB.id) }
+  )
+
+  // With no profile in hand the findings come from every install in the
+  // database, and the single file on disk belongs to none of them in particular.
+  const noProfileRepair = await reuniteOrphans(null)
+  check(
+    'orphan repair: with no profile selected the move is refused rather than guessed at',
+    !noProfileRepair.moved.some((m) => m.includes('GInputSA.asi')) &&
+      noProfileRepair.refused.some((r) => r.includes('GInputSA.asi')) &&
+      fs.existsSync(orphanPlugin) &&
+      pluginRows(orphanA.id).join(',') === 'modloader/GInputSA/GInputSA.asi' &&
+      pluginRows(orphanB.id).join(',') === 'modloader/GInputSA/GInputSA.asi',
+    noProfileRepair
+  )
+
+  // The repair moves a plugin between two paths that both already exist: no
+  // install row moves, stream.ini is untouched, and the cached pre-launch
+  // report's fingerprint reads nothing else - while `duplicate-asi` and
+  // `stacked-adjuster`, both fail-level, read exactly the paths that changed.
+  const orphanCache = await import('./diagnostics/healthCache')
+  await orphanCache.freshHealthReport(orphanA.id, game)
+  const cachedBeforeRepair = orphanCache.storedHealthReport().report !== null
+
+  const repaired = await reuniteOrphans(orphanA.id)
+  check(
+    'orphan repair: the move drops the stored pre-launch report - Play must not answer from before it',
+    cachedBeforeRepair && orphanCache.storedHealthReport().report === null,
+    { before: cachedBeforeRepair, after: orphanCache.storedHealthReport().stamp }
+  )
+  const repairedRel = path.relative(game, path.join(asiDir, 'GInputSA.asi')).split(path.sep).join('/')
+  check(
+    'orphan repair: the plugin is moved back to the ASI directory for the profile that asked',
+    repaired.moved.some((m) => m.startsWith('modloader/GInputSA/GInputSA.asi')) &&
+      !fs.existsSync(orphanPlugin) &&
+      fs.existsSync(path.join(asiDir, 'GInputSA.asi')),
+    repaired
+  )
+  check(
+    'orphan repair: the repaired profile rows follow the file',
+    pluginRows(orphanA.id).join(',') === repairedRel,
+    pluginRows(orphanA.id)
+  )
+  check(
+    're-review Important: the OTHER profile install_file rows are untouched by the repair',
+    pluginRows(orphanB.id).join(',') === 'modloader/GInputSA/GInputSA.asi',
+    { b: pluginRows(orphanB.id), a: pluginRows(orphanA.id) }
+  )
+  check(
+    're-review Important: and so is its provides index - the conflict map still describes its own layout',
+    providesRows(orphanB.id).join(',') === 'ginputsa.asi',
+    { b: providesRows(orphanB.id), a: providesRows(orphanA.id) }
+  )
+
+  // --- archives MixMods locks with its own domain name ------------------------
+  // Against the real 7za, not a transcript of it: an archive is built here with
+  // the site password, handed to the extractor with no password at all, and has
+  // to come out anyway. The one that cannot be opened has to say so without
+  // calling anything corrupt, and a genuinely broken file has to stay broken.
+  {
+    const lockedDir = path.join(tmp, 'locked')
+    await fsp.mkdir(lockedDir, { recursive: true })
+    const payload = path.join(lockedDir, 'infernus.dff')
+    await fsp.writeFile(payload, 'a car nobody can read without the password')
+
+    const pack = (out: string, args: string[]): Promise<number> =>
+      new Promise((resolve) => {
+        const child = spawn(sevenZipPath(), ['a', '-t7z', out, payload, ...args], { windowsHide: true })
+        child.stdout.resume()
+        child.stderr.resume()
+        child.on('close', (code) => resolve(code ?? 1))
+      })
+
+    const filesLocked = path.join(lockedDir, 'files-locked.7z')
+    const headersLocked = path.join(lockedDir, 'headers-locked.7z')
+    const otherPassword = path.join(lockedDir, 'someone-elses.7z')
+    await pack(filesLocked, [`-p${MIXMODS_PASSWORD}`])
+    await pack(headersLocked, [`-p${MIXMODS_PASSWORD}`, '-mhe=on'])
+    await pack(otherPassword, ['-pnot-the-mixmods-one'])
+
+    const extractInto = async (archive: string, name: string): Promise<string | null> => {
+      try {
+        await extractArchive(archive, path.join(lockedDir, 'out', name))
+        return null
+      } catch (e) {
+        return e instanceof ArchiveError ? `${e.failure}: ${e.message}` : String(e)
+      }
+    }
+
+    const filesErr = await extractInto(filesLocked, 'files')
+    check(
+      'mixmods password: an archive locked with the site password extracts with no password asked for',
+      filesErr === null && fs.existsSync(path.join(lockedDir, 'out', 'files', 'infernus.dff')),
+      filesErr
+    )
+
+    const headersErr = await extractInto(headersLocked, 'headers')
+    check(
+      'mixmods password: an -mhe=on archive - the one that reads as a headers error - extracts too',
+      headersErr === null && fs.existsSync(path.join(lockedDir, 'out', 'headers', 'infernus.dff')),
+      headersErr
+    )
+
+    const otherErr = await extractInto(otherPassword, 'other')
+    check(
+      'mixmods password: a different password is refused as a locked archive, naming the password, never damage',
+      otherErr !== null && otherErr.includes(MIXMODS_PASSWORD) && !/headers error|is not archive/i.test(otherErr),
+      otherErr
+    )
+
+    const broken = path.join(lockedDir, 'broken.7z')
+    await fsp.writeFile(broken, Buffer.from('7z\xbc\xaf\x27\x1c not really an archive at all', 'binary'))
+    const brokenErr = await extractInto(broken, 'broken')
+    check(
+      'mixmods password: a genuinely broken archive still fails as broken, with no password claim over the top',
+      brokenErr !== null && brokenErr.startsWith('corrupt:') && !brokenErr.includes(MIXMODS_PASSWORD),
+      brokenErr
+    )
+
+    const rar = path.join(lockedDir, 'mod.rar')
+    await fsp.writeFile(rar, Buffer.from('Rar!\x1a\x07\x01\x00 whatever WinRAR put here', 'binary'))
+    const rarErr = await extractInto(rar, 'rar')
+    check(
+      'mixmods password: a .rar says which formats Modão can open rather than blaming the download',
+      rarErr !== null && rarErr.startsWith('rar-unsupported:') && rarErr.includes('.rar'),
+      rarErr
+    )
+  }
 
   getDb().prepare('DELETE FROM profile').run()
   await fsp.rm(tmp, { recursive: true, force: true }).catch(() => undefined)

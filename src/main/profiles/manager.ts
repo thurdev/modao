@@ -3,13 +3,14 @@ import fsp from 'node:fs/promises'
 import type { Profile, SnapshotEntry, SwitchVerification } from '@shared/types'
 import { getDb } from '../db'
 import { Paths } from '../util/paths'
-import { exists, isDirectory, isLink, moveSafe, slugify, walk } from '../util/fsx'
+import { exists, isDirectory, isLink, moveSafe, slugify, timestampSlug, walk } from '../util/fsx'
 import { activeGame, requireActiveGame } from '../game/detect'
 import { gameDefinition, type GameKind } from '@shared/games'
 import { clampPriority } from '../game/modloaderIni'
 import { providesKey } from '../conflicts'
 import { ownedKey, storeDir } from '../store/contentStore'
 import { dematerialiseProfile, iniProfileName, materialiseProfile, syncProfileIni } from './materialize'
+import { listModFolders } from '../store/folderSpelling'
 import {
   ingestUnstoredInstalls,
   lastRestorableSwitch,
@@ -233,6 +234,49 @@ export interface ActivateResult {
   /** The journal row this switch was recorded in, for "Restore previous state". */
   journalId: number | null
   verification: SwitchVerification | null
+  /**
+   * Game-relative paths of files that were copied to quarantine during this
+   * switch, either because the user had edited them or because an incoming mod
+   * needed their exact path. Quarantine is never cleared on its own.
+   */
+  quarantined: string[]
+}
+
+/**
+ * A switch that materialised but did not reconcile: the game folder does not
+ * hold what the profile says it holds.
+ *
+ * It carries the whole verification so the UI can name every mod that did not
+ * arrive, and the journal id so the user can be offered the rollback. A mod
+ * that vanished on a switch used to be a line in a log nobody opened, under a
+ * profile the app had already recorded as active.
+ */
+export class SwitchVerificationError extends Error {
+  readonly verification: SwitchVerification
+  readonly log: string[]
+  readonly journalId: number
+  readonly profileId: number
+  readonly profileName: string
+  readonly previousProfileName: string | null
+
+  constructor(args: {
+    verification: SwitchVerification
+    log: string[]
+    journalId: number
+    previousProfileName: string | null
+  }) {
+    super(
+      `${args.verification.profileName} was not activated: the game folder does not hold what it says it holds.\n` +
+        args.verification.blockingProblems.map((p) => `  - ${p}`).join('\n')
+    )
+    this.name = 'SwitchVerificationError'
+    this.verification = args.verification
+    this.log = args.log
+    this.journalId = args.journalId
+    this.profileId = args.verification.profileId
+    this.profileName = args.verification.profileName
+    this.previousProfileName = args.previousProfileName
+  }
 }
 
 /**
@@ -245,7 +289,10 @@ export interface ActivateResult {
  *   4. apply     - vacate, swap saves, materialise; only snapshotted files may
  *                  be removed, and unmanaged files are never touched
  *   5. verify    - the switch is not complete until the game folder holds what
- *                  the profile says it holds
+ *                  the profile says it holds. Only then is the profile recorded
+ *                  active; a failure here throws SwitchVerificationError and
+ *                  leaves the previous profile active, with the journal in
+ *                  place for "Restore previous state".
  *
  * Steps 1-3 change nothing in the game folder, so a failure before step 4 leaves
  * the install exactly as it was.
@@ -271,7 +318,7 @@ export async function activateProfile(
     )
   }
   if (current?.id === id) {
-    return { elapsedMs: 0, log: [`${target.name} is already active.`], journalId: null, verification: null }
+    return { elapsedMs: 0, log: [`${target.name} is already active.`], journalId: null, verification: null, quarantined: [] }
   }
 
   onProgress?.('plan', 0, 1)
@@ -286,6 +333,27 @@ export async function activateProfile(
 
   const journal = openJournal(current?.id ?? null, id)
   let snapshot: SnapshotEntry[] = []
+  const quarantined: string[] = []
+
+  /**
+   * Copies every path out and proves the copy by hash before the switch is
+   * allowed to touch any of them. Used for the outgoing profile's own files and
+   * for the user's own files that an incoming mod is about to displace - the
+   * second set used not to be snapshotted at all.
+   */
+  const snapshotAndVerify = async (relativePaths: string[]): Promise<void> => {
+    const unique = [...new Set(relativePaths)]
+    if (unique.length === 0) return
+    snapshot = await snapshotFiles(game.path, unique, journal.snapshotDir)
+    const verified = await verifySnapshot(snapshot)
+    if (!verified.ok) {
+      throw new Error(
+        'The backup taken before the switch did not verify, so nothing was changed:\n  ' + verified.problems.slice(0, 5).join('\n  ')
+      )
+    }
+    recordManifest(journal.id, snapshot)
+    log.push(`Backed up ${snapshot.length} file(s) to ${journal.snapshotDir}, every copy verified by hash.`)
+  }
 
   try {
     if (current) {
@@ -300,18 +368,20 @@ export async function activateProfile(
       for (const f of ingested.failed) log.push(`Note: ${f.label} - ${f.reason}`)
 
       onProgress?.('snapshot', 0, 1)
-      const toSnapshot = (await planSwitch(id)).outgoing
-        .filter((p) => p.action === 'snapshot-and-remove')
-        .map((p) => p.relativePath)
-      snapshot = await snapshotFiles(game.path, toSnapshot, journal.snapshotDir)
-      const verified = await verifySnapshot(snapshot)
-      if (!verified.ok) {
-        throw new Error(
-          'The backup taken before the switch did not verify, so nothing was changed:\n  ' + verified.problems.slice(0, 5).join('\n  ')
+      // Re-planned after the ingest: adopted installs now have a store key, so
+      // what is removable has changed since the plan the caller saw.
+      const replan = await planSwitch(id)
+      await snapshotAndVerify([
+        ...replan.outgoing.filter((p) => p.action === 'snapshot-and-remove').map((p) => p.relativePath),
+        ...replan.willBeOverwritten
+      ])
+      if (replan.willBeOverwritten.length) {
+        log.push(
+          `${replan.willBeOverwritten.length} file(s) you put in the game folder yourself sit where ${target.name} installs its own: ` +
+            `${replan.willBeOverwritten.slice(0, 5).join(', ')}${replan.willBeOverwritten.length > 5 ? ', ...' : ''}. ` +
+            'They were backed up and copied to quarantine before being replaced.'
         )
       }
-      recordManifest(journal.id, snapshot)
-      log.push(`Backed up ${snapshot.length} file(s) to ${journal.snapshotDir}, every copy verified by hash.`)
 
       onProgress?.('unlink', 0, 1)
       const snapshotted = new Set(snapshot.map((e) => ownedKey(e.relativePath)))
@@ -324,14 +394,21 @@ export async function activateProfile(
         )
       }
       if (out.quarantined.length) {
+        quarantined.push(...out.quarantined)
         log.push(
           `${out.quarantined.length} file(s) you edited after installing were copied to quarantine before the link went: ` +
             `${out.quarantined.slice(0, 5).join(', ')}${out.quarantined.length > 5 ? ', ...' : ''}`
         )
       }
-      if (plan.unmanaged.length) {
-        log.push(`${plan.unmanaged.length} unmanaged file(s) in the game folder were left untouched.`)
+      const leftAlone = plan.unmanaged.filter((rel) => !plan.willBeOverwritten.includes(rel))
+      if (leftAlone.length) {
+        log.push(`${leftAlone.length} unmanaged file(s) in the game folder were left untouched.`)
       }
+    } else if (plan.willBeOverwritten.length) {
+      // No profile is active, so there is no outgoing snapshot - but the user's
+      // own files at the incoming paths still need one.
+      onProgress?.('snapshot', 0, 1)
+      await snapshotAndVerify(plan.willBeOverwritten)
     }
 
     onProgress?.('saves', 0, 1)
@@ -344,26 +421,49 @@ export async function activateProfile(
     onProgress?.('link', 0, 1)
     const inResult = await materialiseProfile(id, (d, t) => onProgress?.('link', d, t))
     log.push(...inResult.log)
+    for (const s of inResult.skipped) log.push(`Not materialised - ${s}`)
+    if (inResult.quarantined.length) {
+      quarantined.push(...inResult.quarantined)
+      log.push(
+        `${inResult.quarantined.length} file(s) already in the game folder were copied to quarantine before ${target.name} took their path: ` +
+          `${inResult.quarantined.slice(0, 5).join(', ')}${inResult.quarantined.length > 5 ? ', ...' : ''}`
+      )
+    }
+
+    await syncProfileIni(id)
+    setJournalState(journal.id, 'applied')
+
+    // Reconciliation runs BEFORE the profile is recorded active. It used to run
+    // after, so a mod that never reached the game folder left the app claiming
+    // the broken profile was in place and the user found out in the game.
+    // Nothing below this line happens unless the folder holds what the profile
+    // says it holds.
+    onProgress?.('verify', 0, 1)
+    const verification = await verifySwitch(id)
+    recordVerification(journal.id, verification)
+    if (verification.blockingProblems.length) {
+      log.push(`The switch was refused after materialising: ${verification.blockingProblems.join(' ')}`)
+      throw new SwitchVerificationError({
+        verification,
+        log,
+        journalId: journal.id,
+        previousProfileName: current?.name ?? null
+      })
+    }
 
     db.transaction(() => {
       db.prepare('UPDATE profile SET is_active = 0').run()
       db.prepare('UPDATE profile SET is_active = 1 WHERE id = ?').run(id)
     })()
-    await syncProfileIni(id)
-    setJournalState(journal.id, 'applied')
-
-    onProgress?.('verify', 0, 1)
-    const verification = await verifySwitch(id)
-    recordVerification(journal.id, verification)
     setJournalState(journal.id, verification.ok ? 'verified' : 'failed', verification.ok ? null : verification.problems.join(' '))
     log.push(
       verification.ok
         ? `Verified: ${verification.modsMaterialised}/${verification.modsExpected} mod(s) in place, ` +
             `${verification.asiCount} .asi, ${verification.cleoPluginCount} CLEO plugin(s), ${verification.cleoScriptCount} CLEO script(s).`
-        : `Switch applied but did NOT verify: ${verification.problems.join(' ')}`
+        : `Switched. Notes that do not block the switch: ${verification.problems.join(' ')}`
     )
 
-    return { elapsedMs: Date.now() - t0, log, journalId: journal.id, verification }
+    return { elapsedMs: Date.now() - t0, log, journalId: journal.id, verification, quarantined }
   } catch (e) {
     setJournalState(journal.id, 'failed', (e as Error).message)
     throw e
@@ -374,18 +474,91 @@ export async function activateProfile(
  * Rolls a switch back to the state its snapshot recorded: whatever the switch
  * linked in is taken out, every file in the verified backup goes back where it
  * came from, the saves swap back, and the previous profile is active again.
+ *
+ * Vacating the profile whose files are in the game folder is the same removal a
+ * switch does, so it gets the same interlock. It used to run with no options at
+ * all, which meant no snapshot set, which meant every tracked real file of that
+ * profile was deleted outright - and for an adopted install (no store copy, no
+ * recorded hash) there was nothing anywhere to put back.
+ *
+ * "Whose files are in the game folder" is usually the active profile, but not
+ * after a switch that materialised and then failed reconciliation: that profile
+ * was never recorded active, so the DB still names the one before it while the
+ * folder holds the one that failed. Undoing that switch has to vacate the
+ * profile that actually landed.
  */
 export async function restorePreviousState(journalId?: number): Promise<{ log: string[]; restored: number }> {
   const db = getDb()
-  const journal = journalId ? listJournals(50).find((j) => j.id === journalId) ?? null : lastRestorableSwitch()
+  const journal = journalId ? listJournals(50, 'profile-switch').find((j) => j.id === journalId) ?? null : lastRestorableSwitch()
   if (!journal) throw new Error('There is no switch with a backup to restore from.')
+  // Belt to the SQL's braces. This function vacates the ENTIRE active profile
+  // before it restores a manifest, so it must only ever be handed a profile
+  // switch's journal - a variant swap's manifest is a few files inside one
+  // mod's store folder, and restoring it here would tear the profile down and
+  // call that a success. Both routes to `journal` already filter by kind; this
+  // is the assertion that neither may be loosened without noticing.
+  if (journal.kind !== 'profile-switch') {
+    throw new Error('That journal entry is a variant swap, not a profile switch, so there is no previous state in it to restore.')
+  }
   if (journal.fromProfileId === null) throw new Error('That switch had no previous profile to go back to.')
 
   const log: string[] = []
-  const current = db.prepare('SELECT id, name FROM profile WHERE is_active = 1').get() as { id: number; name: string } | undefined
+  const active = db.prepare('SELECT id, name FROM profile WHERE is_active = 1').get() as { id: number; name: string } | undefined
+  // A journal that reached verification and still failed is exactly the
+  // materialised-but-not-activated case; a failure before that point recorded
+  // no verification and materialised nothing of the incoming profile.
+  const landedButNotActive = journal.state === 'failed' && journal.verification !== null && journal.toProfileId !== active?.id
+  const current = landedButNotActive
+    ? (db.prepare('SELECT id, name FROM profile WHERE id = ?').get(journal.toProfileId) as { id: number; name: string } | undefined)
+    : active
   if (current) {
-    const out = await dematerialiseProfile(current.id, {})
+    const game = requireActiveGame()
+    // Adopted content exists only in the game folder; it has to exist somewhere
+    // else before that folder can be vacated.
+    const ingested = await ingestUnstoredInstalls(current.id, game.path)
+    if (ingested.ingested) {
+      log.push(`Copied ${ingested.ingested} adopted mod(s) (${ingested.files} file(s)) of ${current.name} into the Modão store first.`)
+    }
+    for (const f of ingested.failed) log.push(`Note: ${f.label} - ${f.reason}`)
+
+    const undoDir = path.join(Paths.profileBackups(current.id), `undo-${String(journal.id).padStart(4, '0')}-${timestampSlug()}`)
+    const live = (
+      db
+        .prepare(
+          `SELECT DISTINCT f.relative_path p FROM install_file f JOIN install i ON i.id = f.install_id WHERE i.profile_id = ?`
+        )
+        .all(current.id) as { p: string }[]
+    )
+      .map((r) => r.p)
+      .filter((rel) => {
+        const abs = path.join(game.path, rel)
+        return exists(abs) && !isLink(abs) && !isDirectory(abs)
+      })
+    const undo = await snapshotFiles(game.path, live, undoDir)
+    const verified = await verifySnapshot(undo)
+    if (!verified.ok) {
+      throw new Error(
+        `The backup of ${current.name} taken before the restore did not verify, so nothing was changed:\n  ` +
+          verified.problems.slice(0, 5).join('\n  ')
+      )
+    }
+    if (undo.length) log.push(`Backed up ${undo.length} file(s) of ${current.name} to ${undoDir} before removing them.`)
+
+    const snapshotted = new Set(undo.map((e) => ownedKey(e.relativePath)))
+    const out = await dematerialiseProfile(current.id, { snapshotted })
     log.push(`Removed ${out.removed} item(s) that ${current.name} had materialised.`)
+    if (out.quarantined.length) {
+      log.push(
+        `${out.quarantined.length} file(s) you edited were copied to quarantine first: ` +
+          `${out.quarantined.slice(0, 5).join(', ')}${out.quarantined.length > 5 ? ', ...' : ''}`
+      )
+    }
+    if (out.leftInPlace.length) {
+      log.push(
+        `${out.leftInPlace.length} file(s) stayed in the game folder because no verified backup of them exists: ` +
+          `${out.leftInPlace.slice(0, 5).join(', ')}${out.leftInPlace.length > 5 ? ', ...' : ''}`
+      )
+    }
   }
   const result = await restoreFromJournal(journal.id)
   log.push(`Restored ${result.restored} file(s) from ${journal.snapshotDir}.`)
@@ -486,16 +659,19 @@ export async function adoptIntoProfile(
   // whatever the user already set is what adoption must keep.
   const existingPriorities = readPriorities(ini, iniProfileName(profile.name), { inherit: true })
 
-  const folders = exists(modloaderPath)
-    ? (await fsp.readdir(modloaderPath, { withFileTypes: true })).filter((e) => e.isDirectory() && !e.name.startsWith('.'))
-    : []
+  // A folder the user disabled by hand is read as the mod it is. Mod Loader's
+  // own non-destructive disable is a ". " (dot space) prefix and its load-first
+  // lever is a "$" prefix; both are spellings of the same mod, so adoption
+  // indexes ". GInput" as GInput, switched off, rather than skipping it as a
+  // hidden folder or adopting a second mod literally called ". GInput".
+  const folders = exists(modloaderPath) ? await listModFolders(modloaderPath) : []
 
   const now = new Date().toISOString()
   let adopted = 0
   let done = 0
   for (const folder of folders) {
     const abs = path.join(modloaderPath, folder.name)
-    if (tracked.has(folder.name.toLowerCase())) {
+    if (tracked.has(folder.base.toLowerCase())) {
       onProgress?.(++done, folders.length)
       continue
     }
@@ -512,7 +688,7 @@ export async function adoptIntoProfile(
       onProgress?.(++done, folders.length)
       continue
     }
-    const slug = `adopted-${slugify(folder.name)}`
+    const slug = `adopted-${slugify(folder.base)}`
     let mod = db.prepare('SELECT id FROM mod WHERE slug = ?').get(slug) as { id: number } | undefined
     if (!mod) {
       mod = {
@@ -522,7 +698,7 @@ export async function adoptIntoProfile(
               `INSERT INTO mod (slug, title, author, category, source_url, description, first_seen_at, rating_inputs_json)
                VALUES (?,?,?,?,?,?,?,?)`
             )
-            .run(slug, folder.name, 'Unknown', 'Adopted', '', 'Adopted from an existing install.', now, '{}').lastInsertRowid
+            .run(slug, folder.base, 'Unknown', 'Adopted', '', 'Adopted from an existing install.', now, '{}').lastInsertRowid
         )
       }
     }
@@ -534,15 +710,27 @@ export async function adoptIntoProfile(
         files.reduce((a, f) => a + f.size, 0)
       ).lastInsertRowid
     )
-    const priority = existingPriorities[folder.name] ?? 50
+    // The priority line Mod Loader would apply is keyed by the folder's name on
+    // disk, prefixes included, so that is looked up first; the canonical name is
+    // the fallback for a block written before the folder was renamed.
+    const priority = existingPriorities[folder.name] ?? existingPriorities[folder.base] ?? 50
     const installId = Number(
       db
         .prepare(
           `INSERT INTO install (profile_id, mod_version_id, installed_at, destination_class, variant_choice,
-                                enabled, priority, store_key, folder_name, readme_text, source_archive)
-           VALUES (?,?,?,?,NULL,1,?,NULL,?,NULL,NULL)`
+                                enabled, priority, load_first, store_key, folder_name, readme_text, source_archive)
+           VALUES (?,?,?,?,NULL,?,?,?,NULL,?,NULL,NULL)`
         )
-        .run(profileId, versionId, now, 'modloader-folder', priority, folder.name).lastInsertRowid
+        .run(
+          profileId,
+          versionId,
+          now,
+          'modloader-folder',
+          folder.disabled ? 0 : 1,
+          priority,
+          folder.loadFirst ? 1 : 0,
+          folder.base
+        ).lastInsertRowid
     )
     const insertFile = db.prepare(
       `INSERT INTO install_file (install_id, relative_path, sha256, size, was_overwrite, backup_path, destination_class)
@@ -551,13 +739,20 @@ export async function adoptIntoProfile(
     const insertProvides = db.prepare('INSERT OR REPLACE INTO provides (install_id, relative_path, sha256, size) VALUES (?,?,NULL,?)')
     db.transaction(() => {
       for (const f of files) {
-        const rel = `modloader/${folder.name}/${f.rel}`
+        // Records are always canonical: the prefixes are a spelling on disk, and
+        // an install_file row that carried one would stop matching the moment the
+        // mod was switched back on.
+        const rel = `modloader/${folder.base}/${f.rel}`
         insertFile.run(installId, rel, f.size)
         insertProvides.run(installId, providesKey(rel), f.size)
       }
     })()
     adopted++
-    report.push(`${folder.name}: ${files.length} files, priority ${priority}`)
+    report.push(
+      `${folder.name}: ${files.length} files, priority ${priority}` +
+        (folder.disabled ? ' — disabled by its ". " prefix, adopted switched off' : '') +
+        (folder.loadFirst ? ' — "$" prefix, loads first' : '')
+    )
     onProgress?.(++done, folders.length)
   }
 
@@ -610,10 +805,11 @@ export async function unmanagedContent(profileId: number): Promise<UnmanagedCont
   const modloaderPath = path.join(game.path, 'modloader')
   const folders: string[] = []
   if (exists(modloaderPath)) {
-    for (const e of await fsp.readdir(modloaderPath, { withFileTypes: true })) {
-      if (!e.isDirectory() || e.name.startsWith('.')) continue
+    for (const e of await listModFolders(modloaderPath)) {
       const abs = path.join(modloaderPath, e.name)
-      if (trackedFolders.has(e.name.toLowerCase()) || isLink(abs)) continue
+      // Compared under the canonical name: a mod this profile already tracks is
+      // not untracked content just because it is currently switched off.
+      if (trackedFolders.has(e.base.toLowerCase()) || isLink(abs)) continue
       const files = await walk(abs, { maxFiles: 1 })
       if (files.length > 0) folders.push(e.name)
     }

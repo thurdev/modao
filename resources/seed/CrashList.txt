@@ -1,10 +1,28 @@
 ; CrashList.txt - bundled excerpt of the community crash-address database
-; shipped with CrashInfo (Junior_Djjr / MixMods). Refreshable from within
-; ModVault; entries are community-maintained and may be incomplete.
+; shipped with CrashInfo (Junior_Djjr / MixMods). Entries are community-
+; maintained and may be incomplete.
 ;
-; Format:  <address> = <cause in pt-BR> | <solution>
-; The crash address is 0x400000 (image base) + the fault offset reported by
-; the Windows Event Log.
+; THIS FILE IS STILL A STUB. It is not the upstream CrashList: it holds a
+; hand-written excerpt plus the two entries the field-audit spec states
+; verbatim. A newer copy can be dropped in by hand: put a CrashList.txt in
+; %APPDATA%\Modao\ - the folder that holds modao.db, spelled with no accent
+; whatever the product calls itself - and Modão reads that one
+; instead of this file the next time it starts. It must be Windows-1252, in
+; either of the two formats below.
+;
+; Two formats are read. The upstream stanza:
+;
+;     Erro: 0x004C9691 0x00732924 0x00749B7B
+;     Causa: <cause in pt-BR>
+;     Solucao: <solution>
+;
+; Every address on the Erro: line is indexed, including runs joined by "Ou".
+; And the older one-liner used by the excerpt below:
+;
+;     <address> = <cause in pt-BR> | <solution>
+;
+; The crash address is absolute: 0x400000 (image base) + the fault offset
+; reported by the Windows Event Log. The file is Windows-1252, not UTF-8.
 
 00749B7B = Tentando criar um modelo que nao existe, ou o .txd nao existe. Ou nome de arquivo longo demais. | Verifique o mod instalado por ultimo: modelo sem .txd correspondente, nome de arquivo muito longo, ou textura com dimensao que nao e potencia de dois dentro do .txd.
 004C0DB4 = Problema com veiculo: modelo, handling ou vehicle.ide invalido. | Confira o vehicle.ide e o handling.cfg do ultimo mod de veiculo instalado.
@@ -18,3 +36,15 @@
 00614107 = Arquivo de audio ausente ou corrompido em audio/. | Restaure os arquivos de audio originais do jogo.
 00464D30 = Falha em RwTextureRead: dicionario de texturas corrompido. | O .txd esta corrompido ou foi salvo com uma versao incompativel do RenderWare.
 0056E150 = Problema no carregamento do save game. | Restaure um snapshot de save anterior; nao apague o save atual.
+
+; --- From the field-audit spec, quoted verbatim (items 07 and 13). ---------
+; Both addresses are in the upstream CrashList; neither was in this file, so
+; the UI answered "nao esta no CrashList" for real, diagnosable crashes.
+; No solution text is recorded for either: the spec states none, and none is
+; invented here.
+
+Erro: 0x004C67BB
+Causa: Limite de modelos de pedestres no .ide
+
+Erro: 0x007F3825
+Causa: Descarregamento de uma textura. Foi relatado após ter instalado/desinstalado algum mod sem sair do jogo usando ModLoader.

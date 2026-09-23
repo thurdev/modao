@@ -12,7 +12,7 @@ import { AccessBanner } from './components/AccessBanner'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Setup } from './components/Setup'
 import { InstallPlanDialog } from './components/InstallPlanDialog'
-import { ProfilesScreen } from './screens/Profiles'
+import { ProfilesScreen, SwitchBlockedDialog } from './screens/Profiles'
 import { LibraryScreen } from './screens/Library'
 import { BrowseScreen } from './screens/Browse'
 import { ConflictsScreen } from './screens/Conflicts'
@@ -85,6 +85,10 @@ export function App(): JSX.Element {
     try {
       const r = await api.launch()
       state.pushToast(r.launched ? 'success' : 'error', r.message)
+      // A refusal is not a dead end: the fix for what refused - the safe
+      // stream.ini value, backup kept - is a button on the Health screen, and
+      // so is launching anyway after reading why.
+      if (!r.launched && r.blockers && r.blockers.length > 0) state.setScreen('health')
       await state.refreshProfiles()
     } catch (e) {
       state.pushToast('error', (e as Error).message)
@@ -238,6 +242,14 @@ export function App(): JSX.Element {
 
       <AnimatePresence>
         {state.plan ? <InstallPlanDialog onDone={() => void state.refreshProfiles()} /> : null}
+      </AnimatePresence>
+      {/*
+        A switch that did not reconcile is refused, and the user has to see the
+        report wherever they switched from - the header select reaches every
+        screen, and it used to discard the verification entirely.
+      */}
+      <AnimatePresence>
+        <SwitchBlockedDialog />
       </AnimatePresence>
       <Toasts />
     </div>

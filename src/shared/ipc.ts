@@ -1,4 +1,5 @@
 import type { GameKind } from './games'
+import type { LaunchBlocker } from './launchGate'
 import type {
   AppSettings,
   BisectSession,
@@ -6,6 +7,7 @@ import type {
   CatalogMod,
   CrashIncident,
   CrashReport,
+  DeepAnalysisResult,
   ExistingSavesReport,
   FileConflict,
   GameInstall,
@@ -73,7 +75,12 @@ export interface ModãoApi {
     /** What the game folder holds that this profile does not track yet. */
     unmanaged(profileId: number): Promise<UnmanagedReport>
     remove(id: number): Promise<void>
-    launch(): Promise<{ launched: boolean; message: string }>
+    /**
+     * Starts the game - unless the pre-launch check has a blocking finding, in
+     * which case nothing is started and the finding comes back named in
+     * `blockers`. `force` is the user saying "launch anyway" after reading it.
+     */
+    launch(force?: boolean): Promise<{ launched: boolean; message: string; blockers?: LaunchBlocker[] }>
   }
   profiles: {
     list(): Promise<Profile[]>
@@ -111,10 +118,18 @@ export interface ModãoApi {
     list(profileId: number): Promise<InstalledMod[]>
     setEnabled(installId: number, enabled: boolean): Promise<void>
     setPriority(installId: number, priority: number): Promise<void>
+    /**
+     * Spells the mod folder with, or without, the "$" that makes its .asi load
+     * first. LOAD ORDER, not priority - the two are separate calls because they
+     * are separate Mod Loader mechanisms.
+     */
+    setLoadFirst(installId: number, loadFirst: boolean): Promise<void>
     uninstall(installId: number): Promise<{ restored: number; quarantined: string[] }>
     rollbackPreview(installId: number): Promise<{ relativePath: string; action: string }[]>
     readme(installId: number): Promise<string | null>
     subModSetEnabled(installId: number, relativePath: string, enabled: boolean): Promise<void>
+    /** Switches to another option of a variant group already installed, without re-downloading. */
+    setVariant(installId: number, groupId: string, optionId: string): Promise<void>
   }
   catalog: {
     list(query: {
@@ -136,6 +151,8 @@ export interface ModãoApi {
     planFromSlug(slug: string, profileId: number): Promise<InstallPlan>
     planFromFile(profileId: number): Promise<InstallPlan | null>
     choose(planId: string, groupId: string, optionId: string): Promise<InstallPlan>
+    /** Enables or drops an add-on folder offered beside the plan. */
+    chooseAddOn(planId: string, addOnId: string, enabled: boolean): Promise<InstallPlan>
     setDestination(planId: string, sourcePath: string, destination: string): Promise<InstallPlan>
     apply(planId: string, profileId: number): Promise<{ installId: number; written: number; backedUp: number }>
     discard(planId: string): Promise<void>
@@ -161,18 +178,26 @@ export interface ModãoApi {
     importExisting(profileId: number, label: string): Promise<{ snapshotId: number; slots: number }>
   }
   health: {
-    run(profileId: number): Promise<HealthReport>
+    /** `null` is the no-active-profile state: the game-level checks still run. */
+    run(profileId: number | null): Promise<HealthReport>
     crashes(profileId: number): Promise<CrashReport[]>
     /** The same records grouped into one entry per dead process. */
     incidents(profileId: number): Promise<CrashIncident[]>
     scanCrashes(profileId: number): Promise<{ found: number; added: number; hangSuspected: boolean; message: string }>
     resolveCrash(id: number, resolved: boolean): Promise<void>
     lookupAddress(address: string): Promise<{ address: string; cause: string | null; solution: string | null }>
+    /** Not a disassembler: a VA-to-file-offset conversion plus a hex window, for an address CrashList had no entry for. */
+    deepAnalyze(address: string): Promise<DeepAnalysisResult>
     logs(): Promise<LogEntry[]>
     /** What Mod Loader itself says it did with this profile's mods. */
     modLoaderReport(profileId: number): Promise<ModLoaderLogReport | null>
     /** Writes a streaming-memory value the game can survive, keeping a backup. */
     fixStreamingMemory(memoryMb?: number): Promise<{ file: string; backup: string; from: number | null; to: number }>
+    /**
+     * Moves an orphaned config's plugin back to the ASI directory, or puts the
+     * stray config in quarantine when no plugin exists. Never deletes.
+     */
+    reuniteOrphans(profileId: number | null): Promise<{ moved: string[]; quarantined: string[]; refused: string[] }>
     bisectStart(profileId: number): Promise<BisectSession>
     bisectResult(sessionId: string, result: 'good' | 'bad'): Promise<BisectSession>
     bisectAbort(sessionId: string): Promise<void>
@@ -231,10 +256,12 @@ export const IPC_CHANNELS = [
   'library:list',
   'library:setEnabled',
   'library:setPriority',
+  'library:setLoadFirst',
   'library:uninstall',
   'library:rollbackPreview',
   'library:readme',
   'library:subModSetEnabled',
+  'library:setVariant',
   'catalog:list',
   'catalog:get',
   'catalog:refresh',
@@ -245,6 +272,7 @@ export const IPC_CHANNELS = [
   'install:planFromSlug',
   'install:planFromFile',
   'install:choose',
+  'install:chooseAddOn',
   'install:setDestination',
   'install:apply',
   'install:discard',
@@ -268,9 +296,11 @@ export const IPC_CHANNELS = [
   'health:scanCrashes',
   'health:resolveCrash',
   'health:lookupAddress',
+  'health:deepAnalyze',
   'health:logs',
   'health:modLoaderReport',
   'health:fixStreamingMemory',
+  'health:reuniteOrphans',
   'health:bisectStart',
   'health:bisectResult',
   'health:bisectAbort',

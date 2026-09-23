@@ -12,7 +12,7 @@ const COLORS = ['#d8a657', '#8ab0a0', '#b08a8a', '#9a92b5', '#a6a08c', '#7f97b5'
 
 export function ProfilesScreen(): JSX.Element {
   const t = useT()
-  const { profiles, refreshProfiles, pushToast, game, orphanSaves, checkOrphanSaves } = useApp()
+  const { profiles, refreshProfiles, pushToast, game, orphanSaves, checkOrphanSaves, setSwitchFailure } = useApp()
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Profile | null>(null)
   const [deleting, setDeleting] = useState<Profile | null>(null)
@@ -33,6 +33,19 @@ export function ProfilesScreen(): JSX.Element {
     try {
       const result = await api.activateProfile(p.id)
       await Promise.all([refreshProfiles(), checkOrphanSaves()])
+      // Refused after materialising: the profile is not active. That report
+      // belongs in the blocking dialog, not in the "here is what happened"
+      // modal a successful switch opens.
+      if (!result.ok) {
+        setSwitchFailure({
+          name: result.verification.profileName,
+          previousProfileName: result.previousProfileName,
+          log: result.log,
+          verification: result.verification,
+          journalId: result.journalId
+        })
+        return
+      }
       setSwitchLog({
         name: p.name,
         elapsedMs: result.elapsedMs,
@@ -80,10 +93,14 @@ export function ProfilesScreen(): JSX.Element {
     }
   }
 
-  async function restorePrevious(): Promise<void> {
+  // Same rule as the blocked-switch dialog below: the journal is NAMED. This
+  // modal is opened by a switch that succeeded and stays open while the user
+  // reads it, and the header can switch profiles again underneath it - so "the
+  // latest restorable switch" is not reliably the one this modal is about.
+  async function restorePrevious(journalId: number): Promise<void> {
     setRestoring(true)
     try {
-      const result = await api.restorePreviousSwitch()
+      const result = await api.restorePreviousSwitch(journalId)
       await Promise.all([refreshProfiles(), checkOrphanSaves()])
       setSwitchLog(null)
       pushToast('success', `Restored ${result.restored} file(s) from the pre-switch backup.`)
@@ -347,7 +364,7 @@ export function ProfilesScreen(): JSX.Element {
                   <Button
                     variant="danger"
                     disabled={restoring}
-                    onClick={() => void restorePrevious()}
+                    onClick={() => void restorePrevious(switchLog.journalId as number)}
                     icon={<Icon.undo width={13} height={13} />}
                   >
                     {restoring ? t('profiles.restoring') : t('profiles.restorePrevious')}
@@ -571,6 +588,21 @@ function DryRunReport(props: { plan: SwitchPlan; onForgetMissing?: () => void })
         <dd>{plan.unmanaged.length ? plan.unmanaged.join(', ') : t('profiles.nothing')}</dd>
       </dl>
 
+      {plan.willBeOverwritten.length ? (
+        <div className="notice" data-kind="warn">
+          <span className="notice-mark" />
+          <div>
+            <strong>{t('profiles.willBeOverwritten', { count: plan.willBeOverwritten.length })}</strong>
+            <ul className="list">
+              {plan.willBeOverwritten.map((rel) => (
+                <li key={rel}>{rel}</li>
+              ))}
+            </ul>
+            <span className="faint">{t('profiles.willBeOverwrittenHint')}</span>
+          </div>
+        </div>
+      ) : null}
+
       {plan.unresolved.length ? (
         <div className="notice" data-kind="warn">
           <span className="notice-mark" />
@@ -616,5 +648,101 @@ function DryRunReport(props: { plan: SwitchPlan; onForgetMissing?: () => void })
         </table>
       </div>
     </div>
+  )
+}
+
+/**
+ * The switch that was refused.
+ *
+ * This is deliberately a dialog and not a toast: the switch did not happen, the
+ * game folder is in a state the user did not ask for, and there is exactly one
+ * action that puts it back. It is rendered from the app shell rather than from
+ * this screen, because a profile can be switched from the header on any screen
+ * and that path used to show nothing at all.
+ *
+ * Distinct from the game-is-running refusal, which stops a switch BEFORE
+ * anything is touched: this one is content that did not arrive.
+ */
+export function SwitchBlockedDialog(): JSX.Element | null {
+  const t = useT()
+  const failure = useApp((s) => s.switchFailure)
+  const setSwitchFailure = useApp((s) => s.setSwitchFailure)
+  const refreshProfiles = useApp((s) => s.refreshProfiles)
+  const checkUnmanaged = useApp((s) => s.checkUnmanaged)
+  const pushToast = useApp((s) => s.pushToast)
+  const [restoring, setRestoring] = useState(false)
+
+  if (!failure) return null
+
+  // The id is a PARAMETER rather than a read of `failure` inside the body:
+  // that is what makes it impossible to call this without naming the journal
+  // the dialog is reporting.
+  async function restore(journalId: number): Promise<void> {
+    setRestoring(true)
+    try {
+      // THE JOURNAL THIS DIALOG IS REPORTING, by id. Asking for "the latest
+      // restorable switch" instead was a different question with the same
+      // answer only while nothing else happened in between: the dialog is
+      // rendered from the app shell and survives navigation, so a profile can
+      // be switched again - from the header, on any screen - while it is still
+      // open, and the button would then roll back that newer switch and report
+      // it as the failure the user was reading about.
+      //
+      // `restorePreviousState` still refuses anything that is not a profile
+      // switch, by id as well as by recency: a variant swap writes into the
+      // same table and can never be restored here, whichever route reaches it.
+      const result = await api.restorePreviousSwitch(journalId)
+      await Promise.all([refreshProfiles(), checkUnmanaged()])
+      setSwitchFailure(null)
+      pushToast('success', t('messages.profile.restoredFiles', { count: result.restored }))
+    } catch (e) {
+      pushToast('error', (e as Error).message)
+    } finally {
+      setRestoring(false)
+    }
+  }
+
+  return (
+    <Modal
+      key="switch-blocked"
+      title={t('profiles.switchBlockedTitle', { name: failure.name })}
+      subtitle={t('profiles.switchBlockedSubtitle')}
+      onClose={() => setSwitchFailure(null)}
+      width={720}
+      footer={
+        <>
+          {failure.journalId !== null ? (
+            <Button
+              variant="danger"
+              disabled={restoring}
+              onClick={() => void restore(failure.journalId as number)}
+              icon={<Icon.undo width={13} height={13} />}
+            >
+              {restoring ? t('profiles.restoring') : t('profiles.restorePrevious')}
+            </Button>
+          ) : null}
+          <span className="spacer" />
+          <Button variant="primary" onClick={() => setSwitchFailure(null)}>
+            {t('app.close')}
+          </Button>
+        </>
+      }
+    >
+      <div className="notice" data-kind="error" style={{ marginBottom: 12 }}>
+        <span className="notice-mark" />
+        <div>
+          <strong>{t('profiles.switchBlockedLead', { name: failure.name })}</strong>
+          <div className="faint">
+            {failure.previousProfileName
+              ? t('profiles.switchBlockedStillActive', { name: failure.previousProfileName })
+              : t('profiles.switchBlockedNoPrevious')}{' '}
+            {t('profiles.switchBlockedWhatToDo')}
+          </div>
+        </div>
+      </div>
+      <VerificationReport v={failure.verification} />
+      <h3>{t('profiles.whatHappened')}</h3>
+      <pre className="pre">{failure.log.join('\n')}</pre>
+    </Modal>
   )
 }

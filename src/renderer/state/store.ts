@@ -1,6 +1,21 @@
 import { create } from 'zustand'
-import type { AppSettings, GameInstall, InstallPlan, Profile, Progress, UnmanagedReport } from '@shared/types'
+import type { AppSettings, GameInstall, InstallPlan, Profile, Progress, SwitchVerification, UnmanagedReport } from '@shared/types'
 import { api } from '../api'
+
+/**
+ * A switch that materialised and then failed reconciliation. It lives in the
+ * store rather than in one screen because a profile can be switched from the
+ * header on any screen, and that path used to drop the verification on the
+ * floor - the user got a toast that scrolled away and a profile that looked
+ * switched.
+ */
+export interface SwitchFailure {
+  name: string
+  previousProfileName: string | null
+  log: string[]
+  verification: SwitchVerification
+  journalId: number | null
+}
 
 export type Screen = 'profiles' | 'library' | 'browse' | 'conflicts' | 'health' | 'saves' | 'settings'
 
@@ -27,6 +42,8 @@ interface AppState {
   orphanSaves: { slots: number; path: string } | null
   /** Mods sitting in the game folder that the active profile does not track. */
   unmanaged: UnmanagedReport | null
+  /** The last profile switch that was refused because it did not reconcile. */
+  switchFailure: SwitchFailure | null
 
   init(): Promise<void>
   setScreen(s: Screen): void
@@ -38,6 +55,7 @@ interface AppState {
   checkUnmanaged(): Promise<void>
   adoptUnmanaged(): Promise<void>
   activateProfile(id: number): Promise<void>
+  setSwitchFailure(failure: SwitchFailure | null): void
   setSetting<K extends keyof AppSettings>(key: K, value: AppSettings[K]): Promise<void>
   pushToast(kind: Toast['kind'], message: string): void
   dismissToast(id: number): void
@@ -62,6 +80,7 @@ export const useApp = create<AppState>((set, get) => ({
   planBusy: false,
   orphanSaves: null,
   unmanaged: null,
+  switchFailure: null,
 
   async init() {
     api.onProgress((p) => {
@@ -167,9 +186,27 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   async activateProfile(id) {
-    await api.activateProfile(id)
+    const result = await api.activateProfile(id)
     await get().refreshProfiles()
     await get().checkUnmanaged()
+    // A refused switch is not a switch. The header switcher used to discard
+    // this entirely, which is how a mod that never reached the game folder got
+    // as far as the user noticing it in-game.
+    if (!result.ok) {
+      set({
+        switchFailure: {
+          name: result.verification.profileName,
+          previousProfileName: result.previousProfileName,
+          log: result.log,
+          verification: result.verification,
+          journalId: result.journalId
+        }
+      })
+    }
+  },
+
+  setSwitchFailure(failure) {
+    set({ switchFailure: failure })
   },
 
   async setSetting(key, value) {

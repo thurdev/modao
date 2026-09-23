@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { InstalledMod } from '@shared/types'
 import { DESTINATION_KEYS, DESTINATION_LABELS } from '@shared/types'
+import { extractActivationCodes } from '@shared/activation'
 import { api, formatBytes, relativeTime } from '../api'
 import { useApp } from '../state/store'
 import { useT } from '../lib/i18n'
@@ -115,6 +116,21 @@ export function LibraryScreen(): JSX.Element {
   async function reprioritise(mod: InstalledMod, priority: number): Promise<void> {
     try {
       await api.setPriority(mod.installId, priority)
+    } catch (e) {
+      pushToast('error', (e as Error).message)
+    } finally {
+      mods.reload()
+    }
+  }
+
+  /**
+   * LOAD ORDER, which is not priority. It moves the mod folder's name - and so
+   * the moment its .asi hooks the game - and changes nothing about who wins a
+   * duplicated file.
+   */
+  async function setLoadFirst(mod: InstalledMod, loadFirst: boolean): Promise<void> {
+    try {
+      await api.setLoadFirst(mod.installId, loadFirst)
     } catch (e) {
       pushToast('error', (e as Error).message)
     } finally {
@@ -282,6 +298,9 @@ export function LibraryScreen(): JSX.Element {
                 <Th id="title" label={t('library.colMod')} />
                 <th>{t('library.colKind')}</th>
                 <Th id="priority" label={t('library.colPriority')} style={{ width: 92 }} />
+                <th style={{ width: 96 }} title={t('library.loadOrderHint')}>
+                  {t('library.colLoadOrder')}
+                </th>
                 <Th id="size" label={t('library.colSize')} style={{ width: 84 }} />
                 <th style={{ width: 130 }}>{t('library.colVersion')}</th>
                 <Th id="conflicts" label={t('library.colConflicts')} style={{ width: 92 }} />
@@ -331,6 +350,16 @@ export function LibraryScreen(): JSX.Element {
                   </td>
                   <td>
                     <Stepper value={m.priority} onCommit={(v) => void reprioritise(m, v)} />
+                  </td>
+                  <td className="faint num" title={t('library.loadOrderHint')}>
+                    {m.folderName ? (
+                      <Checkbox
+                        label={t('library.loadFirst')}
+                        on={m.loadFirst}
+                        onChange={(v) => void setLoadFirst(m, v)}
+                      />
+                    ) : null}
+                    {m.loadOrderRank === null ? t('library.loadOrderNotLoaded') : ` #${m.loadOrderRank}`}
                   </td>
                   <td className="faint num">{formatBytes(m.size)}</td>
                   <td>
@@ -407,6 +436,13 @@ export function LibraryScreen(): JSX.Element {
 function ReadmeModal(props: { mod: InstalledMod; onClose: () => void }): JSX.Element {
   const t = useT()
   const readme = useAsync(() => api.readme(props.mod.installId), [props.mod.installId])
+  // The readme is kept verbatim on the install row, so the codes it states can
+  // be read back at any time - long after the install dialog is gone, which is
+  // when someone actually wonders why the mod appears to do nothing.
+  const codes = useMemo(() => {
+    const found = extractActivationCodes(readme.data ?? '')
+    return [...new Map(found.map((a) => [a.code.toUpperCase(), a])).values()]
+  }, [readme.data])
   return (
     <Modal
       title={t('library.readmeTitle', { name: props.mod.title })}
@@ -417,9 +453,24 @@ function ReadmeModal(props: { mod: InstalledMod; onClose: () => void }): JSX.Ele
       {readme.loading ? (
         <Loading />
       ) : readme.data ? (
-        <pre className="pre" style={{ maxHeight: '58vh' }}>
-          {readme.data}
-        </pre>
+        <>
+          {codes.length > 0 ? (
+            <div className="col" style={{ gap: 4, marginBottom: 10 }}>
+              <div className="row wrap" style={{ gap: 8 }}>
+                <Badge tone="ok">{t('install.plan.activationTitle')}</Badge>
+                {codes.map((a) => (
+                  <code key={a.code} className="mono">
+                    {a.code}
+                  </code>
+                ))}
+              </div>
+              <span className="faint">{t('install.plan.activationHint')}</span>
+            </div>
+          ) : null}
+          <pre className="pre" style={{ maxHeight: '58vh' }}>
+            {readme.data}
+          </pre>
+        </>
       ) : (
         <p className="faint">{t('library.noReadme')}</p>
       )}
@@ -430,6 +481,7 @@ function ReadmeModal(props: { mod: InstalledMod; onClose: () => void }): JSX.Ele
 function DetailModal(props: { mod: InstalledMod; onClose: () => void; onChanged: () => void }): JSX.Element {
   const t = useT()
   const m = props.mod
+  const pushToast = useApp((s) => s.pushToast)
   const [busy, setBusy] = useState<string | null>(null)
   return (
     <Modal
@@ -441,10 +493,18 @@ function DetailModal(props: { mod: InstalledMod; onClose: () => void; onChanged:
       <dl className="kv">
         <dt>Destination class</dt>
         <dd>{t(DESTINATION_KEYS[m.destinationClass])}</dd>
-        <dt>Priority</dt>
+        <dt>{t('library.colPriority')}</dt>
         <dd className="num">
           {m.priority}
           {m.priority === 0 ? ' — ignored by Mod Loader' : m.priority === 50 ? ' — default' : ''}
+          <div className="faint">{t('library.priorityMeans')}</div>
+        </dd>
+        <dt>{t('library.colLoadOrder')}</dt>
+        <dd>
+          {m.loadOrderRank === null
+            ? t('library.loadOrderNotLoaded')
+            : t('library.loadOrderPosition', { rank: m.loadOrderRank, folder: m.folderName ?? '' })}
+          <div className="faint">{t('library.loadOrderMeans')}</div>
         </dd>
         <dt>Version</dt>
         <dd>
@@ -458,6 +518,36 @@ function DetailModal(props: { mod: InstalledMod; onClose: () => void; onChanged:
         <dt>Conflicts</dt>
         <dd>{m.conflictCount || t('app.none')}</dd>
       </dl>
+
+      {m.variantGroups.map((g) => (
+        <div key={g.id} style={{ marginTop: 10 }}>
+          <div className="faint">{t('library.variantGroupLabel')}: {g.question}</div>
+          <div className="row wrap" style={{ gap: 6, marginTop: 4 }}>
+            {g.options.map((o) => (
+              <Button
+                key={o.id}
+                size="sm"
+                variant={o.id === g.chosenOptionId ? 'accent' : undefined}
+                disabled={busy === `variant:${g.id}` || o.id === g.chosenOptionId}
+                onClick={async () => {
+                  setBusy(`variant:${g.id}`)
+                  try {
+                    await api.setVariant(m.installId, g.id, o.id)
+                    pushToast('success', t('library.variantSwitched', { label: o.label }))
+                    props.onChanged()
+                  } catch (e) {
+                    pushToast('error', (e as Error).message)
+                  } finally {
+                    setBusy(null)
+                  }
+                }}
+              >
+                {busy === `variant:${g.id}` && o.id !== g.chosenOptionId ? t('library.switchingVariant') : o.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+      ))}
 
       {m.subMods.length > 0 ? (
         <>

@@ -1143,6 +1143,11 @@ tr:focus-within .row-actions {
 .status-dot[data-status='fail'] {
   background: var(--danger);
 }
+/* Not checked this run: a hollow ring, so "no answer" never reads as a pass. */
+.status-dot[data-status='unknown'] {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--text-faint);
+}
 .check-row ul {
   margin: 7px 0 0;
   padding-left: 16px;

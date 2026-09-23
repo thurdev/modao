@@ -19,17 +19,25 @@ export interface WalkedFile {
 /**
  * Walks a tree, following directory junctions - a materialised profile is made
  * of them, so a walk that skipped them would report a mod folder as empty.
- * Resolved paths are tracked so a junction loop cannot spin forever.
+ * The chain of resolved ancestor paths is tracked so a junction loop cannot
+ * spin forever.
+ *
+ * The guard is the ANCESTOR chain, deliberately not a global log of every
+ * realpath ever visited. Two different junctions resolving to the same target
+ * is normal here - `storeKey()` is slug+version+variant, so two installs of the
+ * same mod share one store folder - and both are genuinely live at their own
+ * path in the game tree. A global set would enter the first and silently return
+ * on the second, hiding a file that really is present at a second location.
+ * Only a directory that is its own ancestor means the walk is looping.
  */
 export async function walk(root: string, opts: { maxFiles?: number } = {}): Promise<WalkedFile[]> {
   const out: WalkedFile[] = []
   const max = opts.maxFiles ?? Number.MAX_SAFE_INTEGER
-  const seen = new Set<string>()
 
-  async function rec(dir: string, prefix: string): Promise<void> {
-    const real = await fsp.realpath(dir).catch(() => dir)
-    if (seen.has(real.toLowerCase())) return
-    seen.add(real.toLowerCase())
+  async function rec(dir: string, prefix: string, ancestors: readonly string[]): Promise<void> {
+    const real = (await fsp.realpath(dir).catch(() => dir)).toLowerCase()
+    if (ancestors.includes(real)) return
+    const chain = [...ancestors, real]
 
     let entries: fs.Dirent[]
     try {
@@ -49,7 +57,7 @@ export async function walk(root: string, opts: { maxFiles?: number } = {}): Prom
         isFile = !!st?.isFile()
       }
       if (isDir) {
-        await rec(abs, rel)
+        await rec(abs, rel, chain)
       } else if (isFile) {
         const st = await fsp.stat(abs).catch(() => null)
         if (st) out.push({ abs, rel, size: st.size, mtimeMs: st.mtimeMs })
@@ -57,7 +65,7 @@ export async function walk(root: string, opts: { maxFiles?: number } = {}): Prom
     }
   }
 
-  await rec(root, '')
+  await rec(root, '', [])
   return out
 }
 
@@ -188,6 +196,25 @@ export async function copyRecursive(from: string, to: string): Promise<void> {
     await fsp.mkdir(path.dirname(to), { recursive: true })
     await fsp.copyFile(from, to)
   }
+}
+
+/**
+ * A second reference to the same bytes, for when one copy has to be reachable
+ * from two places at once - a displaced file is both the backup that will be
+ * put back and the quarantine entry the user can see. Hardlinks inside one
+ * volume, so mirroring a multi-gigabyte mod folder costs nothing; falls back to
+ * a real copy across volumes.
+ */
+export async function mirrorRecursive(from: string, to: string): Promise<void> {
+  const st = await fsp.stat(from)
+  if (st.isDirectory()) {
+    await fsp.mkdir(to, { recursive: true })
+    for (const e of await fsp.readdir(from, { withFileTypes: true })) {
+      await mirrorRecursive(path.join(from, e.name), path.join(to, e.name))
+    }
+    return
+  }
+  await linkOrCopyFile(from, to)
 }
 
 export function slugify(name: string): string {

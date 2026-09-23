@@ -146,10 +146,20 @@ export function ConflictsScreen(): JSX.Element {
                   {c.relativePath}
                 </span>
                 <Badge
-                  tone={c.kind === 'physical' ? 'warn' : 'accent'}
-                  title={c.kind === 'physical' ? t('conflicts.kindPhysicalTitle') : t('conflicts.kindMergeTitle')}
+                  tone={c.kind === 'modloader' ? 'accent' : 'warn'}
+                  title={
+                    c.kind === 'physical'
+                      ? t('conflicts.kindPhysicalTitle')
+                      : c.kind === 'split-model'
+                        ? t('conflicts.kindSplitModelTitle')
+                        : t('conflicts.kindMergeTitle')
+                  }
                 >
-                  {c.kind === 'physical' ? t('conflicts.kindPhysical') : t('conflicts.kindMerge')}
+                  {c.kind === 'physical'
+                    ? t('conflicts.kindPhysical')
+                    : c.kind === 'split-model'
+                      ? t('conflicts.kindSplitModel')
+                      : t('conflicts.kindMerge')}
                 </Badge>
                 <Badge>{t('conflicts.modsCount', { count: c.claimants.length })}</Badge>
               </header>
@@ -205,7 +215,20 @@ export function ConflictsScreen(): JSX.Element {
                 </div>
               ) : null}
 
-              {!c.winner ? (
+              {/* A split model has no winner BECAUSE each mod wins one half of it -
+                  the opposite of "nothing claims this path", so it gets its own
+                  explanation rather than the vanilla-fallback one. */}
+              {c.kind === 'split-model' ? (
+                <div style={{ padding: '0 13px 10px' }}>
+                  <div className="notice" data-kind="warn">
+                    <span className="notice-mark" />
+                    <div className="col" style={{ gap: 4 }}>
+                      <strong>{t('conflicts.splitModelTitle')}</strong>
+                      <span className="muted">{t('conflicts.splitModelHint')}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : !c.winner ? (
                 <div style={{ padding: '0 13px 10px' }}>
                   <div className="notice">
                     <span className="notice-mark" />

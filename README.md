@@ -44,11 +44,18 @@ mexer nos arquivos originais do jogo. O que falta em volta dele é o resto:
 | --- | --- |
 | **Perfis** | Conjuntos de mods que dá pra trocar. O conteúdo é guardado uma vez e ligado na pasta do jogo por junction/hardlink — trocar de perfil não copia gigabyte nenhum. |
 | **Saves por perfil** | Cada perfil tem os próprios saves, com snapshot. Os saves que já existiam na sua máquina são importados, nunca sobrescritos. |
-| **Instalação automática** | Baixa, verifica, extrai, classifica, mostra o plano arquivo por arquivo e só então aplica. Lê o `Leiame.txt` em Windows-1252 e entende "extraia para a pasta do modloader". |
+| **Instalação automática** | Baixa, verifica, extrai, classifica, mostra o plano arquivo por arquivo e só então aplica. Lê o `Leiame.txt` em Windows-1252, entende "extraia para a pasta do modloader", separa requisitos do texto e extrai o código de ativação (`digite "TAGS"`) pra te dizer como ligar o mod dentro do jogo. Readme que não deu pra entender não instala sozinho: ele avisa e espera você confirmar. |
+| **Variantes e extras** | Pacote com nove presets instala **um** e guarda os outros oito no store — trocar de opção depois não baixa de novo. Pasta `extra`, `bonus`, `(alt - ...)` ou `translations` vira opção do mod pai, não um mod solto no `modloader\`. |
 | **Conflitos** | Parser de verdade de `.txd`, `.ifp`, `.img` e PE. Mostra quem ganha cada arquivo duplicado e deixa mudar a prioridade (1–100, 0 = ignorado). |
+| **Ordem de carga** | Prioridade decide conflito de arquivo, e só isso. A ordem em que os `.asi` carregam é alfabética pelo nome da pasta, com `$` na frente de todos — são duas ideias diferentes, e o app mostra as duas separadas. |
+| **Ligar e desligar sem apagar** | Desligar um mod é o prefixo `". "` (ponto e espaço) que o próprio Mod Loader documenta: a pasta é renomeada, nada é removido, e ligar de volta é outro rename. Pasta que você desligou na mão é entendida do mesmo jeito. |
+| **Dependências** | Grafo por perfil com `requer`, `requer um destes`, `conflita` e `fornece`. Dependência dura não satisfeita **bloqueia** o launch dizendo quem precisa de quê. |
 | **Catálogo** | Índice do MixMods, com o post do autor renderizado como ele escreveu: texto, imagens e vídeo do YouTube. |
-| **Diagnóstico** | Lê o Visualizador de Eventos, agrupa os registros de um mesmo crash, e só consulta o CrashList quando a falha é dentro do `gta_sa.exe`. |
+| **Diagnóstico** | Lê o Visualizador de Eventos e o `modloader.log`, agrupa os registros de um mesmo crash, e só consulta o CrashList quando a falha é dentro do `gta_sa.exe`. |
+| **Checagem antes de jogar** | Achou problema que derruba o jogo, o botão de jogar **recusa** e diz qual é. Tem "Jogar mesmo assim" pra quando você quiser passar por cima. |
+| **Com o jogo aberto, nada é escrito** | Instalar, desinstalar e trocar de perfil recusam enquanto o executável do jogo está rodando. |
 | **Nada é apagado** | Arquivo que sai da pasta do jogo vai pra quarentena com hash conferido. Toda troca de perfil é transação, com backup verificado antes de qualquer remoção, e botão de desfazer. |
+| **Ele aprende** | Layout de instalação, dependências, grupos de variante, receita de pós-instalação, prioridade que você ajustou, redundância e o veredito de cada mod ficam guardados com a fonte e a confiança de cada regra. Correção sua vale mais que qualquer palpite do app. |
 
 ## Instalação
 
@@ -71,10 +78,70 @@ movido ou reescrito na adoção, e as prioridades que você já tinha no
 2. **Crie um perfil** — ou deixe ele adotar o que já está instalado.
 3. **Explore o catálogo**, instale, e veja o plano antes de aplicar.
 4. **Resolva conflitos** na tela de Conflitos, mudando prioridade.
-5. **Jogue.** Se crashar, a tela de Saúde lê o Event Log e tenta dizer o porquê.
+5. **Jogue.** Se a tela de Saúde achou algo que derruba o jogo, o botão de jogar
+   recusa e diz o quê — com "Jogar mesmo assim" do lado. Se crashar, ela lê o
+   `modloader.log` e o Event Log e tenta dizer o porquê.
 
 Antes de trocar de perfil, o botão **Simular** mostra arquivo por arquivo o que
 a troca faria, sem tocar em nada.
+
+Feche o jogo antes de mexer. Instalar, desinstalar e trocar de perfil recusam
+enquanto o executável do jogo está na memória — não é aviso que dá pra clicar
+por cima. A tela de Saúde continua funcionando com o jogo aberto: ela
+diagnostica sem escrever nada, e diz que não conseguiu testar a escrita em vez
+de fingir que testou.
+
+## A troca de perfil é uma transação
+
+Esta parte existe porque, num install real, uma troca de perfil deixou a pasta
+`scripts\` com 1 `.asi` dos 14 que tinha e zerou a `cleo\` inteira — 27
+arquivos — com três arquivos na quarentena e o resto irrecuperável. O que a
+troca faz hoje:
+
+1. **Tira um snapshot** de todo arquivo que ela vai remover ou sobrescrever, e
+   **confere por contagem e por hash**. Se uma cópia não bate, a troca para
+   antes de remover qualquer coisa.
+2. **Manda pra quarentena em vez de apagar.** A quarentena não se limpa sozinha
+   — você esvazia quando quiser.
+3. **Escreve a operação num journal**, com o manifesto do snapshot. "Restaurar
+   estado anterior" põe a pasta do jogo de volta exatamente como o snapshot a
+   encontrou, re-conferindo cada hash na volta.
+4. **Arquivo que nenhum mod gerenciado é dono fica onde está.** Um `.asi` solto
+   que você copiou na mão não é do app, e não some numa troca — nem quando o
+   caminho dele bate com o de um mod que está entrando: aí ele vai pra
+   quarentena antes de o mod assumir o lugar, e volta quando você sair do
+   perfil.
+5. **Depois de materializar, ele confere.** Se algum mod do perfil não resolveu
+   num arquivo de verdade no disco, a troca é um erro que aparece na tela, o
+   perfil não é marcado como ativo, e o restaurar fica à mão.
+
+Desligar um mod não passa por nada disso, porque desligar não remove arquivo: é
+o rename pro prefixo `". "`.
+
+## Quando o jogo crasha
+
+- O endereço vira absoluto **uma vez só**, e só quando quem falhou foi o
+  `gta_sa.exe`. Falha dentro de uma DLL aparece como `módulo+offset` e não é
+  procurada no CrashList — somar a base da imagem num endereço de outro módulo
+  dá um número que não quer dizer nada.
+- O CrashList é lido como a comunidade escreve: uma entrada indexa **todos** os
+  endereços de cada linha `Erro:`, inclusive as que listam vários e as juntadas
+  por `Ou`.
+- O `modloader.log` é lido antes do Event Log, em Windows-1252, com o dump de
+  registradores, o dump de pilha e o backtrace que o próprio handler do Mod
+  Loader escreve — tudo isso aparece na tela.
+- Os endereços que um plugin mangla no jeito do MSVC (`$0FDOJIB@`) são
+  decodificados, o que deixa o app ver **dois mods enganchando o mesmo
+  endereço**.
+- Pra endereço que o CrashList não conhece, tem a **análise profunda**: ela lê a
+  tabela de seções do `gta_sa.exe`, converte o endereço virtual em offset de
+  arquivo e mostra os bytes em volta. É uma janela de hex, **não um
+  desmontador** — ler o x86 dali é com você.
+
+Fora do crash, a tela de Saúde também aponta: `.asi` duplicado nos dois lugares
+(inclusive atravessando junction, comparando por hash), dois limit adjusters
+diferentes ligados ao mesmo tempo, e build instalada mais velha que o release do
+GitHub de onde ela veio (falha de rede vira "não sei", nunca "desatualizado").
 
 ## O índice
 
@@ -120,6 +187,13 @@ npm run index:export -- --db "%APPDATA%\Modao\modao.db" --out index
 - **Diagnóstico de crash é só San Andreas.** O CrashList indexa endereço do
   `gta_sa.exe`. Pra III e VC o app mostra o módulo e o offset, mas não chuta
   causa.
+- **O CrashList que vem junto é um recorte, não a lista da comunidade.** São 14
+  entradas em `resources/seed/CrashList.txt`. O app lê uma cópia maior se ela
+  existir: ponha um `CrashList.txt` completo em `%APPDATA%\Modao\` e ela ganha
+  da que vem no instalador. Não existe ainda um botão que baixe isso pra você.
+- **A análise profunda mostra bytes, não instruções.** Ela converte o endereço
+  virtual em offset de arquivo e abre uma janela de hex em volta. Não tem
+  desmontador embutido.
 - **Só Windows.** macOS e Linux não são alvo.
 - **Sem assinatura de código.** O SmartScreen vai reclamar do instalador. O
   código está todo aqui pra você conferir.
@@ -191,12 +265,33 @@ Profiles whose payloads are stored once and linked into the game folder
 an install pipeline that shows you the file-level plan before it applies it,
 real binary parsers for `.txd`/`.ifp`/`.img`/PE to tell you which mod wins a
 duplicated file, a searchable offline index of MixMods, and crash analysis that
-reads the Windows Event Log — computing `0x400000 + offset` only when the fault
-is actually inside `gta_sa.exe`.
+reads `modloader.log` and the Windows Event Log — computing `0x400000 + offset`
+once, and only when the fault is actually inside `gta_sa.exe`.
 
-Nothing is ever deleted: files leaving the game folder go to quarantine, and
-every profile switch is a transaction with a hash-verified backup taken before
-anything is removed, plus a dry run and an undo.
+A profile switch is a verified transaction: every file it will remove or
+overwrite is snapshotted and checked by count and hash first, the operation is
+journalled, and "Restore previous state" puts the folder back. Nothing is ever
+deleted — files leaving the game folder go to quarantine — and a file in the
+game that no managed mod owns is left alone. Disabling a mod removes nothing
+either: it is Mod Loader's own `". "` folder prefix, a rename both ways. Load
+order (alphabetical, `$` first) is kept distinct from priority, which only
+decides who wins a duplicated file.
+
+Nothing is written to the game folder while the game is running: install,
+uninstall and profile switches refuse outright, and the health run diagnoses
+without writing. A blocking health finding or an unsatisfied hard dependency
+refuses the launch and names the reason, with an override next to it.
+
+The rest of what the field audit added: duplicate-`.asi` detection across
+directory junctions, stacked limit adjusters, builds older than their upstream
+GitHub release, mutually exclusive variant groups that keep every unchosen
+option switchable without re-downloading, `extra`/`bonus`/`translations` folders
+attached to their parent mod, a plugin's own binary strings deciding where its
+sidecar data goes, readmes parsed for instructions, requirements and activation
+codes (an unparseable one must be acknowledged before installing), a
+profile-scoped dependency graph, and a knowledge store that records what it
+learns with a source and a confidence — where your manual correction outranks
+anything the app inferred.
 
 ### The index
 
@@ -213,6 +308,12 @@ Definitive Edition support is partial (no Mod Loader, no priorities, `.pak`
 only); `linkshrink`/`j.gs`/`gtainside`/Mega fall back to a manual download
 dialog; crash diagnosis is San Andreas only; Windows only; the installer is
 unsigned.
+
+The bundled `resources/seed/CrashList.txt` is a 14-entry excerpt, not the
+community list — drop a fuller `CrashList.txt` into `%APPDATA%\Modao\` and it
+takes precedence; there is no in-app download for it yet. Deep crash analysis
+converts the faulting virtual address to a file offset and shows a hex window
+around it: it is not a disassembler.
 
 ### Credits
 

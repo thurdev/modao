@@ -369,6 +369,113 @@ const MIGRATIONS: Migration[] = [
       d.exec('DELETE FROM install_file WHERE install_id NOT IN (SELECT id FROM install)')
       d.exec('DELETE FROM provides WHERE install_id NOT IN (SELECT id FROM install)')
     }
+  },
+  {
+    version: 9,
+    name: 'variant-groups-switchable-without-redownload',
+    up: (d) => {
+      // Every option of a variant group ("(0a- lowest)" … "(5 - very high)")
+      // is snapshotted into the store at install time now, not just the one
+      // chosen. This records which groups an install has and what its current
+      // choice is, so a later switch can find and replace the right files
+      // without ever needing the archive again.
+      d.exec('ALTER TABLE install ADD COLUMN variant_groups_json TEXT')
+    }
+  },
+  {
+    version: 10,
+    name: 'dependency-subject-addressed-by-slug',
+    up: (d) => {
+      // A curated edge's TARGET was always allowed to name a mod the catalogue
+      // has never heard of - `requires_slug` is text, and that is why
+      // "Proper Shaders conflicts ped-spec" works. Its SUBJECT was not: the
+      // loader looked the subject up, found nothing, and dropped the row
+      // without a word. `more-radar-icons requires cleoplus` was lost that way
+      // at every startup, and every ItemFinders edge would have been too.
+      //
+      // Both ends are text now. `mod_id` stays for edges whose subject IS in
+      // the catalogue (it carries the ON DELETE CASCADE), and becomes nullable
+      // so an edge can outlive - or precede - the mod row it is about. Nothing
+      // references `dependency`, so the rebuild is local to this table.
+      d.exec(`
+        CREATE TABLE dependency_rebuilt (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          mod_id INTEGER REFERENCES mod(id) ON DELETE CASCADE,
+          mod_slug TEXT,
+          requires_mod_id INTEGER REFERENCES mod(id) ON DELETE CASCADE,
+          requires_slug TEXT,
+          kind TEXT NOT NULL,
+          version_range TEXT,
+          alt_group TEXT,
+          note TEXT
+        );
+        INSERT INTO dependency_rebuilt
+          (id, mod_id, mod_slug, requires_mod_id, requires_slug, kind, version_range, alt_group, note)
+          SELECT d.id, d.mod_id, (SELECT slug FROM mod WHERE id = d.mod_id),
+                 d.requires_mod_id, d.requires_slug, d.kind, d.version_range, d.alt_group, d.note
+            FROM dependency d;
+        DROP TABLE dependency;
+        ALTER TABLE dependency_rebuilt RENAME TO dependency;
+        CREATE INDEX idx_dependency_mod ON dependency(mod_id);
+        CREATE INDEX idx_dependency_mod_slug ON dependency(mod_slug);
+      `)
+    }
+  },
+  {
+    version: 11,
+    name: 'variant-swap-journalled-like-a-profile-switch',
+    up: (d) => {
+      // Switching a variant moves bytes in the store and rows in the database,
+      // and for a junctioned mod the game folder shows the new bytes the
+      // instant the store has them - before those rows commit. A thrown error
+      // is rolled back in process; a kill or a power cut in that window used to
+      // leave the two disagreeing with nothing to recover from, which is less
+      // than a profile switch has offered since it was journalled.
+      //
+      // A swap now writes a switch_journal row like a switch does. This column
+      // is what marks it as one and carries what the recovery needs: which
+      // install and group, which option it was leaving, which it was going to,
+      // and the exact paths on both sides.
+      d.exec('ALTER TABLE switch_journal ADD COLUMN variant_swap_json TEXT')
+    }
+  },
+  {
+    version: 12,
+    name: 'switch-journal-kind-discriminator',
+    up: (d) => {
+      // Sharing the table with a profile switch was right; sharing it with no
+      // way to tell the two apart was not. A variant swap reaches the same
+      // terminal states, leaves restored_at NULL the same way, and is simply
+      // the newest row - so "Restore previous state" could pick one up,
+      // dematerialise the WHOLE active profile, and put a handful of variant
+      // files in the game root in its place, reporting success.
+      //
+      // The kind is now on the row, and every reader asks for the kind it
+      // means. Rows a previous build wrote are backfilled exactly as
+      // `journalKindOf` reads them: a variant swap is the row that carries a
+      // variant_swap_json payload (nothing before schema 11 could have one),
+      // and everything else was, and still is, a profile switch.
+      d.exec("ALTER TABLE switch_journal ADD COLUMN kind TEXT NOT NULL DEFAULT 'profile-switch'")
+      d.exec("UPDATE switch_journal SET kind = 'variant-swap' WHERE variant_swap_json IS NOT NULL")
+      d.exec('CREATE INDEX IF NOT EXISTS idx_switch_journal_kind ON switch_journal(kind, state)')
+    }
+  },
+  {
+    version: 13,
+    name: 'load-order-is-not-priority',
+    up: (d) => {
+      // Load order and priority are two different Mod Loader mechanisms and the
+      // schema only ever had one of them. Priority (already here, 1-100) decides
+      // who wins a duplicated file. LOAD ORDER decides which .asi hooks the game
+      // first, it is alphabetical by mod folder name, and the only lever on it is
+      // the "$" prefix - which sorts before every letter and digit.
+      //
+      // One flag, because one flag is the whole mechanic: a folder either carries
+      // the prefix or it does not. Everything else about load order is derived
+      // from the folder names themselves (`@shared/loadOrder`), so there is no
+      // second ordering to keep in sync with the disk.
+      d.exec('ALTER TABLE install ADD COLUMN load_first INTEGER NOT NULL DEFAULT 0')
+    }
   }
 ]
 

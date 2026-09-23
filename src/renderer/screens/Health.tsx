@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import type { BisectSession, CrashIncident, CrashReport, HealthCheck } from '@shared/types'
+import type { BisectSession, CrashIncident, CrashReport, DeepAnalysisResult, HealthCheck } from '@shared/types'
 import { UNLOADED_NOTE } from '@shared/crash'
 import { api, relativeTime } from '../api'
-import { useT } from '../lib/i18n'
+import { useT, type TranslateFn } from '../lib/i18n'
 import { useApp } from '../state/store'
 import { Badge, Button, Checkbox, Empty, ErrorNote, Loading, Modal, StatusDot, Tabs, useAsync } from '../components/ui'
 import { Icon } from '../components/icons'
@@ -19,7 +19,10 @@ const STATUS_TONE: Record<HealthCheck['status'], 'ok' | 'warn' | 'danger' | 'neu
   pass: 'ok',
   warn: 'warn',
   fail: 'danger',
-  skip: 'neutral'
+  skip: 'neutral',
+  // "Not checked this run" is neither a pass nor a complaint - it is the
+  // absence of an answer, and it has to read as one.
+  unknown: 'neutral'
 }
 
 export function HealthScreen(): JSX.Element {
@@ -27,12 +30,25 @@ export function HealthScreen(): JSX.Element {
   const { profile, pushToast } = useApp()
   const [tab, setTab] = useState<Tab>('check')
 
+  // With no active profile the pre-launch check still runs. A refused launch
+  // sends the user here, and the game-level findings that refuse it - stream.ini
+  // above all - are just as fatal with no profile pointing at them. This screen
+  // used to be an Empty in that state: no blockers, no reason, and no "Launch
+  // anyway", which is the only override in the app. The profile-scoped tabs have
+  // nothing to show and say so.
   if (!profile) {
     return (
-      <Empty
-        title={t('health.noProfile')}
-        hint={t('health.noProfileHint')}
-      />
+      <>
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div className="card-body" style={{ paddingTop: 12, paddingBottom: 12 }}>
+            <strong>{t('health.noProfile')}</strong>
+            <p className="muted" style={{ margin: '6px 0 0' }}>
+              {t('health.noProfileChecks')}
+            </p>
+          </div>
+        </div>
+        <PreLaunch profileId={null} pushToast={pushToast} />
+      </>
     )
   }
 
@@ -63,10 +79,26 @@ export function HealthScreen(): JSX.Element {
 
 // ───────────────────────────── pre-launch ─────────────────────────────
 
-function PreLaunch(props: { profileId: number; pushToast: ToastFn }): JSX.Element {
+function PreLaunch(props: { profileId: number | null; pushToast: ToastFn }): JSX.Element {
   const t = useT()
   const [fixingStream, setFixingStream] = useState(false)
+  const [reuniting, setReuniting] = useState(false)
+  const [launching, setLaunching] = useState(false)
   const report = useAsync(() => api.health(props.profileId), [props.profileId])
+
+  // The override lives here rather than next to the Play button: it is only
+  // offered to someone who is looking at what refused and why.
+  async function launchAnyway(): Promise<void> {
+    setLaunching(true)
+    try {
+      const r = await api.launch(true)
+      props.pushToast(r.launched ? 'success' : 'error', r.message)
+    } catch (e) {
+      props.pushToast('error', (e as Error).message)
+    } finally {
+      setLaunching(false)
+    }
+  }
 
   if (report.error) return <ErrorNote message={report.error} onRetry={report.reload} />
   if (report.loading || !report.data) return <Loading label={t('health.running')} />
@@ -103,6 +135,11 @@ function PreLaunch(props: { profileId: number; pushToast: ToastFn }): JSX.Elemen
           <p style={{ margin: 0 }} className="muted">
             {verdict}
           </p>
+          {r.ok ? null : (
+            <p className="faint" style={{ margin: '7px 0 0' }}>
+              {t('health.launchBlockedHint')}
+            </p>
+          )}
           <div className="row wrap faint" style={{ marginTop: 7 }}>
             <span className="mono ellipsis" title={r.gamePath}>
               {r.gamePath}
@@ -110,6 +147,13 @@ function PreLaunch(props: { profileId: number; pushToast: ToastFn }): JSX.Elemen
             <span>·</span>
             <span>{t('health.checkedAt', { when: relativeTime(r.generatedAt, t) })}</span>
           </div>
+          {r.ok ? null : (
+            <div className="row" style={{ marginTop: 10 }}>
+              <Button size="sm" disabled={launching} onClick={launchAnyway}>
+                {launching ? t('health.launching') : t('health.launchAnyway')}
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -155,6 +199,28 @@ function PreLaunch(props: { profileId: number; pushToast: ToastFn }): JSX.Elemen
                   </Button>
                 </span>
               ) : null}
+              {c.id === 'orphan-config' && c.status === 'warn' ? (
+                <span className="row">
+                  <Button
+                    size="sm"
+                    disabled={reuniting}
+                    onClick={async () => {
+                      setReuniting(true)
+                      try {
+                        const r = await api.reuniteOrphans(props.profileId)
+                        for (const why of r.refused) props.pushToast('info', why)
+                        report.reload()
+                      } catch (e) {
+                        props.pushToast('error', (e as Error).message)
+                      } finally {
+                        setReuniting(false)
+                      }
+                    }}
+                  >
+                    {reuniting ? t('health.reuniting') : t('health.reuniteOrphans')}
+                  </Button>
+                </span>
+              ) : null}
             </div>
           </motion.div>
         ))}
@@ -174,6 +240,23 @@ function Crashes(props: { profileId: number; pushToast: ToastFn }): JSX.Element 
   const [manualResult, setManualResult] = useState<{ address: string; cause: string | null; solution: string | null } | null>(
     null
   )
+  const [deepLoading, setDeepLoading] = useState(false)
+  const [deepResults, setDeepResults] = useState<Record<number, DeepAnalysisResult>>({})
+
+  // Only offered when CrashList had nothing to say: this is what makes a miss
+  // read as "not in the bundled list, here is a hex window" instead of a dead end.
+  async function runDeepAnalysis(crash: CrashReport): Promise<void> {
+    if (!crash.crashAddress) return
+    setDeepLoading(true)
+    try {
+      const result = await api.deepAnalyze(crash.crashAddress)
+      setDeepResults((prev) => ({ ...prev, [crash.id]: result }))
+    } catch (e) {
+      props.pushToast('error', (e as Error).message)
+    } finally {
+      setDeepLoading(false)
+    }
+  }
 
   async function scan(): Promise<void> {
     setScanning(true)
@@ -365,7 +448,9 @@ function Crashes(props: { profileId: number; pushToast: ToastFn }): JSX.Element 
               <dt>{detail.primary.addressKind === 'exe' ? t('crashes.crashAddress') : t('crashes.faultLocation')}</dt>
               <dd className="mono">
                 {detail.primary.crashAddress || '—'}
-                {detail.primary.addressKind === 'exe' ? ' (0x400000 + fault offset)' : ''}
+                {/* Only true when there WAS a fault offset. A modloader.log crash
+                    reports the absolute address directly and nothing was added. */}
+                {detail.primary.addressKind === 'exe' && detail.primary.faultOffset ? ' (0x400000 + fault offset)' : ''}
               </dd>
             </dl>
 
@@ -384,6 +469,22 @@ function Crashes(props: { profileId: number; pushToast: ToastFn }): JSX.Element 
                     <p className="muted">{detail.primary.matchedSolution}</p>
                   </>
                 ) : null}
+                {!detail.primary.matchedCause ? (
+                  deepResults[detail.primary.id] ? (
+                    <DeepAnalysisView result={deepResults[detail.primary.id]} t={t} />
+                  ) : (
+                    <div style={{ marginTop: 8 }}>
+                      <Button
+                        size="sm"
+                        variant="quiet"
+                        disabled={deepLoading}
+                        onClick={() => void runDeepAnalysis(detail.primary)}
+                      >
+                        {deepLoading ? t('crashes.deepAnalyzing') : t('crashes.deepAnalyze')}
+                      </Button>
+                    </div>
+                  )
+                ) : null}
               </>
             ) : (
               <>
@@ -391,6 +492,10 @@ function Crashes(props: { profileId: number; pushToast: ToastFn }): JSX.Element 
                 <p className="muted">{detail.primary.addressNote}</p>
               </>
             )}
+
+            {detail.primary.processId === 'modloader.log' ? (
+              <ModLoaderCrashDetail raw={detail.primary.raw} t={t} />
+            ) : null}
 
             {detail.related.length ? (
               <>
@@ -413,6 +518,119 @@ function Crashes(props: { profileId: number; pushToast: ToastFn }): JSX.Element 
           </Modal>
         ) : null}
       </AnimatePresence>
+    </>
+  )
+}
+
+/**
+ * The result of "deep analysis": a hex window around the crash address, not a
+ * disassembly - Modão has no x86 decoder and bundles neither Python nor
+ * capstone. `result.note` says so plainly (or explains why there is nothing
+ * to show, when the address falls in no section of the exe).
+ */
+function DeepAnalysisView(props: { result: DeepAnalysisResult; t: TranslateFn }): JSX.Element {
+  const { result, t } = props
+  return (
+    <div className="col" style={{ marginTop: 8, gap: 6 }}>
+      {result.section !== null && result.fileOffset !== null ? (
+        <div className="row wrap faint" style={{ gap: 12 }}>
+          <span>{t('crashes.deepAnalysisSection', { section: result.section })}</span>
+          <span>{t('crashes.deepAnalysisOffset', { offset: result.fileOffset.toString(16).toUpperCase() })}</span>
+        </div>
+      ) : null}
+      {result.hex.length ? (
+        <>
+          <strong className="faint">{t('crashes.deepAnalysisHexHeading')}</strong>
+          <pre className="pre mono">{result.hex.join('\n')}</pre>
+        </>
+      ) : null}
+      <p className="faint">{result.note}</p>
+    </div>
+  )
+}
+
+/**
+ * scanModLoaderCrash (src/main/diagnostics/eventlog.ts) writes the register
+ * dump, stack dump and backtrace it parsed out of modloader.log into the
+ * crash_report row's `raw` column as plain text, under headings it controls
+ * itself ("Registers:", "Stack dump:", "Backtrace:"). This reads that text
+ * back into the same structure for display - the parsing already happened in
+ * modloaderLog.ts; this just stops throwing the structure away before the
+ * user sees it.
+ */
+function parseModLoaderDetail(raw: string): { registers: { name: string; value: string }[]; stack: string[]; backtrace: string[] } {
+  const registers: { name: string; value: string }[] = []
+  const stack: string[] = []
+  const backtrace: string[] = []
+  let section: 'registers' | 'stack' | 'backtrace' | null = null
+
+  for (const line of raw.split('\n')) {
+    if (line === 'Registers:') {
+      section = 'registers'
+      continue
+    }
+    if (line === 'Stack dump:') {
+      section = 'stack'
+      continue
+    }
+    if (line === 'Backtrace:') {
+      section = 'backtrace'
+      continue
+    }
+    if (!line) continue
+
+    if (section === 'registers') {
+      for (const pair of line.split(/\s+/)) {
+        const [name, value] = pair.split('=')
+        if (name && value) registers.push({ name, value })
+      }
+      section = null // the register line is exactly one line
+    } else if (section === 'stack') {
+      stack.push(line)
+    } else if (section === 'backtrace') {
+      backtrace.push(line)
+    }
+  }
+  return { registers, stack, backtrace }
+}
+
+/**
+ * What Mod Loader's own crash handler captured, laid out as its own readable
+ * blocks rather than left inside the raw-event text. The raw blob below this
+ * still carries the same text in full - this is an addition, not a replacement.
+ */
+function ModLoaderCrashDetail(props: { raw: string; t: TranslateFn }): JSX.Element | null {
+  const { raw, t } = props
+  const parsed = parseModLoaderDetail(raw)
+  if (!parsed.registers.length && !parsed.stack.length && !parsed.backtrace.length) return null
+
+  return (
+    <>
+      <hr className="divider" />
+      {parsed.registers.length ? (
+        <>
+          <h3>{t('crashes.registers')}</h3>
+          <div className="row wrap mono" style={{ gap: '4px 16px', marginBottom: 8 }}>
+            {parsed.registers.map((r) => (
+              <span key={r.name}>
+                <strong>{r.name}</strong>={r.value}
+              </span>
+            ))}
+          </div>
+        </>
+      ) : null}
+      {parsed.backtrace.length ? (
+        <>
+          <h3>{t('crashes.backtrace')}</h3>
+          <pre className="pre mono">{parsed.backtrace.join('\n')}</pre>
+        </>
+      ) : null}
+      {parsed.stack.length ? (
+        <>
+          <h3>{t('crashes.stackDump')}</h3>
+          <pre className="pre mono">{parsed.stack.join('\n')}</pre>
+        </>
+      ) : null}
     </>
   )
 }
@@ -505,6 +723,26 @@ function Bisect(props: { profileId: number; pushToast: ToastFn }): JSX.Element {
                 </div>
               </motion.div>
             </motion.div>
+
+            {active.outdated?.length ? (
+              <div className="notice" data-kind="warn" style={{ marginBottom: 12 }}>
+                <span className="notice-mark" />
+                <div className="col" style={{ gap: 4 }}>
+                  <strong>{t('health.bisectOutdatedTitle', { count: active.outdated.length })}</strong>
+                  <span className="faint">{t('health.bisectOutdatedDetail')}</span>
+                  {active.outdated.map((o) => (
+                    <span className="faint" key={o.installId}>
+                      {t('health.bisectOutdatedLine', {
+                        title: o.title,
+                        installed: o.installedBytes.toLocaleString(),
+                        latest: o.upstreamBytes === null ? '?' : o.upstreamBytes.toLocaleString(),
+                        repo: o.repo
+                      })}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             <div className="notice" data-kind="warn" style={{ marginBottom: 12 }}>
               <span className="notice-mark" />

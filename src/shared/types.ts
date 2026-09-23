@@ -1,5 +1,8 @@
 import type { Language } from './i18n'
 import type { GameKind } from './games'
+import type { OutdatedBuild } from './upstream'
+import type { ActivationCode } from './activation'
+import type { SwitchJournalKind } from './switchJournal'
 /** Shared domain types. Imported by main, preload and renderer. */
 
 export type DestinationClass =
@@ -186,12 +189,38 @@ export interface InstalledMod {
   variantChoice: string | null
   enabled: boolean
   priority: number
+  /**
+   * The mod folder this install owns in modloader\, canonical - without the
+   * ". " disable prefix or the "$" load-first prefix it may wear on disk.
+   */
+  folderName: string | null
+  /**
+   * The folder is spelled with a leading "$", so its .asi hooks the game before
+   * the others. LOAD ORDER, not priority: it decides nothing about who wins a
+   * duplicated file, and priority decides nothing about load order.
+   */
+  loadFirst: boolean
+  /**
+   * 1-based position in Mod Loader's alphabetical .asi load order, or null when
+   * Mod Loader does not load this folder at all. Derived from the folder names,
+   * never from priority.
+   */
+  loadOrderRank: number | null
   fileCount: number
   size: number
   conflictCount: number
   updateAvailable: boolean
   latestVersionLabel: string | null
   subMods: SubMod[]
+  /** Mutually exclusive options recorded at install time, switchable without re-downloading. */
+  variantGroups: InstalledVariantGroup[]
+}
+
+export interface InstalledVariantGroup {
+  id: string
+  question: string
+  chosenOptionId: string
+  options: { id: string; label: string }[]
 }
 
 /** One archive entry classified into a destination. */
@@ -222,10 +251,31 @@ export interface VariantGroup {
   id: string
   /** Path of the parent folder containing the mutually exclusive siblings. */
   parentPath: string
+  /**
+   * Set when the parent folder is itself a parenthesised config container
+   * ("(configurações)") whose options duplicate a sibling mod's own config
+   * filenames. The chosen option merges into this mod's own folder instead of
+   * becoming a top-level mod of its own.
+   */
+  attachedToPath: string | null
   kind: 'style' | 'resolution' | 'language' | 'game' | 'extra' | 'generic'
   question: string
   hint: string | null
   options: VariantOption[]
+}
+
+/**
+ * An optional folder that means nothing installed on its own - "Extra",
+ * "(bonus)", "translations" - but that a user may still want: merged into the
+ * mod it belongs to, or installed as its own higher-priority mod.
+ */
+export interface AddOn {
+  id: string
+  /** Path inside the archive. */
+  path: string
+  label: string
+  fileCount: number
+  size: number
 }
 
 /**
@@ -260,6 +310,8 @@ export interface ReadmeParse {
   requirementUrls: string[]
   /** Requirements and conflicts the author stated in prose. */
   declared: DeclaredDependency[]
+  /** Codes the author says to type in-game to turn the mod on. */
+  activationCodes: ActivationCode[]
   confidence: number
 }
 
@@ -274,13 +326,25 @@ export interface DependencyNode {
   modId: number | null
   slug: string
   title: string
-  kind: 'requires' | 'conflicts' | 'alt'
+  /**
+   * `provides` is a mod shipping a file others may need or may also ship -
+   * VehFuncs and gsx.asi. It was seeded before it was modelled, and an
+   * unmodelled kind fell through to the requires branch, so the provision was
+   * reported as a missing dependency named after the file.
+   */
+  kind: 'requires' | 'conflicts' | 'alt' | 'provides'
   versionRange: string | null
   satisfied: boolean
   /** For 'alt' groups: the alternatives that satisfy the requirement. */
   alternatives?: { slug: string; title: string; satisfied: boolean }[]
   resolution: 'already-installed' | 'will-install' | 'missing' | 'blocking' | 'ok'
   note: string | null
+  /**
+   * The installed mod this edge belongs to. A launch refusal has to name what
+   * needs what, and "SilentPatch is missing" does not say who is missing it.
+   */
+  requiredBy?: string
+  requiredBySlug?: string
 }
 
 export interface InstallPlan {
@@ -294,6 +358,8 @@ export interface InstallPlan {
   extractRoot: string
   readmes: ReadmeParse[]
   variants: VariantGroup[]
+  /** Optional folders offered beside the plan - enable to merge or install separately. */
+  addOns: AddOn[]
   files: PlannedFile[]
   dependencies: DependencyNode[]
   /**
@@ -324,7 +390,15 @@ export interface ConflictClaimant {
 
 export interface FileConflict {
   relativePath: string
-  kind: 'modloader' | 'physical'
+  /**
+   * 'physical' - both mods wrote the same file on disk, one over the other.
+   * 'modloader' - both files exist and Mod Loader picks one at load time.
+   * 'split-model' - not a duplicated path at all: `<name>.dff` and
+   * `<name>.txd` resolve to DIFFERENT mods, which is what a white or
+   * invisible car or ped is. Same fix, same priority control (see
+   * `@shared/splitModels`).
+   */
+  kind: 'modloader' | 'physical' | 'split-model'
   claimants: ConflictClaimant[]
   winner: ConflictClaimant | null
   binaryNotes: string[]
@@ -392,7 +466,14 @@ export interface PeInfo {
 export interface HealthCheck {
   id: string
   title: string
-  status: 'pass' | 'warn' | 'fail' | 'skip'
+  /**
+   * `skip` means the check does not apply here; `unknown` means it applies and
+   * could not be answered this run - a probe deliberately not taken because the
+   * game is up, say. The two must not be one status: presenting a never-taken
+   * probe as a clean `pass` is what made write access read as fine while the
+   * game held the folder.
+   */
+  status: 'pass' | 'warn' | 'fail' | 'skip' | 'unknown'
   summary: string
   detail?: string
   items?: string[]
@@ -400,7 +481,8 @@ export interface HealthCheck {
 
 export interface HealthReport {
   generatedAt: string
-  profileId: number
+  /** null when no profile is active - the game-level checks still ran. */
+  profileId: number | null
   gamePath: string
   checks: HealthCheck[]
   ok: boolean
@@ -478,6 +560,12 @@ export interface BisectSession {
   knownBad: number[]
   culprit: number | null
   history: { step: number; tested: number[]; result: 'good' | 'bad' }[]
+  /**
+   * Mods whose installed binary is older than the newest upstream release, as
+   * the outdated-build check found them before the first halving. Optional: a
+   * session started before this check existed simply carries nothing.
+   */
+  outdated?: OutdatedBuild[]
 }
 
 export interface LogEntry {
@@ -581,8 +669,14 @@ export interface SwitchPlan {
   incoming: SwitchFilePlan[]
   toIngest: { installId: number; label: string; files: number }[]
   unresolved: { installId: number; label: string; reason: string }[]
-  /** Files in the game folder no managed mod claims. A switch never touches these. */
+  /** Files in the game folder no managed mod claims. A switch leaves these alone. */
   unmanaged: string[]
+  /**
+   * The subset of `unmanaged` whose path the incoming profile writes, so it
+   * cannot be left in place. Each one is snapshotted with the rest of the
+   * switch and copied to quarantine before the mod takes the path.
+   */
+  willBeOverwritten: string[]
   iniPath: string
   iniPriorities: Record<string, number>
   totalBytes: number
@@ -604,13 +698,44 @@ export interface SwitchVerification {
   iniStaleKeys: string[]
   unresolvedDependencies: string[]
   problems: string[]
+  /**
+   * The subset of `problems` that means the game folder does not hold what the
+   * profile says it holds. A switch with any of these is not a switch: it is
+   * refused, the profile is never recorded active, and the user is offered the
+   * rollback. The rest of `problems` - an unresolved dependency, say - is
+   * advice about mods that ARE in place, and never blocks.
+   */
+  blockingProblems: string[]
   checkedAt: string
 }
 
 export type SwitchState = 'snapshotted' | 'applied' | 'verified' | 'failed' | 'restored'
 
+/**
+ * What a variant swap's `switch_journal` row carries on top of the snapshot
+ * every switch keeps: which install and group it was switching, which option
+ * it was leaving and which it was going to, and the exact paths on both
+ * sides. This is what a stale journal's boot-time recovery reads before it
+ * touches anything - the install row (never caught mid-write, by SQLite's own
+ * atomicity) says which option won, and this record says what to do about it.
+ */
+export interface VariantSwapRecord {
+  installId: number
+  groupId: string
+  fromOptionId: string
+  toOptionId: string
+  outgoingTargets: string[]
+  incomingTargets: string[]
+}
+
 export interface SwitchJournal {
   id: number
+  /**
+   * Which operation wrote this row. Only a 'profile-switch' is a previous
+   * state of the game folder; a 'variant-swap' is a few files inside one
+   * mod's store folder and must never be offered as one.
+   */
+  kind: SwitchJournalKind
   startedAt: string
   completedAt: string | null
   fromProfileId: number | null
@@ -639,9 +764,46 @@ export interface ModLoaderCrash {
   occurredAt: string | null
   reason: string
   address: string | null
+  /**
+   * Mod Loader's handler records the address the process faulted at, which is
+   * already absolute - the image base is in it. Marked so no caller can mistake
+   * it for a fault offset and base it a second time.
+   */
+  addressIsAbsolute: true
   module: string | null
   backtrace: string[]
   lastStreamedFile: string | null
+  /**
+   * Name -> value, exactly as Mod Loader's own crash handler printed them
+   * ("ECX" -> "0xFFFFFFFF"). Empty when the dump carried no register block.
+   */
+  registers: Record<string, string>
+  /** The raw stack-dump lines, in the order the handler wrote them. */
+  stack: string[]
+}
+
+/** One row of a PE section table: what a VA-to-file-offset conversion needs. */
+export interface PeSection {
+  name: string
+  virtualAddress: number
+  virtualSize: number
+  rawSize: number
+  rawPointer: number
+}
+
+/** The result of the app's "deep analysis" action on a crash address that CrashList could not answer for. */
+export interface DeepAnalysisResult {
+  address: string
+  /** Null when the address falls in no section of the exe as read from disk. */
+  fileOffset: number | null
+  section: string | null
+  /** Formatted hex-dump lines around the address. Empty when fileOffset is null. */
+  hex: string[]
+  /**
+   * Always present: explains what this is (a hex window, not a disassembly)
+   * or why there is nothing to show.
+   */
+  note: string
 }
 
 export interface ModLoaderLogReport {

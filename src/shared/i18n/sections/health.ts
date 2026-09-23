@@ -9,7 +9,7 @@
 export const health = {
   pt: {
     tabCheck: 'Checagem antes de jogar',
-    status: { pass: 'ok', warn: 'aviso', fail: 'falha', skip: 'pulado' },
+    status: { pass: 'ok', warn: 'aviso', fail: 'falha', skip: 'pulado', unknown: 'não checado' },
     verdictClean: 'Passou em tudo. Este perfil está pronto para jogar.',
     verdictWarned_one: 'Nada impede de jogar, mas 1 checagem achou algo que vale ler antes.',
     verdictWarned_other: 'Nada impede de jogar, mas {count} checagens acharam algo que vale ler antes.',
@@ -23,8 +23,15 @@ export const health = {
     failCount: '{count} falha(s)',
     skippedCount: '{count} pulada(s)',
     rerun: 'Checar de novo',
+    launchBlockedHint:
+      'O botão de jogar fica recusando enquanto uma falha estiver aqui: o que ela descreve é um crash que já aconteceu com outra pessoa. Resolva, ou abra assim mesmo por sua conta.',
+    launchAnyway: 'Abrir o jogo assim mesmo',
+    launching: 'Abrindo…',
     fixStreaming: 'Gravar 2048 MB (com backup)',
     fixing: 'Gravando…',
+    reuniteOrphans: 'Devolver os plugins para a pasta ASI',
+    reuniting: 'Movendo…',
+    reunited: '{moved} plugin(s) de volta na pasta ASI, {quarantined} config(s) em quarentena. Nada foi apagado.',
     checkedAt: 'checado {when}',
     tabCrashes: 'Histórico de crashes',
     tabBisect: 'Bisecção guiada',
@@ -32,6 +39,8 @@ export const health = {
     noProfile: 'Nenhum perfil ativo',
     noProfileHint:
       'A Saúde roda em cima dos mods que um perfil tem ligados. Ative um na tela de Perfis para checar, ler os crashes ou bisseccionar.',
+    noProfileChecks:
+      'Sem perfil ativo, as checagens que dependem de um perfil ficam de fora — mas as da instalação continuam valendo, e elas é que podem barrar o jogo. O que estiver barrando aparece abaixo, junto com o "Abrir mesmo assim". Ative um perfil na tela de Perfis para ver o resto.',
     running: 'Rodando as checagens na pasta do jogo…',
     crashIntro:
       'Os registros de crash vêm do Visualizador de Eventos do Windows — canal Application, origem "Application Error", filtrando gta_sa.exe. Registros escritos por um mesmo processo que morreu aparecem como um incidente só. Quando a falha é dentro do gta_sa.exe, o endereço é 0x400000 + o deslocamento da falha, e é consultado no CrashList.txt que vem junto; quando é dentro de uma DLL, o deslocamento é relativo àquela DLL, então aparece como módulo+deslocamento e nada é consultado — o CrashList indexa só o executável. Travar sem fechar não gera registro de exceção nenhum: essa ausência já é o diagnóstico, e aponta para deadlock ou loop infinito, não para um endereço.',
@@ -59,6 +68,10 @@ export const health = {
     bisectLoaded_one: '{count} mod está carregado nesta rodada.',
     bisectLoaded_other: '{count} mods estão carregados nesta rodada.',
     bisectNoFiles: 'Nada é movido: o Modão usa o próprio ExcludeAllMods do Mod Loader, então as pastas ficam onde estão.',
+    bisectOutdatedTitle: 'Descarte primeiro: {count} mod(s) com build desatualizada',
+    bisectOutdatedDetail:
+      'Uma build velha custa um download; uma bissecção custa uma noite. Atualize estes antes de acreditar em qualquer resultado da bissecção.',
+    bisectOutdatedLine: '{title}: instalado {installed} bytes, a release mais recente de {repo} tem {latest}',
     bisectCareTitle: 'Três coisas que o método exige',
     bisectCareMany: 'Mais de um mod pode ser culpado ao mesmo tempo. Achar um não garante que acabou.',
     bisectCareAddress:
@@ -77,7 +90,7 @@ export const health = {
   },
   en: {
     tabCheck: 'Pre-launch check',
-    status: { pass: 'pass', warn: 'warn', fail: 'fail', skip: 'skipped' },
+    status: { pass: 'pass', warn: 'warn', fail: 'fail', skip: 'skipped', unknown: 'not checked' },
     verdictClean: 'Every check passed. This profile is ready to launch.',
     verdictWarned_one: 'Nothing blocks a launch, but 1 check found something worth reading before you play.',
     verdictWarned_other: 'Nothing blocks a launch, but {count} checks found something worth reading before you play.',
@@ -91,8 +104,15 @@ export const health = {
     failCount: '{count} fail',
     skippedCount: '{count} skipped',
     rerun: 'Re-run',
+    launchBlockedHint:
+      'The Play button keeps refusing while a failure stands here: what it describes is a crash that already happened to somebody else. Fix it, or open the game anyway at your own risk.',
+    launchAnyway: 'Launch anyway',
+    launching: 'Launching…',
     fixStreaming: 'Write 2048 MB (keeping a backup)',
     fixing: 'Writing…',
+    reuniteOrphans: 'Move the plugins back to the ASI directory',
+    reuniting: 'Moving…',
+    reunited: '{moved} plugin(s) back in the ASI directory, {quarantined} config(s) quarantined. Nothing was deleted.',
     checkedAt: 'checked {when}',
     tabCrashes: 'Crash history',
     tabBisect: 'Guided bisect',
@@ -100,6 +120,8 @@ export const health = {
     noProfile: 'No active profile',
     noProfileHint:
       'Health runs against the mods a profile has enabled. Activate one on the Profiles screen to check it, read its crashes or bisect it.',
+    noProfileChecks:
+      'With no profile active the profile-scoped checks stand down - but the ones about this game install still run, and those are the ones that can refuse a launch. Whatever is blocking is listed below, with "Launch anyway" beside it. Activate a profile on the Profiles screen for the rest.',
     running: 'Running checks against the game folder…',
     crashIntro:
       'Crash records come from the Windows Event Log — the Application channel, source "Application Error", matching gta_sa.exe. Records written by one dying process are shown as a single incident. When the fault is inside gta_sa.exe the crash address is 0x400000 plus the fault offset and is looked up in the bundled CrashList.txt; when it is inside a DLL the offset is relative to that DLL, so it is shown as module+offset and no lookup is attempted — CrashList indexes the executable only. A hang leaves no exception record at all: that absence is itself the diagnosis, and points at a deadlock or an infinite loop rather than a faulting address.',
@@ -127,6 +149,10 @@ export const health = {
     bisectLoaded_one: '{count} mod is loaded for this run.',
     bisectLoaded_other: '{count} mods are loaded for this run.',
     bisectNoFiles: "Nothing is moved: Modão uses Mod Loader's own ExcludeAllMods, so the folders stay where they are.",
+    bisectOutdatedTitle: 'Rule these out first: {count} mod(s) on an outdated build',
+    bisectOutdatedDetail:
+      'An old build costs one download; a bisect costs an evening. Update these before trusting any bisect result.',
+    bisectOutdatedLine: '{title}: installed at {installed} bytes, the newest {repo} release is {latest}',
     bisectCareTitle: 'Three things the method demands',
     bisectCareMany: 'More than one mod can be guilty at the same time. Finding one does not mean you are done.',
     bisectCareAddress:

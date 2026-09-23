@@ -2,9 +2,11 @@ import path from 'node:path'
 import fsp from 'node:fs/promises'
 import { getDb } from '../db'
 import { Paths } from '../util/paths'
-import { copyRecursive, exists, isDirectory, isLink, linkOrCopyFile, sha256File } from '../util/fsx'
+import { copyRecursive, exists, isDirectory, isLink, linkOrCopyFile, sha256File, walk } from '../util/fsx'
 import { requireActiveGame } from '../game/detect'
 import { storeDir, storeKey } from '../store/contentStore'
+import { existsUnderAnySpelling, resolveSpelledPath } from '../store/folderSpelling'
+import { spellFolderName } from '@shared/loadOrder'
 import type {
   SnapshotEntry,
   SwitchFilePlan,
@@ -13,6 +15,7 @@ import type {
   SwitchState,
   SwitchVerification
 } from '@shared/types'
+import { isRestorableProfileSwitch, journalKindOf, type SwitchJournalKind } from '@shared/switchJournal'
 
 /**
  * A profile switch removes files from a folder full of the user's own work, so
@@ -32,6 +35,8 @@ interface InstallRow {
   folder_name: string | null
   enabled: number
   priority: number
+  /** The folder wears the "$" load-first prefix. Load order, not priority. */
+  load_first: number
   destination_class: string
 }
 
@@ -144,6 +149,12 @@ export async function planSwitch(toProfileId: number): Promise<SwitchPlan> {
   // appear, with nothing said about it.
   const incoming: SwitchFilePlan[] = []
   const unresolved: SwitchPlan['unresolved'] = []
+  // Split by where the bytes are, because that is what decides whether a file
+  // sitting at an incoming path belongs to Modão or to the user. An adopted
+  // install IS the file in the game folder. A store-backed install is about to
+  // put its own copy over whatever is there.
+  const adoptedInPlace = new Set<string>()
+  const fromStore = new Set<string>()
   const targetRows = installsOf(to.id)
   const targetFiles = filesOfProfile(to.id)
   const filesByInstall = new Map<number, FileRow[]>()
@@ -161,7 +172,7 @@ export async function planSwitch(toProfileId: number): Promise<SwitchPlan> {
       continue
     }
     if (!row.store_key) {
-      const live = files.filter((f) => exists(path.join(game.path, f.relative_path)))
+      const live = files.filter((f) => existsUnderAnySpelling(game.path, f.relative_path))
       if (live.length === 0) {
         unresolved.push({
           installId: row.id,
@@ -171,6 +182,7 @@ export async function planSwitch(toProfileId: number): Promise<SwitchPlan> {
         continue
       }
       for (const f of live) {
+        adoptedInPlace.add(f.relative_path.toLowerCase())
         incoming.push({
           relativePath: f.relative_path,
           action: 'materialise',
@@ -200,6 +212,7 @@ export async function planSwitch(toProfileId: number): Promise<SwitchPlan> {
     }
     for (const f of files) {
       if (missing.includes(f)) continue
+      fromStore.add(f.relative_path.toLowerCase())
       incoming.push({
         relativePath: f.relative_path,
         action: 'materialise',
@@ -211,7 +224,19 @@ export async function planSwitch(toProfileId: number): Promise<SwitchPlan> {
     }
   }
 
-  const unmanaged = await unmanagedFiles(game.path, new Set([...outgoing, ...incoming].map((p) => p.relativePath.toLowerCase())))
+  // What Modão can account for: the files the outgoing profile put there, and
+  // the files an adopted incoming install literally IS. Everything else loose
+  // in scripts\ and cleo\ is the user's.
+  //
+  // The incoming profile's store-backed targets are deliberately NOT in here.
+  // Folding them in hid the one case that matters: a file of the user's at a
+  // path the incoming profile is about to write. It was filtered out of the
+  // report and then destroyed without ever being named.
+  const known = new Set([...outgoing.map((p) => p.relativePath.toLowerCase()), ...adoptedInPlace])
+  const loose = await unmanagedFiles(game.path, known)
+  const displacedFolders = await unmanagedFolderFiles(game.path, known, fromStore)
+  const unmanaged = [...loose, ...displacedFolders].sort()
+  const willBeOverwritten = [...loose.filter((rel) => fromStore.has(rel.toLowerCase())), ...displacedFolders].sort()
 
   const priorities: Record<string, number> = {}
   for (const row of targetRows) {
@@ -229,6 +254,7 @@ export async function planSwitch(toProfileId: number): Promise<SwitchPlan> {
     toIngest,
     unresolved,
     unmanaged,
+    willBeOverwritten,
     iniPath: path.join(game.path, iniRelativePath()),
     iniPriorities: priorities,
     totalBytes
@@ -239,6 +265,14 @@ export async function planSwitch(toProfileId: number): Promise<SwitchPlan> {
  * Loose plugins in the game folder that no managed install claims. A switch
  * leaves these exactly where they are: they are the user's, Modão did not put
  * them there, and removing them is what destroyed an install once already.
+ *
+ * The one exception is a path the incoming profile itself writes, which cannot
+ * be left in place. Those come back in `willBeOverwritten` as well as here:
+ * they are snapshotted with the rest of the switch and copied to quarantine
+ * before the mod takes the path, so the file survives either way.
+ *
+ * This covers loose plugins; `unmanagedFolderFiles` covers a real
+ * `modloader\<Folder>\` an incoming junction would take the place of.
  */
 async function unmanagedFiles(gamePath: string, known: Set<string>): Promise<string[]> {
   const out: string[] = []
@@ -252,6 +286,44 @@ async function unmanagedFiles(gamePath: string, known: Set<string>): Promise<str
     for (const e of await fsp.readdir(d.dir, { withFileTypes: true })) {
       if (!e.isFile() || !d.match.test(e.name)) continue
       const rel = path.relative(gamePath, path.join(d.dir, e.name)).replace(/\\/g, '/')
+      if (known.has(rel.toLowerCase())) continue
+      out.push(rel)
+    }
+  }
+  return out.sort()
+}
+
+/**
+ * The contents of a real `modloader\<Folder>\` that an incoming junction is
+ * about to take the place of.
+ *
+ * A mod folder Modão materialised is a junction, and dropping a junction
+ * destroys nothing - the payload is in the store. A REAL directory there is
+ * either a folder some managed install claims, in which case `known` holds
+ * files inside it, or it is the user's own: built by hand, or left by another
+ * tool. That last one is what `createJunction` recursed straight over, because
+ * `removeLinkOrDir` is `fsp.rm(recursive, force)`.
+ *
+ * Reported file by file rather than as one folder, because that is the
+ * granularity the snapshot, the journal manifest and the restore all work at -
+ * `snapshotFiles` skips a directory outright.
+ */
+async function unmanagedFolderFiles(gamePath: string, known: Set<string>, fromStore: Set<string>): Promise<string[]> {
+  const root = path.join(gamePath, 'modloader')
+  if (!exists(root)) return []
+  const incomingKeys = [...fromStore]
+  const out: string[] = []
+  for (const e of await fsp.readdir(root, { withFileTypes: true })) {
+    const abs = path.join(root, e.name)
+    // A junction is Modão's own and reports as a link, not a directory, on Windows.
+    if (!e.isDirectory() || isLink(abs)) continue
+    const prefix = `modloader/${e.name.toLowerCase()}/`
+    if (!incomingKeys.some((k) => k.startsWith(prefix))) continue
+    // Per file, not per folder: a folder holding one tracked file and one file
+    // nobody tracks is not a folder Modão owns, and the untracked one is
+    // exactly what the junction used to take with it.
+    for (const f of await walk(abs)) {
+      const rel = path.relative(gamePath, f.abs).replace(/\\/g, '/')
       if (known.has(rel.toLowerCase())) continue
       out.push(rel)
     }
@@ -301,8 +373,12 @@ export async function ingestUnstoredInstalls(
     let copied = 0
     const absent: string[] = []
     for (const r of rels) {
-      const from = path.join(gamePath, r.relative_path)
-      if (!exists(from)) {
+      // Read through whatever spelling the folder wears: a mod the user has
+      // switched off sits at "modloader\. <name>\...", and an adopted one that
+      // was never copied into the store is the single most irreplaceable thing
+      // in the game folder. Ingesting it is what makes it survivable at all.
+      const from = resolveSpelledPath(gamePath, r.relative_path)
+      if (!from) {
         absent.push(r.relative_path)
         continue
       }
@@ -383,15 +459,26 @@ export async function verifySnapshot(entries: SnapshotEntry[]): Promise<{ ok: bo
 // Journal
 // ---------------------------------------------------------------------------
 
-export function openJournal(fromProfileId: number | null, toProfileId: number): { id: number; snapshotDir: string } {
+/**
+ * Opens a journal row. `kind` says which operation is writing it, and is the
+ * ONLY thing that separates a profile switch from a variant swap afterwards -
+ * they reach the same states, keep the same columns, and a variant swap is
+ * routinely the newest row. Everything that reads the table back asks for the
+ * kind it means.
+ */
+export function openJournal(
+  fromProfileId: number | null,
+  toProfileId: number,
+  kind: SwitchJournalKind = 'profile-switch'
+): { id: number; snapshotDir: string } {
   const startedAt = new Date().toISOString()
   const id = Number(
     getDb()
       .prepare(
-        `INSERT INTO switch_journal (started_at, from_profile_id, to_profile_id, state, snapshot_dir)
-         VALUES (?,?,?,'snapshotted','')`
+        `INSERT INTO switch_journal (started_at, from_profile_id, to_profile_id, state, snapshot_dir, kind)
+         VALUES (?,?,?,'snapshotted','',?)`
       )
-      .run(startedAt, fromProfileId, toProfileId).lastInsertRowid
+      .run(startedAt, fromProfileId, toProfileId, kind).lastInsertRowid
   )
   const snapshotDir = path.join(
     Paths.profileBackups(fromProfileId ?? toProfileId),
@@ -427,9 +514,12 @@ function rowToJournal(r: {
   verification_json: string | null
   error: string | null
   restored_at: string | null
+  kind?: string | null
+  variant_swap_json?: string | null
 }): SwitchJournal {
   return {
     id: r.id,
+    kind: journalKindOf(r),
     startedAt: r.started_at,
     completedAt: r.completed_at,
     fromProfileId: r.from_profile_id,
@@ -443,19 +533,46 @@ function rowToJournal(r: {
   }
 }
 
-export function listJournals(limit = 20): SwitchJournal[] {
+/**
+ * Recent journal rows, newest first. Pass `kind` to get one operation's rows
+ * only - anything that presents a row to the user as a switch, or acts on one
+ * as a switch, must pass 'profile-switch'.
+ */
+export function listJournals(limit = 20, kind?: SwitchJournalKind): SwitchJournal[] {
   const rows = getDb().prepare('SELECT * FROM switch_journal ORDER BY id DESC LIMIT ?').all(limit) as Parameters<
     typeof rowToJournal
   >[0][]
-  return rows.map(rowToJournal)
+  const journals = rows.map(rowToJournal)
+  return kind ? journals.filter((j) => j.kind === kind) : journals
 }
 
-/** The most recent switch that still has a snapshot to roll back to. */
+/**
+ * The most recent PROFILE SWITCH that still has a snapshot to roll back to.
+ *
+ * The kind filter is the whole point of this query. A variant swap lands in
+ * the same table with the same terminal states and a NULL `restored_at`, and
+ * it is usually the newest row - the user adjusts a variant long after they
+ * last changed profile. Without the filter, "Restore previous state" picked
+ * one up, vacated the entire active profile, and dropped a couple of variant
+ * files into the game root in its place while reporting success.
+ *
+ * The SQL already excludes them; `isRestorableProfileSwitch` re-checks each
+ * candidate through the same pure rule, so a row that somehow arrives with no
+ * `kind` (one written by a build older than schema 12, say) is still read as a
+ * variant swap when it carries a variant-swap payload.
+ */
 export function lastRestorableSwitch(): SwitchJournal | null {
-  const row = getDb()
-    .prepare("SELECT * FROM switch_journal WHERE state IN ('applied','verified','failed') AND restored_at IS NULL ORDER BY id DESC LIMIT 1")
-    .get() as Parameters<typeof rowToJournal>[0] | undefined
-  return row ? rowToJournal(row) : null
+  const rows = getDb()
+    .prepare(
+      `SELECT * FROM switch_journal
+        WHERE state IN ('applied','verified','failed')
+          AND restored_at IS NULL
+          AND COALESCE(kind, CASE WHEN variant_swap_json IS NOT NULL THEN 'variant-swap' ELSE 'profile-switch' END)
+              = 'profile-switch'
+        ORDER BY id DESC LIMIT 25`
+    )
+    .all() as Parameters<typeof rowToJournal>[0][]
+  return rows.map(rowToJournal).find(isRestorableProfileSwitch) ?? null
 }
 
 // ---------------------------------------------------------------------------
@@ -473,6 +590,10 @@ async function countFiles(dir: string, match: RegExp): Promise<number> {
  * game folder actually holds what the profile says it holds - every mod
  * materialised, the plugin counts as expected, and a modloader.ini that parses
  * and names exactly this profile's mods.
+ *
+ * Anything that says otherwise lands in `blockingProblems`, and `activateProfile`
+ * refuses the switch on it: a mod that did not arrive used to be reported in a
+ * log the user never read, while the profile was already recorded active.
  */
 export async function verifySwitch(profileId: number): Promise<SwitchVerification> {
   const db = getDb()
@@ -491,7 +612,7 @@ export async function verifySwitch(profileId: number): Promise<SwitchVerificatio
       missingMods.push({ installId: row.id, label, reason: 'no files are recorded for this install' })
       continue
     }
-    const present = files.filter((f) => exists(path.join(game.path, f.relative_path))).length
+    const present = files.filter((f) => existsUnderAnySpelling(game.path, f.relative_path)).length
     if (present === 0) {
       missingMods.push({ installId: row.id, label, reason: 'not one of its files is in the game folder' })
       continue
@@ -517,9 +638,17 @@ export async function verifySwitch(profileId: number): Promise<SwitchVerificatio
     const ini = await readIniFile(iniPath)
     const written = readPriorities(ini, iniProfileName(profile.name))
     iniParsed = true
-    const expected = new Set(rows.filter((r) => r.folder_name).map((r) => r.folder_name!))
+    // Compared under the name the folder actually has in modloader\: a mod that
+    // is switched off is spelled ". <name>" and one set to load first "$<name>",
+    // and that is the key `syncProfileIni` writes, because it is the key Mod
+    // Loader matches. Comparing canonical names here would report every one of
+    // them as a line naming a mod the profile does not have, and block the
+    // switch on a rename.
+    const spelled = (r: { folder_name: string | null; enabled: number; load_first: number }): string =>
+      spellFolderName(r.folder_name!, { enabled: !!r.enabled, loadFirst: !!r.load_first })
+    const expected = new Set(rows.filter((r) => r.folder_name).map(spelled))
     const all = installsOf(profileId).filter((r) => r.folder_name)
-    const knownToProfile = new Set(all.map((r) => r.folder_name!))
+    const knownToProfile = new Set(all.map(spelled))
     iniMissingKeys = [...expected].filter((k) => !(k in written))
     iniStaleKeys = Object.keys(written).filter((k) => !knownToProfile.has(k))
   } catch (e) {
@@ -535,17 +664,32 @@ export async function verifySwitch(profileId: number): Promise<SwitchVerificatio
 
   const unresolvedDependencies = await unresolvedDeps(profileId)
 
-  const problems: string[] = []
+  // Blocking: the game folder does not hold what the profile says it holds.
+  // Every one of these is a mod the user would have gone looking for in-game.
+  const blockingProblems: string[] = []
   if (missingMods.length) {
-    problems.push(`${missingMods.length} mod(s) in this profile did not reach the game folder.`)
+    blockingProblems.push(
+      `${missingMods.length} mod(s) in this profile did not reach the game folder: ` +
+        missingMods
+          .slice(0, 5)
+          .map((m) => `${m.label} (${m.reason})`)
+          .join('; ')
+    )
   }
-  if (!iniParsed) problems.push('modloader.ini could not be read back after the switch.')
+  if (!iniParsed) blockingProblems.push('modloader.ini could not be read back after the switch.')
   if (iniMissingKeys.length && iniParsed) {
-    problems.push(`modloader.ini is missing a priority line for: ${iniMissingKeys.slice(0, 5).join(', ')}`)
+    blockingProblems.push(`modloader.ini is missing a priority line for: ${iniMissingKeys.slice(0, 5).join(', ')}`)
   }
   if (iniStaleKeys.length) {
-    problems.push(`modloader.ini still names mod(s) this profile does not have: ${iniStaleKeys.slice(0, 5).join(', ')}`)
+    blockingProblems.push(
+      `modloader.ini still names mod(s) this profile does not have: ${iniStaleKeys.slice(0, 5).join(', ')}`
+    )
   }
+
+  // Advisory: these are about mods that ARE in place, so they are reported and
+  // never block. A missing dependency is the user's to resolve, not a failed
+  // materialisation.
+  const problems = [...blockingProblems]
   if (unresolvedDependencies.length) {
     problems.push(`${unresolvedDependencies.length} unresolved dependency/dependencies.`)
   }
@@ -566,6 +710,7 @@ export async function verifySwitch(profileId: number): Promise<SwitchVerificatio
     iniStaleKeys,
     unresolvedDependencies,
     problems,
+    blockingProblems,
     checkedAt: new Date().toISOString()
   }
 }
@@ -581,10 +726,18 @@ async function unresolvedDeps(profileId: number): Promise<string[]> {
  * Puts the game folder back exactly as the snapshot found it: every file in the
  * manifest is copied back and re-hashed, and anything Modão linked in after
  * the snapshot is removed first. Used by "Restore previous state".
+ *
+ * `baseDir` is where the manifest's relative paths are restored under. A
+ * profile switch's manifest is game-relative, so it defaults to the active
+ * game folder. A variant swap's manifest is store-relative instead - a
+ * junctioned mod folder is a live view of the store, so putting the store
+ * back is what puts the junction back too, without the game even needing to
+ * be open - so a caller recovering one of those passes its store directory
+ * explicitly and never pays for `requireActiveGame()`.
  */
 export async function restoreFromJournal(
   journalId: number,
-  opts: { removeFirst?: string[] } = {}
+  opts: { removeFirst?: string[]; baseDir?: string } = {}
 ): Promise<{ restored: number; problems: string[] }> {
   const db = getDb()
   const row = db.prepare('SELECT * FROM switch_journal WHERE id = ?').get(journalId) as
@@ -592,11 +745,11 @@ export async function restoreFromJournal(
     | undefined
   if (!row) throw new Error(`Switch #${journalId} is not in the journal.`)
   const journal = rowToJournal(row)
-  const game = requireActiveGame()
+  const baseDir = opts.baseDir ?? requireActiveGame().path
   const problems: string[] = []
 
   for (const rel of opts.removeFirst ?? []) {
-    const abs = path.join(game.path, rel)
+    const abs = path.join(baseDir, rel)
     if (isLink(abs)) await fsp.rm(abs, { recursive: true, force: true }).catch(() => undefined)
   }
 
@@ -611,7 +764,7 @@ export async function restoreFromJournal(
       problems.push(`${entry.relativePath}: the backup copy no longer matches its recorded hash; it was not restored`)
       continue
     }
-    const to = path.join(game.path, entry.relativePath)
+    const to = path.join(baseDir, entry.relativePath)
     await fsp.mkdir(path.dirname(to), { recursive: true })
     if (isLink(to)) await fsp.rm(to, { recursive: true, force: true }).catch(() => undefined)
     await fsp.copyFile(entry.backupPath, to)
@@ -650,7 +803,7 @@ export function forgetMissingInstalls(profileId: number): ForgottenInstall[] {
     const files = db.prepare('SELECT relative_path FROM install_file WHERE install_id = ?').all(row.id) as {
       relative_path: string
     }[]
-    const anyLive = files.some((f) => exists(path.join(game.path, f.relative_path)))
+    const anyLive = files.some((f) => existsUnderAnySpelling(game.path, f.relative_path))
     const hasPayload = row.store_key
       ? files.some((f) => exists(path.join(storeDir(row.store_key as string), f.relative_path)))
       : false

@@ -4,7 +4,7 @@ import fsp from 'node:fs/promises'
 import { execFile } from 'node:child_process'
 import crypto from 'node:crypto'
 import { BrowserWindow, app, dialog, ipcMain, shell } from 'electron'
-import type { AppSettings, CacheKind, DestinationClass, InstallPlan, Progress, StorageReport } from '@shared/types'
+import type { AppSettings, CacheKind, DestinationClass, FileConflict, InstallPlan, Progress, StorageReport } from '@shared/types'
 import { EVENT_PROGRESS, EVENT_TOAST, type IpcChannel } from '@shared/ipc'
 import { classifyDownload, githubRepo, looksLikeArchive } from '@shared/download'
 import { fetchThroughBrowser } from './install/fetcher'
@@ -13,8 +13,15 @@ import { log, logError } from './util/log'
 import { getDb, getSetting, setSetting } from './db'
 import { Paths } from './util/paths'
 import { dirSize, exists, walk } from './util/fsx'
-import { activeGame, addGame, detectCandidates, listGames, requireActiveGame, setActiveGame } from './game/detect'
-import { describeFsError, forgetWriteAccess, isProtectedLocation, probeWriteAccess } from './game/access'
+import { activeGame, addGame, detectCandidates, gameTarget, listGames, requireActiveGame, setActiveGame } from './game/detect'
+import {
+  describeFsError,
+  forgetWriteAccess,
+  isProtectedLocation,
+  probeWriteAccess,
+  writeAccessUnlessGameRunning
+} from './game/access'
+import { assertGameNotRunning, checkGameRunning, forgetRunningProcesses, whenGameClosed } from './game/running'
 import { readPe } from './game/pe'
 import {
   activateProfile,
@@ -27,6 +34,7 @@ import {
   deleteProfile,
   importManifest,
   listProfiles,
+  SwitchVerificationError,
   unmanagedContent,
   updateProfile,
   type ImportResult,
@@ -40,15 +48,37 @@ import {
   restoreSnapshot,
   snapshot
 } from './profiles/saves'
-import { listInstalled, applyPriorities, readInstallReadme, setEnabled, setPriority, setSubModEnabled } from './library'
+import {
+  listInstalled,
+  applyPriorities,
+  readInstallReadme,
+  recoverStaleVariantSwaps,
+  setEnabled,
+  setLoadFirst,
+  setPriority,
+  setSubModEnabled,
+  switchVariant
+} from './library'
 import { annotateConflicts, listConflicts } from './conflicts'
-import { applyPlan, createPlan, choose, discardPlan, rollbackPreview, setDestination, uninstall } from './install/engine'
+import { applyPlan, createPlan, choose, chooseAddOn, discardPlan, rollbackPreview, setDestination, uninstall } from './install/engine'
+import {
+  knownAbout,
+  learnLayout,
+  learnRedundancies,
+  learnVariantChoices,
+  learnVariantGroupsFromArchive,
+  signatureForArchive
+} from './knowledge/learn'
+import { redundancyFindings } from '@shared/knowledgeRules'
+import type { ModSignature } from './knowledge/signature'
 import { getCatalogMod, listCatalog, loadSeedCatalog, seedInfo } from './catalog/service'
 import { crawl, refreshMod } from './catalog/mixmods'
 import { analyzeTxd } from './formats/txd'
 import { analyzeImg } from './formats/img'
 import { compareWithVanilla } from './formats/ifp'
-import { runHealthCheck, scanTextures } from './diagnostics/health'
+import { reuniteOrphans, runHealthCheck, scanTextures } from './diagnostics/health'
+import { forgetHealthReport, freshHealthReport } from './diagnostics/healthCache'
+import { planLaunch } from './game/launch'
 import { listCrashes, listIncidents, scanCrashes, setCrashResolved } from './diagnostics/eventlog'
 import { listJournals, planSwitch, verifySwitch } from './profiles/switchTx'
 import { gameDefinition, type GameKind } from '@shared/games'
@@ -179,10 +209,23 @@ function handle(channel: IpcChannel, fn: (...args: never[]) => unknown): void {
  * need it at all - only the ones sitting in a Windows-protected folder do. So
  * Modão asks once, remembers the answer for that game, and keeps pointing at
  * the better fix: move the game out of Program Files.
+ *
+ * This is read-shaped but the access probe underneath it is a write - it
+ * creates and deletes a file inside modloader\. So it never probes while the
+ * game is up: the last answer stands, and with no last answer there is simply
+ * nothing to report. The banner this feeds is about a permission problem the
+ * user hits when they install something, and they cannot install right now
+ * anyway.
  */
-export function elevationState(): { running: boolean; needed: boolean; remembered: boolean; reason: string | null; protectedPath: boolean } {
-  const game = activeGame()
-  const access = game ? probeWriteAccess(game.path) : null
+export async function elevationState(): Promise<{
+  running: boolean
+  needed: boolean
+  remembered: boolean
+  reason: string | null
+  protectedPath: boolean
+}> {
+  const game = gameTarget()
+  const access = game ? await writeAccessUnlessGameRunning(game) : null
   return {
     running: isElevated(),
     needed: !!access && !access.writable && access.needsElevation,
@@ -261,6 +304,50 @@ function requireWritableGame(): void {
   throw new Error(access.reason ?? t('messages.access.cannotWrite', { path: game.path }))
 }
 
+/**
+ * The other half of "fail before touching anything": is the game open?
+ *
+ * Write access says nothing about it - a running gta_sa.exe does not lock
+ * modloader\, so the probe above succeeds and the write lands in a folder Mod
+ * Loader is watching. It hot-reloads it and the game dies mid-session. This is
+ * a refusal, not a warning: there is no safe way to continue.
+ *
+ * The install is read through `gameTarget`, which does no write-access probe:
+ * `requireActiveGame()` would have run one, and that probe writes a file into
+ * modloader\ - the check would have triggered the write it exists to prevent.
+ * A game id names the install to check when it is not the active one yet.
+ */
+async function requireGameClosed(gameId?: number): Promise<void> {
+  await assertGameNotRunning(gameTarget(gameId) ?? requireActiveGame())
+}
+
+/**
+ * Reads the process table and records the answer, refusing nothing.
+ *
+ * This is the read-shaped half of the guard. The synchronous access probes
+ * further down - `requireActiveGame()`, and the forced one inside
+ * `runHealthCheck` - create a file inside modloader\ unless the running state
+ * is already known, and asking here costs nothing but a process listing. So a
+ * handler the user is entitled to run with the game open calls this instead of
+ * `requireGameClosed`, and keeps working; only the checks that genuinely need
+ * a write fall back to the last answer on record.
+ */
+async function noteWhetherGameIsRunning(): Promise<void> {
+  const target = gameTarget()
+  if (target) await checkGameRunning(target)
+}
+
+/**
+ * What every handler that writes into the game folder runs first, in this
+ * order: the running check comes before the access probe because the probe
+ * itself writes a file into modloader\, which is exactly what must not happen
+ * while the watcher is live.
+ */
+async function requireIdleGame(): Promise<void> {
+  await requireGameClosed()
+  requireWritableGame()
+}
+
 export function registerIpc(): void {
   // --- app ------------------------------------------------------------------
   ipcMain.handle('app:settings', () => settings())
@@ -321,7 +408,10 @@ export function registerIpc(): void {
   ipcMain.handle('app:storage', () => storageReport())
   ipcMain.handle('app:elevation', () => elevationState())
   ipcMain.handle('app:relaunchElevated', (_e, remember: boolean) => relaunchElevated(!!remember))
-  ipcMain.handle('app:recheckAccess', () => {
+  // The forced probe writes a file into modloader\, which is itself a write the
+  // watcher would pick up - so the running check comes first here too.
+  ipcMain.handle('app:recheckAccess', async () => {
+    await requireGameClosed()
     const game = requireActiveGame()
     forgetWriteAccess(game.path)
     return probeWriteAccess(game.path, true)
@@ -350,7 +440,14 @@ export function registerIpc(): void {
   })
   ipcMain.handle('game:active', () => activeGame())
   ipcMain.handle('game:adopt', async (_e, gameId: number, profileName: string) => {
-    setActiveGame(gameId)
+    // Checked before anything at all, the active-game pointer included: a
+    // refusal has to leave the app exactly as it was, which is what its message
+    // promises. The install is named by id because it is not the active one
+    // yet. Adoption rewrites modloader.ini with the priorities it found, so it
+    // is a write like any other; the access probe is deliberately not run,
+    // since adopting is how a read-only install gets indexed in the first place.
+    const target = gameTarget(gameId) ?? requireActiveGame()
+    await whenGameClosed(target, () => setActiveGame(gameId))
     const task = newTask('Adopting existing install')
     try {
       const result = await adoptInstall(profileName, (d, t) => progress(task.id, 'Adopting existing install', 'indexing', d, t))
@@ -363,7 +460,7 @@ export function registerIpc(): void {
     }
   })
   ipcMain.handle('game:adoptInto', async (_e, profileId: number) => {
-    requireWritableGame()
+    await requireIdleGame()
 
     const id = requireProfile(profileId)
     const task = newTask('Scanning the game folder')
@@ -384,17 +481,31 @@ export function registerIpc(): void {
   })
   ipcMain.handle('game:unmanaged', (_e, profileId: number) => unmanagedContent(requireProfile(profileId)))
   ipcMain.handle('game:remove', (_e, id: number) => removeGame(id))
-  ipcMain.handle('game:launch', async () => {
-    const game = requireActiveGame()
-    const exe = gameDefinition(game.kind)
-      .exeNames.map((name) => path.join(game.path, name))
-      .find((candidate) => exists(candidate))
-    if (!exe) throw new Error(t('messages.game.exeNotFound', { game: game.gameName, path: game.path }))
-    const profile = await activeProfile()
-    if (profile) getDb().prepare('UPDATE profile SET last_played_at = ? WHERE id = ?').run(new Date().toISOString(), profile.id)
-    const ok = await shell.openPath(exe)
-    if (ok === '') armCrashScan(profile?.id ?? null)
-    return { launched: ok === '', message: ok || `Launched ${exe}` }
+  // The pre-launch check is only a check if something acts on it. `blocking`
+  // used to be counted, shown, and then ignored by the one button that could
+  // have used it - which is how a stream.ini asking for 13500 MB was found,
+  // named on screen, and launched into anyway. The gate itself is pure and
+  // lives in @shared/launchGate, so anything else that must refuse a launch
+  // adds a reason to the same list instead of growing a second gate.
+  ipcMain.handle('game:launch', async (_e, force?: boolean) => {
+    // The decision lives in planLaunch, where the e2e harness can run it
+    // against a real game folder; what is left here starts a process.
+    const plan = await planLaunch(!!force)
+    if (plan.refusal) return plan.refusal
+
+    if (plan.profileId !== null) {
+      getDb().prepare('UPDATE profile SET last_played_at = ? WHERE id = ?').run(new Date().toISOString(), plan.profileId)
+    }
+    const ok = await shell.openPath(plan.exe)
+    // The process table just changed. The running check caches it for two
+    // seconds, which is exactly long enough for a user to alt-tab back and
+    // click something while the guard still believes the game is closed.
+    forgetRunningProcesses()
+    // And the stored report describes a game that was closed when it was made:
+    // its running and write-access answers are now wrong.
+    forgetHealthReport()
+    if (ok === '') armCrashScan(plan.profileId)
+    return { launched: ok === '', message: ok || `Launched ${plan.exe}` }
   })
 
   // --- profiles -------------------------------------------------------------
@@ -403,20 +514,22 @@ export function registerIpc(): void {
   ipcMain.handle('profiles:create', (_e, input: { name: string; color: string; notes: string; copyFrom?: number }) =>
     createProfile(input)
   )
-  ipcMain.handle('profiles:update', (_e, id: number, patch: { name?: string; color?: string; notes?: string }) =>
-    updateProfile(id, patch)
-  )
+  // Renaming the active profile rewrites its section header in modloader.ini.
+  ipcMain.handle('profiles:update', async (_e, id: number, patch: { name?: string; color?: string; notes?: string }) => {
+    await requireGameClosed()
+    return updateProfile(id, patch)
+  })
   ipcMain.handle('profiles:remove', (_e, id: number) => deleteProfile(id))
   ipcMain.handle('profiles:activate', async (_e, id: number) => {
-    requireWritableGame()
+    await requireIdleGame()
 
     const task = newTask('Switching profile')
     try {
       const result = await activateProfile(id, (phase, d, t) => progress(task.id, 'Switching profile', phase, d, t))
       task.end()
       const profile = (await listProfiles()).find((p) => p.id === id)!
-      // A switch that did not verify is not a switch that worked: say so, and
-      // leave the journal in place so "Restore previous state" can undo it.
+      // Notes that do not block: the profile IS active and its mods ARE in
+      // place, but something adjacent (an unresolved dependency) wants saying.
       if (result.verification && !result.verification.ok) {
         toast(
           'error',
@@ -429,6 +542,7 @@ export function registerIpc(): void {
         toast('success', t('messages.profile.switchedActive', { profile: profile.name, seconds: (result.elapsedMs / 1000).toFixed(1) }))
       }
       return {
+        ok: true as const,
         profile,
         elapsedMs: result.elapsedMs,
         log: result.log,
@@ -437,13 +551,36 @@ export function registerIpc(): void {
       }
     } catch (e) {
       task.end((e as Error).message)
+      // Reconciliation failed: the switch is off. The profile was never
+      // recorded active, so the renderer gets the whole report back rather than
+      // a bare message - it has to open the failure dialog, not a toast that
+      // scrolls away while the user believes the switch worked.
+      if (e instanceof SwitchVerificationError) {
+        const profile = (await listProfiles()).find((p) => p.id === id) ?? null
+        toast(
+          'error',
+          t('messages.profile.switchBlocked', {
+            profile: e.profileName,
+            problem: e.verification.blockingProblems[0] ?? t('messages.profile.seeSwitchReport')
+          })
+        )
+        return {
+          ok: false as const,
+          profile,
+          elapsedMs: 0,
+          log: e.log,
+          journalId: e.journalId,
+          verification: e.verification,
+          previousProfileName: e.previousProfileName
+        }
+      }
       throw e
     }
   })
   ipcMain.handle('profiles:switchPlan', (_e, id: number) => planSwitch(requireProfile(id)))
   ipcMain.handle('profiles:verify', (_e, id: number) => verifySwitch(requireProfile(id)))
   ipcMain.handle('profiles:restorePrevious', async (_e, journalId?: number) => {
-    requireWritableGame()
+    await requireIdleGame()
     const task = newTask('Restoring the previous state')
     try {
       const result = await restorePreviousState(journalId)
@@ -455,7 +592,10 @@ export function registerIpc(): void {
       throw e
     }
   })
-  ipcMain.handle('profiles:switchHistory', () => listJournals())
+  // Switch history means profile switches. A variant swap writes into the same
+  // journal table and would otherwise be listed here as one, inviting a restore
+  // that dematerialises the whole profile.
+  ipcMain.handle('profiles:switchHistory', () => listJournals(20, 'profile-switch'))
   ipcMain.handle('profiles:forgetMissing', async (_e, profileId: number) => {
     const { forgetMissingInstalls } = await import('./profiles/switchTx')
     const forgotten = forgetMissingInstalls(requireProfile(profileId))
@@ -475,6 +615,8 @@ export function registerIpc(): void {
     return res.filePath
   })
   ipcMain.handle('profiles:importArchive', async (): Promise<ImportResult | null> => {
+    // An import that lands on the active profile writes modloader.ini.
+    await requireGameClosed()
     const res = await dialog.showOpenDialog({
       title: t('messages.profile.importTitle'),
       filters: [{ name: t('messages.profile.fileFilterName'), extensions: ['json'] }],
@@ -494,25 +636,43 @@ export function registerIpc(): void {
 
   // --- library --------------------------------------------------------------
   ipcMain.handle('library:list', (_e, profileId: number) => listInstalled(requireProfile(profileId)))
-  ipcMain.handle('library:setEnabled', (_e, installId: number, enabled: boolean) => {
-    requireWritableGame()
+  ipcMain.handle('library:setEnabled', async (_e, installId: number, enabled: boolean) => {
+    await requireIdleGame()
     return setEnabled(installId, enabled)
   })
-  ipcMain.handle('library:setPriority', (_e, installId: number, priority: number) => {
-    requireWritableGame()
+  ipcMain.handle('library:setPriority', async (_e, installId: number, priority: number) => {
+    await requireIdleGame()
     return setPriority(installId, priority)
   })
+  // Renames the mod folder, so the game must not be reading it.
+  ipcMain.handle('library:setLoadFirst', async (_e, installId: number, loadFirst: boolean) => {
+    await requireIdleGame()
+    return setLoadFirst(installId, loadFirst)
+  })
   ipcMain.handle('library:uninstall', async (_e, installId: number) => {
-    requireWritableGame()
+    await requireIdleGame()
     const result = await uninstall(installId)
     toast('success', t('messages.library.uninstalled', { count: result.restored }))
+    // An adopted mod's bytes lived nowhere else. Say where they went, or the
+    // user has no way of knowing the uninstall was recoverable at all.
+    if (result.quarantined.length > 0) {
+      toast('info', t('messages.library.uninstalledQuarantined', { count: result.quarantined.length, path: result.quarantineDir }))
+    }
     return result
   })
   ipcMain.handle('library:rollbackPreview', (_e, installId: number) => rollbackPreview(installId))
   ipcMain.handle('library:readme', (_e, installId: number) => readInstallReadme(installId))
-  ipcMain.handle('library:subModSetEnabled', (_e, installId: number, rel: string, enabled: boolean) => {
-    requireWritableGame()
+  ipcMain.handle('library:subModSetEnabled', async (_e, installId: number, rel: string, enabled: boolean) => {
+    await requireIdleGame()
     return setSubModEnabled(installId, rel, enabled)
+  })
+  ipcMain.handle('library:setVariant', async (_e, installId: number, groupId: string, optionId: string) => {
+    await requireIdleGame()
+    // A refused or rolled-back switch left the old option live and says so in
+    // its message. The rejection reaches the renderer directly, which already
+    // toasts it (Library.tsx) - toasting it here too would be the same error
+    // shown to the user twice.
+    return await switchVariant(installId, groupId, optionId)
   })
 
   // --- catalog --------------------------------------------------------------
@@ -578,10 +738,10 @@ export function registerIpc(): void {
       )
       .get(slug) as { id: number } | undefined
     if (!row) throw new Error(t('messages.installDeps.notInCatalog', { slug }))
-    return planFromCatalogVersion(row.id, requireProfile(profileId))
+    return learnFromFreshPlan(await planFromCatalogVersion(row.id, requireProfile(profileId)))
   })
-  ipcMain.handle('install:planFromCatalog', (_e, modVersionId: number, profileId: number) =>
-    planFromCatalogVersion(modVersionId, requireProfile(profileId))
+  ipcMain.handle('install:planFromCatalog', async (_e, modVersionId: number, profileId: number) =>
+    learnFromFreshPlan(await planFromCatalogVersion(modVersionId, requireProfile(profileId)))
   )
 
   ipcMain.handle('install:planFromFile', async (_e, profileId: number) => {
@@ -606,23 +766,34 @@ export function registerIpc(): void {
         onProgress: (phase, c, t) => progress(task.id, `Reading ${path.basename(archivePath)}`, phase, c, t)
       })
       task.end()
-      return plan
+      return learnFromFreshPlan(plan)
     } catch (e) {
       task.end((e as Error).message)
       throw e
     }
   })
 
-  ipcMain.handle('install:choose', (_e, planId: string, groupId: string, optionId: string) => choose(planId, groupId, optionId))
-  ipcMain.handle('install:setDestination', (_e, planId: string, sourcePath: string, destination: string) =>
-    setDestination(planId, sourcePath, destination as DestinationClass)
+  ipcMain.handle('install:choose', async (_e, planId: string, groupId: string, optionId: string) =>
+    learnVariantPick(await choose(planId, groupId, optionId), groupId, optionId)
   )
-  ipcMain.handle('install:apply', async (_e, planId: string, profileId: number) => {
-    requireWritableGame()
+  ipcMain.handle('install:chooseAddOn', (_e, planId: string, addOnId: string, enabled: boolean) => chooseAddOn(planId, addOnId, enabled))
+  ipcMain.handle('install:setDestination', async (_e, planId: string, sourcePath: string, destination: string) =>
+    learnUserPlacement(await setDestination(planId, sourcePath, destination as DestinationClass), sourcePath)
+  )
+  // The third argument is the user's answer to the unparsed-readme warning, and
+  // it is never assumed: a renderer that does not send one gets the refusal.
+  ipcMain.handle('install:apply', async (_e, planId: string, profileId: number, acknowledgedUnparsedReadme?: boolean) => {
+    await requireIdleGame()
     const task = newTask('Applying install plan')
     try {
-      const result = await applyPlan(planId, profileId, (phase, c, tot) => progress(task.id, 'Applying install plan', phase, c, tot))
+      const result = await applyPlan(
+        planId,
+        profileId,
+        { acknowledgedUnparsedReadme: acknowledgedUnparsedReadme === true },
+        (phase, c, tot) => progress(task.id, 'Applying install plan', phase, c, tot)
+      )
       task.end()
+      forgetPlan(planId)
       const modeLabel = t(`messages.install.mode.${result.mode}`)
       toast(
         'success',
@@ -634,10 +805,17 @@ export function registerIpc(): void {
       throw e
     }
   })
-  ipcMain.handle('install:discard', (_e, planId: string) => discardPlan(planId))
+  ipcMain.handle('install:discard', (_e, planId: string) => {
+    forgetPlan(planId)
+    return discardPlan(planId)
+  })
 
   // --- conflicts ------------------------------------------------------------
-  ipcMain.handle('conflicts:list', async (_e, profileId: number) => annotateConflicts(listConflicts(requireProfile(profileId))))
+  ipcMain.handle('conflicts:list', async (_e, profileId: number) => {
+    const conflicts = listConflicts(requireProfile(profileId))
+    learnRedundanciesFor(profileId, conflicts)
+    return annotateConflicts(conflicts)
+  })
   ipcMain.handle('conflicts:preview', (_e, profileId: number, changes: { installId: number; priority: number }[]) => {
     requireProfile(profileId)
     // A preview may only move the priorities of installs inside the profile it
@@ -653,7 +831,7 @@ export function registerIpc(): void {
     return listConflicts(profileId, overrides)
   })
   ipcMain.handle('conflicts:applyPriorities', async (_e, profileId: number, changes: { installId: number; priority: number }[]) => {
-    requireWritableGame()
+    await requireIdleGame()
     await applyPriorities(requireProfile(profileId), changes)
     toast('success', t('messages.conflicts.prioritiesWritten'))
   })
@@ -669,19 +847,40 @@ export function registerIpc(): void {
   ipcMain.handle('saves:list', (_e, profileId: number) => listSnapshots(requireProfile(profileId)))
   ipcMain.handle('saves:snapshot', (_e, profileId: number, label: string) => snapshot(requireProfile(profileId), label || 'manual', false))
   ipcMain.handle('saves:restore', async (_e, snapshotId: number) => {
+    // The live save folder belongs to the running game: it holds the slots open
+    // and writes them back on exit, so a restore now is silently undone.
+    await requireGameClosed()
     await restoreSnapshot(snapshotId)
     toast('success', t('messages.saves.restored'))
   })
   ipcMain.handle('saves:currentSlots', (_e, profileId: number) => currentSlots(requireProfile(profileId)))
   ipcMain.handle('saves:detectExisting', () => detectExistingSaves())
   ipcMain.handle('saves:importExisting', async (_e, profileId: number, label: string) => {
+    // An import is remembered forever by a content marker: taking it from a
+    // folder the running game is halfway through writing records a torn copy as
+    // the one the user arrived with, and it is never offered again.
+    await requireGameClosed()
     const result = await importExistingSaves(requireProfile(profileId), label || 'Imported from your existing install')
     toast('success', t('messages.saves.imported', { slots: result.slots }))
     return result
   })
 
   // --- health ---------------------------------------------------------------
-  ipcMain.handle('health:run', (_e, profileId: number) => runHealthCheck(requireProfile(profileId)))
+  // A health run is a diagnosis the user asked for, so it is not refused while
+  // the game is up - it is made not to write. Its write-access check forces a
+  // probe, which creates a file inside modloader\; establishing the running
+  // state first is what suppresses that, with no write of its own.
+  // `profileId` may be null, because having no active profile is a reachable
+  // state and the launch is STILL gated in it: a stream.ini asking for 13500 MB
+  // refuses a launch with or without a profile pointing at it. Refusing to run
+  // the checks here is what left that user on a screen with no blockers, no
+  // explanation and no "Launch anyway" - a refusal with nowhere to go.
+  ipcMain.handle('health:run', async (_e, profileId: number | null) => {
+    await noteWhetherGameIsRunning()
+    // "Re-run" means re-run: this always runs the checks. It stores the answer
+    // so that pressing Play right after reading it costs nothing.
+    return freshHealthReport(profileId === null ? null : requireProfile(profileId), requireActiveGame().path)
+  })
   ipcMain.handle('health:crashes', (_e, profileId: number) => listCrashes(requireProfile(profileId)))
   ipcMain.handle('health:incidents', (_e, profileId: number) => listIncidents(requireProfile(profileId)))
   ipcMain.handle('health:scanCrashes', (_e, profileId: number) => scanCrashes(requireProfile(profileId)))
@@ -693,6 +892,21 @@ export function registerIpc(): void {
       cause: m.cause ?? (m.nearest ? `${m.nearest.cause} (nearest known address ${m.nearest.address})` : null),
       solution: m.solution
     }
+  })
+  // "Deep analysis": for a crash address CrashList has no entry for. Not a
+  // disassembler - see src/main/diagnostics/disasm.ts for exactly what this
+  // does and does not do.
+  ipcMain.handle('health:deepAnalyze', async (_e, address: string) => {
+    const game = requireActiveGame()
+    // The executable THAT IS ON DISK, asked through the same helper planLaunch
+    // and the health check use. `exeNames[0]` is only the first name a game can
+    // ship under: a Vice City install holding gta_vc.exe (the second) launches
+    // and passes its checks, and this handler then went looking for gta-vc.exe,
+    // failed to read it and reported that instead of analysing the executable
+    // that is actually there.
+    const { resolveGameExe } = await import('./game/launch')
+    const { deepAnalyse } = await import('./diagnostics/disasm')
+    return deepAnalyse(resolveGameExe(game), address)
   })
   // The renderer still passes a profile id; the logs are not per-profile, and an
   // extra argument to a handler that ignores it is harmless.
@@ -707,7 +921,7 @@ export function registerIpc(): void {
     return reportFromGame(game.path, expected)
   })
   ipcMain.handle('health:fixStreamingMemory', async (_e, memoryMb?: number) => {
-    requireWritableGame()
+    await requireIdleGame()
     const game = requireActiveGame()
     const { setStreamingMemory, SAFE_STREAMING_MEMORY_MB } = await import('./game/streamIni')
     const result = await setStreamingMemory(
@@ -718,15 +932,30 @@ export function registerIpc(): void {
     toast('success', t('messages.installDeps.streamingFixed', { from: String(result.from ?? '?'), to: result.to }))
     return result
   })
+  ipcMain.handle('health:reuniteOrphans', async (_e, profileId: number | null) => {
+    await requireIdleGame()
+    const result = await reuniteOrphans(profileId)
+    toast('success', t('health.reunited', { moved: result.moved.length, quarantined: result.quarantined.length }))
+    return result
+  })
   ipcMain.handle('health:logs', () => collectLogs())
   ipcMain.handle('health:bisectStart', async (_e, profileId: number) => {
-    requireWritableGame()
+    await requireIdleGame()
     // The session applies its own first step: it turns mods off through the ini
     // rather than moving files, so there is nothing else to do here.
     return startBisect(requireProfile(profileId))
   })
-  ipcMain.handle('health:bisectResult', (_e, sessionId: string, result: 'good' | 'bad') => recordResult(sessionId, result))
-  ipcMain.handle('health:bisectAbort', (_e, sessionId: string) => abortBisect(sessionId))
+  // Both of these rewrite modloader.ini - recording a result applies the next
+  // step, aborting restores the original. Bisecting is launch-test-record in a
+  // loop, so it is the likeliest thing to be done with the game still open.
+  ipcMain.handle('health:bisectResult', async (_e, sessionId: string, result: 'good' | 'bad') => {
+    await requireGameClosed()
+    return recordResult(sessionId, result)
+  })
+  ipcMain.handle('health:bisectAbort', async (_e, sessionId: string) => {
+    await requireGameClosed()
+    return abortBisect(sessionId)
+  })
   ipcMain.handle('health:bisectCurrent', (_e, profileId: number) => currentBisect(requireProfile(profileId)))
 
   // --- tasks ----------------------------------------------------------------
@@ -972,6 +1201,18 @@ function hostOf(url: string): string {
 export async function bootstrap(): Promise<void> {
   getDb()
   setMainLanguage(getSetting('ui.language', DEFAULT_LANGUAGE))
+  // A variant swap journals itself the way a profile switch does; a stale one
+  // means the process died mid-swap, which for a junctioned mod folder can
+  // leave the game folder showing bytes the database has not agreed to yet.
+  // Reconciled before anything else touches a profile - never allowed to
+  // block the app from opening if it fails.
+  try {
+    const recovery = await recoverStaleVariantSwaps()
+    if (recovery.recovered) log(`Recovered ${recovery.recovered} stale variant-swap journal(s) at startup.`)
+    for (const problem of recovery.problems) log(`Variant-swap recovery: ${problem}`)
+  } catch (e) {
+    logError('recovering a stale variant-swap journal at startup', e)
+  }
   await loadSeedCatalog()
 }
 
@@ -983,6 +1224,171 @@ export async function bootstrap(): Promise<void> {
  * another does not work - ipcMain keeps handlers in a map of its own, not as
  * listeners - which is how "handler is not a function" happened.
  */
+// --- what a plan teaches, and what the store already knows about it ---------
+//
+// The knowledge store is written from the install flow, and the install flow
+// reaches the user through these handlers. Two things happen here and nowhere
+// else: a correction the USER makes by hand - retargeting a file, picking a
+// variant - is learned at the moment they state it, at the highest weight there
+// is; and whatever the store already knows that CONTRADICTS the author's readme
+// is attached to the plan as a warning, so a learned rule can never quietly
+// win an argument with the readme.
+//
+// Nothing here can fail an install: every call is wrapped, and a store that
+// throws costs a warning, not the user's mod.
+
+/**
+ * The archive identity a plan is keyed by.
+ *
+ * `buildPlan` keys everything it looks up on the signature of the WHOLE
+ * extracted archive, so anything learned afterwards has to use that same key or
+ * the rule is written where nothing will ever read it. The walk is the one
+ * `buildPlan` already did, repeated once per plan and then remembered.
+ */
+const planSignatures = new Map<string, ModSignature>()
+/** Files the user retargeted by hand, per plan: the corrections worth learning. */
+const planCorrections = new Map<string, Set<string>>()
+/** Variant options the user picked in the dialog, per plan. */
+const planSelections = new Map<string, Record<string, string>>()
+
+async function planIdentity(plan: InstallPlan): Promise<{ signature: ModSignature; files: { rel: string; size: number }[] }> {
+  const files = (await walk(plan.extractRoot)).map((f) => ({ rel: f.rel, size: f.size }))
+  const signature =
+    planSignatures.get(plan.planId) ?? signatureForArchive(files.map((f) => f.rel), plan.readmes[0]?.raw ?? null)
+  planSignatures.set(plan.planId, signature)
+  return { signature, files }
+}
+
+/** The identity alone, without re-walking the archive once it is known. */
+async function planSignature(plan: InstallPlan): Promise<ModSignature> {
+  const cached = planSignatures.get(plan.planId)
+  return cached ?? (await planIdentity(plan)).signature
+}
+
+function forgetPlan(planId: string): void {
+  planSignatures.delete(planId)
+  planCorrections.delete(planId)
+  planSelections.delete(planId)
+}
+
+/**
+ * Puts every disagreement between the author's readme and something the app
+ * learned onto the plan the user is about to confirm. Deduplicated by code and
+ * message, because a rebuild re-runs the engine's own layout check.
+ */
+function attachKnownConflicts(plan: InstallPlan, signature: ModSignature): InstallPlan {
+  try {
+    const seen = new Set(plan.warnings.map((w) => `${w.code}|${w.message}`))
+    for (const c of knownAbout(signature).conflicts) {
+      if (seen.has(`${c.code}|${c.message}`)) continue
+      seen.add(`${c.code}|${c.message}`)
+      plan.warnings.push(c)
+    }
+  } catch (e) {
+    logError('knowledge: reading what is known about this archive failed', e)
+  }
+  return plan
+}
+
+/**
+ * A freshly built plan: the variant groups the detector found in this archive
+ * are recorded against its SHAPE, at inference weight, with the detector's own
+ * reason as evidence - so the next archive laid out the same way is recognised
+ * as offering a choice rather than installed nine times over.
+ */
+async function learnFromFreshPlan(plan: InstallPlan): Promise<InstallPlan> {
+  try {
+    const { signature, files } = await planIdentity(plan)
+    if (plan.variants.length > 0) {
+      learnVariantGroupsFromArchive(signature, files, plan.readmes[0]?.raw ?? null, plan.title)
+    }
+    return attachKnownConflicts(plan, signature)
+  } catch (e) {
+    logError('knowledge: learning from the plan failed', e)
+    return plan
+  }
+}
+
+/** The user picked a variant option in the dialog. That is their decision, at their weight. */
+async function learnVariantPick(plan: InstallPlan, groupId: string, optionId: string): Promise<InstallPlan> {
+  try {
+    const selections = { ...(planSelections.get(plan.planId) ?? {}), [groupId]: optionId }
+    planSelections.set(plan.planId, selections)
+    const signature = await planSignature(plan)
+    learnVariantChoices(signature, plan.variants, selections, plan.files, plan.title)
+    return attachKnownConflicts(plan, signature)
+  } catch (e) {
+    logError('knowledge: learning the variant choice failed', e)
+    return plan
+  }
+}
+
+/**
+ * The user moved a file. This is the input the spec calls the highest weight
+ * there is, and it is learned here rather than after the install: the
+ * correction is a statement about where this archive belongs, and it is just as
+ * true if the person then changes their mind about installing at all.
+ *
+ * Only the files they actually retargeted are learned - the ones the classifier
+ * placed and they merely did not object to stay an inference, written by
+ * `applyPlan`. Learning both at one weight is what made a correction
+ * indistinguishable from a guess.
+ */
+async function learnUserPlacement(plan: InstallPlan, sourcePath: string): Promise<InstallPlan> {
+  try {
+    const corrected = planCorrections.get(plan.planId) ?? new Set<string>()
+    corrected.add(sourcePath)
+    planCorrections.set(plan.planId, corrected)
+    const signature = await planSignature(plan)
+    const moved = plan.files.filter((f) => corrected.has(f.sourcePath))
+    if (moved.length > 0) learnLayout(signature, moved, 'user', [...corrected])
+    return attachKnownConflicts(plan, signature)
+  } catch (e) {
+    logError('knowledge: learning your correction failed', e)
+    return plan
+  }
+}
+
+/**
+ * "Mod A obsoletes mods B, C, D", read off the profile as it actually stands.
+ *
+ * Learned from the real conflict index rather than a preview: the preview
+ * exists to answer "what if I moved this slider", and a hypothetical is not
+ * evidence. A finding stops being true the moment a priority changes, which is
+ * why it is written at inference weight and re-read every time.
+ */
+function learnRedundanciesFor(profileId: number, conflicts: FileConflict[]): void {
+  try {
+    const rows = getDb()
+      .prepare(
+        `SELECT i.id AS install_id, i.enabled, i.folder_name, m.title, p.relative_path
+           FROM provides p
+           JOIN install i ON i.id = p.install_id
+           JOIN mod_version mv ON mv.id = i.mod_version_id
+           JOIN mod m ON m.id = mv.mod_id
+          WHERE i.profile_id = ?`
+      )
+      .all(profileId) as { install_id: number; enabled: number; folder_name: string | null; title: string; relative_path: string }[]
+    const installs = new Map<number, { installId: number; title: string; folder: string | null; provides: string[]; enabled: boolean }>()
+    for (const r of rows) {
+      const entry = installs.get(r.install_id) ?? {
+        installId: r.install_id,
+        title: r.title,
+        folder: r.folder_name,
+        provides: [],
+        enabled: !!r.enabled
+      }
+      entry.provides.push(r.relative_path)
+      installs.set(r.install_id, entry)
+    }
+    const winnerByPath = new Map<string, number>()
+    for (const c of conflicts) if (c.winner) winnerByPath.set(c.relativePath, c.winner.installId)
+    learnRedundancies(redundancyFindings([...installs.values()], winnerByPath))
+  } catch (e) {
+    logError('knowledge: working out what this profile makes redundant failed', e)
+  }
+}
+
 async function planFromCatalogVersion(modVersionId: number, profileId: number): Promise<InstallPlan> {
   const db = getDb()
   const row = db

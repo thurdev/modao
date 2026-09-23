@@ -34,9 +34,6 @@ export const checks = {
       'A pasta de .asi é detectada por onde o modloader.asi realmente está, e não presumida: algumas instalações carregam da raiz do jogo, repacks costumam carregar de scripts\\.',
     asiUnknown: 'desconhecida',
     asiGameRoot: 'a raiz do jogo',
-    cleoPlusTitle: 'Versão do CLEO exigida pelo CLEO+',
-    cleoPlusOk: 'O CLEO {version} atende o CLEO+',
-    cleoPlusTooOld: 'O CLEO+ está instalado mas o CLEO {version} é velho demais',
     cleoPlusDetail:
       'CLEO+ com CLEO 4.3 quebra na inicialização com um diálogo fatal: "The ordinal 22 could not be located in the dynamic link library CLEO+.cleo". Atualize o CLEO para 4.4 ou mais novo.',
     cleoTitle: 'CLEO',
@@ -62,6 +59,14 @@ export const checks = {
     orphanFound: '{count} arquivo(s) de configuração sem o .asi correspondente',
     orphanDetail:
       'Sobram quando um plugin é removido e o .ini dele fica. Não quebram o jogo, mas confundem o diagnóstico: o arquivo sugere um mod que não está mais lá.',
+    orphanReunite:
+      '{count} deles é porque o .asi foi movido para uma pasta de mod. O Modão pode trazer o plugin de volta para a pasta ASI — nada é apagado.',
+    orphanItemMoveBack: '{config} — {plugin} está na pasta {folder}, e o lugar dele é {where}',
+    orphanItemNoPlugin: '{config} — nenhum {plugin} neste perfil; nada lê esse arquivo',
+    orphanRefusedShared:
+      '{plugin} está registrado em {count} perfis com o mesmo caminho. O arquivo no disco é um só e não dá para saber de qual perfil ele é, então nada foi movido: abra o perfil que você quer arrumar e use o botão lá.',
+    orphanRefusedUnowned:
+      '{plugin} aparece em {path}, mas nenhum mod instalado reivindica esse caminho. Nada foi movido — mova à mão se for isso que você quer.',
     fpsTitle: 'Limite de FPS',
     fpsOk: '{value} FPS — dentro do que o motor aguenta',
     fpsHigh: '{value} FPS — acima de 60 o GTA SA quebra física, animação e missão',
@@ -90,10 +95,62 @@ export const checks = {
     verdictInert: 'inerte',
     verdictMisInstalled: 'instalado errado',
     verdictUnknown: 'não mencionado no log',
+    upstreamTitle: 'Build desatualizada (releases do autor)',
+    upstreamNoRepos: 'Nenhum mod deste perfil tem uma release conhecida no GitHub para comparar',
+    upstreamUnavailable: 'Não foi possível falar com o GitHub agora — nada a dizer sobre a idade das builds',
+    upstreamCurrent: '{count} mod(s) conferido(s) contra a release mais recente do autor; nenhum atrasado',
+    upstreamSomeUnknown: '{count} mod(s) não puderam ser comparados (sem release, sem arquivo equivalente, ou sem rede).',
+    upstreamCapped: '{count} mod(s) com repositório conhecido não foram verificados nesta varredura (limite por execução atingido).',
+    upstreamOutdated: '{count} mod(s) estão numa build mais antiga que a release mais recente do autor',
+    upstreamDetail:
+      'Uma build velha é o suspeito mais barato de todos: um download resolve, contra uma noite inteira de bissecção. O Modão compara tamanho e SHA-256 do arquivo instalado com o arquivo da release; quando a release só publica um .zip, o timestamp do PE serve de indício. Sem rede, a resposta é “não sei” — nunca “desatualizado”.',
+    upstreamItem: '{title} - {file}: instalado {installed} bytes, release {tag} de {repo} tem {latest} bytes',
     sizeTitle: 'Tamanho dos mods',
     sizeSummary: '{size} GB de mods ligados',
     sizeDetail:
       'Pacote grande somado a um espaço de endereçamento de 2 GB é a causa mais comum de crash por falta de memória no meio do jogo.',
+    hookTitle: 'Mods hookando o mesmo endereço',
+    hookNone: 'Nenhum hook duplicado encontrado entre os .asi deste perfil',
+    hookFound_one: '1 endereço tem mais de um mod hookando ele',
+    hookFound_other: '{count} endereços têm mais de um mod hookando eles',
+    hookDetail:
+      'Um plugin-sdk .asi compilado sem código-fonte guarda os endereços que ele hooka como nomes ofuscados no próprio símbolo — o Modão decodifica isso. Dois mods hookando o mesmo endereço não aparecem como conflito de arquivo: os dois .asi instalam sem problema, e só um dos hooks sobrevive em tempo de execução.',
+    dupTitle: 'Plugins duplicados',
+    dupNone: 'Nenhum .asi/.cleo duplicado entre a pasta de .asi, scripts\\, cleo\\ e modloader\\',
+    dupFound_one: '1 arquivo está duplicado em mais de um lugar',
+    dupFound_other: '{count} arquivos estão duplicados em mais de um lugar',
+    dupDetail:
+      'O mesmo plugin em dois lugares ao mesmo tempo (por exemplo, uma cópia em scripts\\ e outra dentro de uma pasta de mod em modloader\\) faz as duas instâncias tentar aplicar o mesmo limite duas vezes — foi assim que um limite de modelos de pedestre nunca entrou em vigor e o jogo travou. A varredura segue junções de diretório, então uma pasta de mod materializada como junção é revistada por dentro, não pulada.',
+    dupItem: '{name}: os mesmos bytes em {count} lugares — {paths}',
+    stackedTitle: 'Vários limit adjusters ao mesmo tempo',
+    stackedNone: 'No máximo um limit adjuster ativo neste perfil',
+    stackedFound_one: '1 limit adjuster diferente encontrado',
+    stackedFound_other: '{count} limit adjusters diferentes encontrados ao mesmo tempo',
+    stackedDetail:
+      'O CrashList avisa explicitamente que empilhar limit adjusters derruba o jogo: dois produtos diferentes reescrevem os mesmos limites, um por cima do outro. Desative todos menos um.',
+    stackedItem: '{label}: {paths}',
+    dupUnknown: 'Nenhum duplicado no que deu para ler — mas a varredura não chegou ao fim',
+    stackedUnknown: 'Nenhum empilhamento no que deu para ler — mas a varredura não chegou ao fim',
+    scanCapped: 'A varredura atingiu o limite de arquivos por execução e parou antes de terminar — este resultado é parcial, não uma pasta limpa.',
+    runningTitle: 'O jogo está aberto agora?',
+    runningClosed: 'O {exe} não está rodando — instalar, desinstalar e trocar de perfil estão liberados',
+    runningOpen: 'O {exe} está aberto agora (PID {pid})',
+    runningAssumed: 'Um {exe} está aberto agora; o Windows não disse de qual pasta ele veio, então o Modão assume que é desta',
+    runningDetail:
+      'O Mod Loader observa a pasta modloader\\ e recarrega o que muda embaixo dele. Mexer nos mods com o jogo aberto não dá erro de arquivo travado: dá crash no meio da sessão (CrashList 0x007F3825). Enquanto o jogo estiver aberto o Modão recusa qualquer alteração — e não escreve nem o arquivo de teste de permissão.',
+    writeUnknownRunning: 'Não checado agora: o jogo está aberto',
+    writeUnknownDetail:
+      'O teste de permissão grava um arquivo dentro de modloader\\, que é exatamente o que não pode acontecer com o jogo aberto. Ele não foi feito, então a resposta honesta é “não sei” — e não “está tudo certo”. Feche o jogo e rode a checagem de novo. Se aparecer um resultado abaixo, ele é de uma checagem anterior.',
+    cleoPluginsOk: 'O CLEO {version} atende os {count} plugin(s) que declaram uma exigência',
+    cleoPluginTooOld_one: 'O {name} exige CLEO {range}, e o instalado é {version}',
+    cleoPluginTooOld_other:
+      '{count} plugins exigem um CLEO mais novo que o instalado ({version}); o primeiro é o {name}, que exige {range}',
+    cleoPluginUnknown_one: 'O {name} exige CLEO {range}, mas não deu para ler a versão do CLEO instalado',
+    cleoPluginUnknown_other: '{count} plugins exigem uma versão mínima do CLEO, mas não deu para ler a versão instalada',
+    cleoPluginDetail:
+      'Um plugin .cleo compilado contra um CLEO mais novo do que o instalado quebra na inicialização, com um diálogo fatal citando um ordinal que não existe na versão antiga. A exigência é lida de cada plugin instalado — do que o mod dele declara — e não de uma lista fixa dentro do Modão, então um plugin novo já entra checado.',
+    cleoPluginItem: '{name} exige CLEO {range} (instalado: {version}) — {path}',
+    noProfile: 'Nenhum perfil ativo — esta checagem olha os mods de um perfil; as checagens do jogo em si rodaram assim mesmo',
     unknown: 'desconhecido'
   },
   en: {
@@ -124,9 +181,6 @@ export const checks = {
       'The ASI directory is detected from where modloader.asi actually lives rather than assumed: some installs load from the game root, repacks often load from scripts\\.',
     asiUnknown: 'unknown',
     asiGameRoot: 'the game root',
-    cleoPlusTitle: 'CLEO+ version gate',
-    cleoPlusOk: 'CLEO {version} satisfies CLEO+',
-    cleoPlusTooOld: 'CLEO+ is installed but CLEO {version} is too old',
     cleoPlusDetail:
       'CLEO+ against CLEO 4.3 fails at startup with a fatal dialog: "The ordinal 22 could not be located in the dynamic link library CLEO+.cleo". Update CLEO to 4.4 or newer.',
     cleoTitle: 'CLEO',
@@ -152,6 +206,14 @@ export const checks = {
     orphanFound: '{count} config file(s) with no matching .asi',
     orphanDetail:
       'These are left when a plugin is removed and its .ini stays. They break nothing, but they confuse diagnosis: the file suggests a mod that is no longer there.',
+    orphanReunite:
+      '{count} of them are there because the .asi was moved into a mod folder. Modão can move the plugin back to the ASI directory - nothing is deleted.',
+    orphanItemMoveBack: '{config} - {plugin} is in the {folder} folder, and belongs in {where}',
+    orphanItemNoPlugin: '{config} - no {plugin} anywhere in this profile; nothing reads it',
+    orphanRefusedShared:
+      '{plugin} is on record in {count} profiles at the same path. There is one file on disk and no way to tell whose it is, so nothing was moved: open the profile you want repaired and use the button there.',
+    orphanRefusedUnowned:
+      '{plugin} is at {path}, but no installed mod claims that path. Nothing was moved - move it by hand if that is what you want.',
     fpsTitle: 'FPS limit',
     fpsOk: '{value} FPS - within what the engine can take',
     fpsHigh: '{value} FPS - above 60 GTA SA breaks physics, animation and missions',
@@ -180,10 +242,62 @@ export const checks = {
     verdictInert: 'inert',
     verdictMisInstalled: 'mis-installed',
     verdictUnknown: 'not mentioned in the log',
+    upstreamTitle: 'Outdated build (upstream releases)',
+    upstreamNoRepos: 'No mod in this profile has a known GitHub release to compare against',
+    upstreamUnavailable: 'GitHub could not be reached just now - nothing to say about how old these builds are',
+    upstreamCurrent: '{count} mod(s) checked against their newest release; none behind',
+    upstreamSomeUnknown: '{count} mod(s) could not be compared (no release, no matching asset, or no network).',
+    upstreamCapped: '{count} mod(s) with a known repo were not checked in this scan (per-run limit reached).',
+    upstreamOutdated: '{count} mod(s) are on a build older than their newest release',
+    upstreamDetail:
+      'An old build is the cheapest suspect there is: one download against a whole evening of bisecting. Modão compares the installed file size and SHA-256 with the release asset; when a release only ships a .zip, the PE timestamp is taken as a hint. With no network the answer is "unknown" - never "outdated".',
+    upstreamItem: '{title} - {file}: installed {installed} bytes, release {tag} of {repo} has {latest} bytes',
     sizeTitle: 'Asset size',
     sizeSummary: '{size} GB of enabled mods',
     sizeDetail:
       'Large packs plus a 2 GB address space is the usual cause of out-of-memory crashes mid-game.',
+    hookTitle: 'Mods hooking the same address',
+    hookNone: 'No duplicate hooks found among this profile\'s .asi files',
+    hookFound_one: '1 address has more than one mod hooking it',
+    hookFound_other: '{count} addresses have more than one mod hooking them',
+    hookDetail:
+      'A plugin-sdk .asi built with no source code stores the addresses it hooks as obfuscated names in its own symbol table - Modão decodes that. Two mods hooking the same address never show up as a file conflict: both .asi files install fine, and only one hook survives at runtime.',
+    dupTitle: 'Duplicate plugins',
+    dupNone: 'No duplicate .asi/.cleo files across the ASI directory, scripts\\, cleo\\ and modloader\\',
+    dupFound_one: '1 file is duplicated in more than one place',
+    dupFound_other: '{count} files are duplicated in more than one place',
+    dupDetail:
+      'The same plugin in two places at once (a copy in scripts\\ and another inside a mod folder in modloader\\, say) makes both instances try to apply the same limit twice - this is exactly how a pedestrian-model limit never took effect and the game crashed. The scan follows directory junctions, so a mod folder materialised as a junction is looked inside rather than skipped.',
+    dupItem: '{name}: the same bytes at {count} places - {paths}',
+    stackedTitle: 'Several limit adjusters at once',
+    stackedNone: 'At most one limit adjuster active in this profile',
+    stackedFound_one: '1 different limit adjuster found',
+    stackedFound_other: '{count} different limit adjusters found active at once',
+    stackedDetail:
+      'The CrashList warns explicitly that stacking limit adjusters crashes the game: two different products rewrite the same limits, one on top of the other. Disable all but one.',
+    stackedItem: '{label}: {paths}',
+    dupUnknown: 'No duplicate in what could be read - but the scan did not reach the end',
+    stackedUnknown: 'No stack in what could be read - but the scan did not reach the end',
+    scanCapped: 'The scan hit its per-run file limit and stopped before finishing - this result is partial, not a clean folder.',
+    runningTitle: 'Is the game open right now?',
+    runningClosed: '{exe} is not running - installing, uninstalling and switching profiles are all allowed',
+    runningOpen: '{exe} is open right now (PID {pid})',
+    runningAssumed: 'An {exe} is open right now; Windows would not say which folder it came from, so Modão assumes it is this one',
+    runningDetail:
+      'Mod Loader watches modloader\\ and hot-reloads whatever changes underneath it. Touching mods with the game open does not fail with a locked-file error: it succeeds, and the game crashes mid-session (CrashList 0x007F3825). While the game is open Modão refuses every change - and writes not even the write-access probe file.',
+    writeUnknownRunning: 'Not checked this run: the game is open',
+    writeUnknownDetail:
+      'The probe writes a file into modloader\\, which is exactly what must not happen while the game is open. It was not taken, so the honest answer is "unknown" - not "fine". Close the game and run the check again. Anything listed below is from an earlier probe.',
+    cleoPluginsOk: 'CLEO {version} satisfies the {count} plugin(s) that state a requirement',
+    cleoPluginTooOld_one: '{name} requires CLEO {range}, and the installed one is {version}',
+    cleoPluginTooOld_other:
+      '{count} plugins require a newer CLEO than the installed {version}; the first is {name}, which requires {range}',
+    cleoPluginUnknown_one: '{name} requires CLEO {range}, but the installed CLEO version could not be read',
+    cleoPluginUnknown_other: '{count} plugins state a minimum CLEO version, but the installed version could not be read',
+    cleoPluginDetail:
+      'A .cleo plugin built against a newer CLEO than the installed one breaks at startup with a fatal dialog naming an ordinal the older version does not export. The requirement is read per installed plugin - from what its own mod declares - rather than from a fixed list inside Modão, so a new plugin arrives already checked.',
+    cleoPluginItem: '{name} requires CLEO {range} (installed: {version}) - {path}',
+    noProfile: 'No active profile - this check reads the mods a profile has; the game-level checks ran anyway',
     unknown: 'unknown'
   }
 } as const

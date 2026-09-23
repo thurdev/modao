@@ -1,7 +1,7 @@
 {
   "format": "modao-dependencies",
   "version": 1,
-  "note": "Curated dependency graph, keyed by the MixMods post slug. The scraper reads prose, not structured data, so these relationships are maintained by hand from the mod pages and from what the scene documents. Slugs that are not in the catalogue are ignored.",
+  "note": "Curated dependency graph, keyed by the MixMods post slug. The scraper reads prose, not structured data, so these relationships are maintained by hand from the mod pages and from what the scene documents. Both ends are slug-addressed: an edge whose subject is not one of the bundled catalogue entries is still stored, and binds the moment that mod is installed - a locally-installed archive titled \"More Radar Icons\" lands on the slug more-radar-icons. Kinds are requires, conflicts, alt (requires-one-of, with an altGroup) and provides (this mod ships that file; a second copy in the same profile is a conflict).",
   "frameworks": {
     "modloader": "Mod Loader - every modloader-folder mod needs it",
     "cleoplus": "CLEO+ - requires CLEO 4.4 or newer",
@@ -148,6 +148,94 @@
       "kind": "provides",
       "target": "gsx.asi",
       "note": "VehFuncs ships gsx.asi; a second copy from another mod collides."
+    },
+    {
+      "mod": "itemfinders",
+      "kind": "requires",
+      "target": "cleo",
+      "versionRange": ">=4.4",
+      "note": "The ItemFinders scripts are CLEO+ scripts, and CLEO+ itself only works from CLEO 4.4 onwards."
+    },
+    {
+      "mod": "itemfinders",
+      "kind": "requires",
+      "target": "cleoplus",
+      "versionRange": ">=1.0.7",
+      "note": "The ItemFinders scripts call CLEO+ opcodes added in 1.0.7."
+    },
+    {
+      "mod": "tag-finder",
+      "kind": "requires",
+      "target": "cleo",
+      "versionRange": ">=4.4",
+      "note": "Tag Finder is a CLEO+ script, and CLEO+ itself only works from CLEO 4.4 onwards."
+    },
+    {
+      "mod": "tag-finder",
+      "kind": "requires",
+      "target": "cleoplus",
+      "versionRange": ">=1.0.7",
+      "note": "Tag Finder calls CLEO+ opcodes added in 1.0.7."
+    },
+    {
+      "mod": "horseshoe-finder",
+      "kind": "requires",
+      "target": "cleo",
+      "versionRange": ">=4.4",
+      "note": "Horseshoe Finder is a CLEO+ script, and CLEO+ itself only works from CLEO 4.4 onwards."
+    },
+    {
+      "mod": "horseshoe-finder",
+      "kind": "requires",
+      "target": "cleoplus",
+      "versionRange": ">=1.0.7",
+      "note": "Horseshoe Finder calls CLEO+ opcodes added in 1.0.7."
+    },
+    {
+      "mod": "snapshot-finder",
+      "kind": "requires",
+      "target": "cleo",
+      "versionRange": ">=4.4",
+      "note": "Snapshot Finder is a CLEO+ script, and CLEO+ itself only works from CLEO 4.4 onwards."
+    },
+    {
+      "mod": "snapshot-finder",
+      "kind": "requires",
+      "target": "cleoplus",
+      "versionRange": ">=1.0.7",
+      "note": "Snapshot Finder calls CLEO+ opcodes added in 1.0.7."
+    },
+    {
+      "mod": "oyster-finder",
+      "kind": "requires",
+      "target": "cleo",
+      "versionRange": ">=4.4",
+      "note": "Oyster Finder is a CLEO+ script, and CLEO+ itself only works from CLEO 4.4 onwards."
+    },
+    {
+      "mod": "oyster-finder",
+      "kind": "requires",
+      "target": "cleoplus",
+      "versionRange": ">=1.0.7",
+      "note": "Oyster Finder calls CLEO+ opcodes added in 1.0.7."
+    },
+    {
+      "mod": "icones-de-armas-fieis-desenhos-corrigidos",
+      "kind": "requires",
+      "target": "sa-weapon-icons-txd",
+      "note": "nadalao Weapon Icons is adapted to Weapon Icons TXD - the icons are separated out precisely so you do not have to replace your weapon models. Without the base mod there is nothing for the icon .txd to live in."
+    },
+    {
+      "mod": "weapon-icons-hd-repaint",
+      "kind": "requires",
+      "target": "weapon-icons-txd",
+      "note": "A repainted hud.txd is an overlay: the file replaces the one inside Weapon Icons TXD. Installed on its own it is a silent no-op, because priority picks one winner per filename."
+    },
+    {
+      "mod": "proper-tattoos-retex-hd",
+      "kind": "requires",
+      "target": "proper-player-retex",
+      "note": "The mod page states the requirement itself: the HD tattoos need a retextured player at 1024, which is what Proper Player Retex supplies."
     }
   ]
 }
