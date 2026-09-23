@@ -7,8 +7,9 @@ import { clampPriority } from '../game/modloaderIni'
 import { remateriliseInstall, syncProfileIni } from '../profiles/materialize'
 import { recordEarlyDisable } from '../catalog/rating'
 import { requireActiveGame } from '../game/detect'
-import { exists, sha256File } from '../util/fsx'
-import { dematerialise, listVariantOption, quarantineEdited, storeDir } from '../store/contentStore'
+import { exists, isDirectory, isLink, sha256File } from '../util/fsx'
+import { listVariantOption, quarantineEdited, storeDir } from '../store/contentStore'
+import { snapshotFiles } from '../profiles/switchTx'
 import { providesKey } from '../conflicts'
 import { Paths } from '../util/paths'
 
@@ -270,18 +271,36 @@ function planVariantSwap(
  * the store at install time (`contentStore.ingestVariantOptions`).
  *
  * The outgoing option's files are REMOVED - from the store, from the game
- * folder and from this install's records - before the incoming option's are
+ * folder and from this install's records - as the incoming option's are
  * written. Exactly one option is live afterwards, which is the whole point of
  * the group: a switch that left the old file beside the new one would be the
- * "nine presets installed at once" bug wearing a different hat. It is also
- * all-or-nothing. Everything is resolved before anything is moved, and a file
- * that cannot be placed throws with the group untouched, rather than reporting
- * success over a half-swapped install.
+ * "nine presets installed at once" bug wearing a different hat.
+ *
+ * It is also all-or-nothing, in three stages:
+ *
+ * 1. RESOLVE. Which incoming file lands on which target is worked out in full
+ *    (`planVariantSwap`) before anything moves. Anything ambiguous throws here,
+ *    with the install untouched.
+ * 2. STAGE. The outgoing bytes are snapshotted out of the store and hash-checked
+ *    by `snapshotFiles` - the profile switch's own primitive - and the incoming
+ *    bytes are staged and hash-checked beside them. Both states now exist on
+ *    disk. Still nothing has been removed.
+ * 3. SWAP. Store, then game folder, then rows, then relink. Any throw runs the
+ *    undo: the staged bytes come out, the snapshot goes back, the rows are
+ *    restored to exactly what they were, and the install is re-materialised. The
+ *    caller sees the old option, live, and an error saying so - never a
+ *    half-swap, and never rows describing bytes that are gone.
+ *
+ * Nothing unlinks a whole mod folder. A junctioned folder IS the store folder,
+ * so it follows every store write on its own; a per-file install has only the
+ * files being swapped touched.
  */
 export async function switchVariant(installId: number, groupId: string, optionId: string): Promise<void> {
   const db = getDb()
-  const row = db.prepare('SELECT profile_id, store_key, variant_groups_json FROM install WHERE id = ?').get(installId) as
-    | { profile_id: number; store_key: string | null; variant_groups_json: string | null }
+  const row = db
+    .prepare('SELECT profile_id, store_key, variant_groups_json, variant_choice FROM install WHERE id = ?')
+    .get(installId) as
+    | { profile_id: number; store_key: string | null; variant_groups_json: string | null; variant_choice: string | null }
     | undefined
   if (!row) throw new Error('That install no longer exists.')
   if (!row.store_key) throw new Error('This install has no store payload to switch within.')
@@ -305,77 +324,186 @@ export async function switchVariant(installId: number, groupId: string, optionId
 
   const storeRoot = storeDir(storeKey)
   const outgoingRows = db
-    .prepare('SELECT relative_path, backup_path, sha256, destination_class FROM install_file WHERE install_id = ?')
-    .all(installId) as { relative_path: string; backup_path: string | null; sha256: string | null; destination_class: string }[]
+    .prepare('SELECT relative_path, backup_path, sha256, size, was_overwrite, destination_class FROM install_file WHERE install_id = ?')
+    .all(installId) as {
+    relative_path: string
+    backup_path: string | null
+    sha256: string | null
+    size: number
+    was_overwrite: number
+    destination_class: string
+  }[]
   const mine = new Set(group.targetRelatives.map((t) => t.toLowerCase()))
   const leaving = outgoingRows.filter((r) => mine.has(r.relative_path.toLowerCase()))
   // Every file in the group shares one destination class - it is one folder in
   // one place - so the outgoing rows say what the incoming ones are.
   const destination = (leaving[0]?.destination_class ?? 'modloader-folder') as DestinationClass
 
-  // --- from here on it is a swap, and it completes ---------------------------
   const profile = db.prepare('SELECT is_active FROM profile WHERE id = ?').get(row.profile_id) as { is_active: number } | undefined
-  if (profile?.is_active) {
-    const game = requireActiveGame()
-    // A file the user edited by hand is theirs, whichever way it leaves.
+  const game = profile?.is_active ? requireActiveGame() : null
+
+  // --- staging: both states exist on disk, verified, before anything is lost -
+  // Every destructive step below has a byte-for-byte copy behind it, taken and
+  // hash-checked by the same `snapshotFiles` the profile switch uses. This
+  // branch exists because a filesystem mutation with no verified undo destroyed
+  // a real install; a variant swap gets the same treatment.
+  const workDir = path.join(Paths.quarantine(), 'variant-swap', String(installId), String(Date.now()))
+  const rollback = await snapshotFiles(
+    storeRoot,
+    leaving.map((r) => r.relative_path),
+    path.join(workDir, 'outgoing')
+  )
+  if (rollback.length !== leaving.length) {
+    await fsp.rm(workDir, { recursive: true, force: true }).catch(() => undefined)
+    throw new Error(
+      `The store no longer holds every file "${outgoingLabel}" installed, so Modão cannot undo a switch away from it ` +
+        'and will not start one. Reinstall the mod and pick the option you want.'
+    )
+  }
+  const staged: { target: string; from: string; sha256: string; size: number }[] = []
+  for (const s of swap) {
+    const to = path.join(workDir, 'incoming', s.target)
+    await fsp.mkdir(path.dirname(to), { recursive: true })
+    await fsp.copyFile(s.abs, to)
+    const sha = await sha256File(to)
+    if (sha !== (await sha256File(s.abs))) {
+      await fsp.rm(workDir, { recursive: true, force: true }).catch(() => undefined)
+      throw new Error(`The staged copy of ${s.target} does not match the store. Nothing was changed.`)
+    }
+    staged.push({ target: s.target, from: to, sha256: sha, size: (await fsp.stat(to)).size })
+  }
+
+  // A file the user edited by hand is theirs, whichever way it leaves. Copying
+  // it out changes nothing, so it belongs in the staging half.
+  if (game) {
     await quarantineEdited(
       game.path,
       leaving.map((r) => ({ relativePath: r.relative_path, sha256: r.sha256 })),
       path.join(Paths.quarantine(), 'variant', String(installId))
     )
-    // The store copy goes first, so removing a path that reaches the store
-    // through a junction cannot take the incoming bytes with it.
-    for (const r of leaving) await fsp.rm(path.join(storeRoot, r.relative_path), { force: true })
-    await dematerialise(
-      game,
-      leaving.map((r) => r.relative_path),
-      leaving.filter((r) => r.backup_path).map((r) => ({ relativePath: r.relative_path, backupPath: r.backup_path! })),
-      // Every path here is one this install wrote and this switch is replacing;
-      // anything the user edited went to quarantine three lines up.
-      { mayRemoveFile: () => true }
-    )
-  } else {
-    for (const r of leaving) await fsp.rm(path.join(storeRoot, r.relative_path), { force: true })
   }
 
-  const written: { target: string; sha256: string; size: number }[] = []
-  for (const s of swap) {
-    const dest = path.join(storeRoot, s.target)
-    await fsp.mkdir(path.dirname(dest), { recursive: true })
-    await fsp.copyFile(s.abs, dest)
-    written.push({ target: s.target, sha256: await sha256File(dest), size: (await fsp.stat(dest)).size })
+  /**
+   * A mod folder materialised as a junction IS the store folder, so the game
+   * folder follows every store write for free and must not be unlinked. Only a
+   * per-file (hardlink or copy) install needs its own files touched - and then
+   * only the ones being swapped, never the whole folder.
+   */
+  const followsStore = (rel: string): boolean => {
+    if (!game) return true
+    const m = /^modloader\/([^/]+)\//.exec(rel)
+    return !!m && isLink(path.join(game.path, 'modloader', m[1]))
   }
 
   group.chosenOptionId = optionId
-  group.targetRelatives = written.map((w) => w.target)
+  group.targetRelatives = staged.map((s) => s.target)
   // Every group's choice, not just this one: an install with two groups used to
   // lose the other one's label the moment either was switched.
   const variantChoice = groups.map((g) => g.chosenOptionId).join(' + ') || null
 
-  db.transaction(() => {
-    const dropFile = db.prepare('DELETE FROM install_file WHERE install_id = ? AND relative_path = ?')
-    const dropProvides = db.prepare('DELETE FROM provides WHERE install_id = ? AND relative_path = ?')
-    for (const r of leaving) {
-      dropFile.run(installId, r.relative_path)
-      dropProvides.run(installId, providesKey(r.relative_path))
+  let committed = false
+  const restoredBackups: string[] = []
+  const undo = async (): Promise<void> => {
+    // Newest first: drop what the incoming option wrote, then put the outgoing
+    // bytes back where they came from, then the rows, then the game folder.
+    for (const s of staged) await fsp.rm(path.join(storeRoot, s.target), { force: true }).catch(() => undefined)
+    for (const b of rollback) {
+      const to = path.join(storeRoot, b.relativePath)
+      await fsp.mkdir(path.dirname(to), { recursive: true })
+      await fsp.copyFile(b.backupPath, to)
     }
-    const addFile = db.prepare(
-      `INSERT INTO install_file (install_id, relative_path, sha256, size, was_overwrite, backup_path, destination_class)
-       VALUES (?,?,?,?,0,NULL,?)`
-    )
-    const addProvides = db.prepare('INSERT OR REPLACE INTO provides (install_id, relative_path, sha256, size) VALUES (?,?,?,?)')
-    for (const w of written) {
-      addFile.run(installId, w.target, w.sha256, w.size, destination)
-      addProvides.run(installId, providesKey(w.target), w.sha256, w.size)
+    for (const p of restoredBackups) await fsp.rm(p, { force: true }).catch(() => undefined)
+    if (committed) {
+      db.transaction(() => {
+        for (const s of staged) {
+          db.prepare('DELETE FROM install_file WHERE install_id = ? AND relative_path = ?').run(installId, s.target)
+          db.prepare('DELETE FROM provides WHERE install_id = ? AND relative_path = ?').run(installId, providesKey(s.target))
+        }
+        const addFile = db.prepare(
+          `INSERT INTO install_file (install_id, relative_path, sha256, size, was_overwrite, backup_path, destination_class)
+           VALUES (?,?,?,?,?,?,?)`
+        )
+        const addProvides = db.prepare('INSERT OR REPLACE INTO provides (install_id, relative_path, sha256, size) VALUES (?,?,?,?)')
+        for (const r of leaving) {
+          addFile.run(installId, r.relative_path, r.sha256, r.size, r.was_overwrite, r.backup_path, r.destination_class)
+          addProvides.run(installId, providesKey(r.relative_path), r.sha256, r.size)
+        }
+        db.prepare('UPDATE install SET variant_groups_json = ?, variant_choice = ? WHERE id = ?').run(
+          row.variant_groups_json,
+          row.variant_choice,
+          installId
+        )
+      })()
     }
-    db.prepare('UPDATE install SET variant_groups_json = ?, variant_choice = ? WHERE id = ?').run(
-      JSON.stringify(groups),
-      variantChoice,
-      installId
-    )
-  })()
+    await remateriliseInstall(installId)
+  }
 
-  // The store now holds the new bytes; re-link (or re-copy) so the game folder
-  // picks them up too. A junctioned mod folder sees the change for free.
-  await remateriliseInstall(installId)
+  try {
+    // 1. The store: the outgoing bytes out, the staged bytes in.
+    for (const r of leaving) await fsp.rm(path.join(storeRoot, r.relative_path), { force: true })
+    for (const s of staged) {
+      const dest = path.join(storeRoot, s.target)
+      await fsp.mkdir(path.dirname(dest), { recursive: true })
+      await fsp.copyFile(s.from, dest)
+    }
+
+    // 2. The game folder, only where it does not already follow the store, and
+    //    only the files this swap replaces.
+    if (game) {
+      const keeping = new Set(staged.map((s) => s.target.toLowerCase()))
+      for (const r of leaving) {
+        if (followsStore(r.relative_path)) continue
+        const p = path.join(game.path, r.relative_path)
+        if (exists(p) && !isDirectory(p)) await fsp.rm(p, { force: true })
+        // Nothing is taking this path over, so whatever it displaced comes back.
+        if (r.backup_path && !keeping.has(r.relative_path.toLowerCase()) && exists(r.backup_path)) {
+          await fsp.mkdir(path.dirname(p), { recursive: true })
+          await fsp.copyFile(r.backup_path, p)
+          restoredBackups.push(p)
+        }
+      }
+    }
+
+    // 3. The rows, in one SQLite transaction.
+    db.transaction(() => {
+      const dropFile = db.prepare('DELETE FROM install_file WHERE install_id = ? AND relative_path = ?')
+      const dropProvides = db.prepare('DELETE FROM provides WHERE install_id = ? AND relative_path = ?')
+      for (const r of leaving) {
+        dropFile.run(installId, r.relative_path)
+        dropProvides.run(installId, providesKey(r.relative_path))
+      }
+      const addFile = db.prepare(
+        `INSERT INTO install_file (install_id, relative_path, sha256, size, was_overwrite, backup_path, destination_class)
+         VALUES (?,?,?,?,0,NULL,?)`
+      )
+      const addProvides = db.prepare('INSERT OR REPLACE INTO provides (install_id, relative_path, sha256, size) VALUES (?,?,?,?)')
+      for (const s of staged) {
+        addFile.run(installId, s.target, s.sha256, s.size, destination)
+        addProvides.run(installId, providesKey(s.target), s.sha256, s.size)
+      }
+      db.prepare('UPDATE install SET variant_groups_json = ?, variant_choice = ? WHERE id = ?').run(
+        JSON.stringify(groups),
+        variantChoice,
+        installId
+      )
+    })()
+    committed = true
+
+    // 4. Link the new bytes into the game folder.
+    await remateriliseInstall(installId)
+  } catch (e) {
+    try {
+      await undo()
+    } catch (undoError) {
+      throw new Error(
+        `Switching to "${incoming.label}" failed (${(e as Error).message}) AND the rollback failed ` +
+          `(${(undoError as Error).message}). A verified copy of "${outgoingLabel}" is in ${path.join(workDir, 'outgoing')}.`
+      )
+    }
+    throw new Error(
+      `Switching to "${incoming.label}" failed, so Modão put "${outgoingLabel}" back: ${(e as Error).message}`
+    )
+  }
+
+  await fsp.rm(workDir, { recursive: true, force: true }).catch(() => undefined)
 }

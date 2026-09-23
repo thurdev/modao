@@ -300,6 +300,54 @@ export async function runE2E(): Promise<number> {
 
   await fsp.rm(hudSource, { recursive: true, force: true })
   const hudMod = listInstalled(adopted.profileId).find((m) => m.installId === hudApplied.installId)!
+
+  // A swap that fails halfway must leave the install exactly as it was. The
+  // failure injected here is a real filesystem obstruction rather than a test
+  // hook: a DIRECTORY sitting where the incoming option's file has to be
+  // written, so the copy into the store throws AFTER the outgoing bytes have
+  // already been removed - the window that used to be unguarded.
+  const hudKey = (getDb().prepare('SELECT store_key FROM install WHERE id = ?').get(hudApplied.installId) as { store_key: string })
+    .store_key
+  const hudBlocked = path.join(storeDir(hudKey), 'modloader', 'HUD 2K', 'models', 'hud4k.txd')
+  await fsp.mkdir(hudBlocked, { recursive: true })
+  let swapError: string | null = null
+  try {
+    await switchVariant(hudMod.installId, hudMod.variantGroups[0].id, hud4k.id)
+  } catch (e) {
+    swapError = (e as Error).message
+  }
+  check(
+    'field audit 09: a swap that fails midway throws instead of reporting success',
+    !!swapError && swapError.includes('put "HUD 2K" back'),
+    swapError
+  )
+  check(
+    'field audit 09: the rolled-back swap left the old option live in the game folder',
+    fs.existsSync(hudOld) && (await fsp.readFile(hudOld, 'utf8')) === 'two kay',
+    swapError
+  )
+  const hudRolledBack = listInstalled(adopted.profileId).find((m) => m.installId === hudApplied.installId)!
+  check(
+    'field audit 09: the rolled-back swap left the records on the old option',
+    hudRolledBack.fileCount === 1 && hudRolledBack.variantGroups[0]?.chosenOptionId === hud2k.id,
+    { fileCount: hudRolledBack.fileCount, group: hudRolledBack.variantGroups[0] }
+  )
+  const trackedAfterRollback = getDb()
+    .prepare('SELECT relative_path FROM install_file WHERE install_id = ?')
+    .all(hudApplied.installId) as { relative_path: string }[]
+  check(
+    'field audit 09: every file the rolled-back install still claims is really on disk',
+    trackedAfterRollback.length === 1 &&
+      trackedAfterRollback.every((f) => fs.existsSync(path.join(game, f.relative_path))),
+    trackedAfterRollback
+  )
+  check(
+    'field audit 09: the failed swap quarantined nothing - it had nothing of the user in it',
+    !fs.existsSync(path.join(Paths.quarantine(), 'variant', String(hudApplied.installId))),
+    Paths.quarantine()
+  )
+  await fsp.rm(hudBlocked, { recursive: true, force: true })
+
   await switchVariant(hudMod.installId, hudMod.variantGroups[0].id, hud4k.id)
   check(
     'field audit 09: switching to a differently-named option removes the file the old one installed',

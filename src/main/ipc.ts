@@ -645,7 +645,15 @@ export function registerIpc(): void {
   })
   ipcMain.handle('library:setVariant', async (_e, installId: number, groupId: string, optionId: string) => {
     await requireIdleGame()
-    return switchVariant(installId, groupId, optionId)
+    try {
+      return await switchVariant(installId, groupId, optionId)
+    } catch (e) {
+      // A refused or rolled-back switch left the old option live and says so in
+      // its message. That has to reach the user, not disappear into a rejected
+      // promise the renderer may or may not be listening to.
+      toast('error', (e as Error).message)
+      throw e
+    }
   })
 
   // --- catalog --------------------------------------------------------------
