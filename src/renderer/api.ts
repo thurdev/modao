@@ -209,7 +209,7 @@ export const api = {
   importExistingSaves: (profileId: number, label: string) =>
     call<{ snapshotId: number; slots: number }>('saves:importExisting', profileId, label),
 
-  health: (profileId: number) => call<HealthReport>('health:run', profileId),
+  health: (profileId: number | null) => call<HealthReport>('health:run', profileId),
   crashes: (profileId: number) => call<CrashReport[]>('health:crashes', profileId),
   /** The same records grouped into one entry per dead process. */
   crashIncidents: (profileId: number) => call<CrashIncident[]>('health:incidents', profileId),

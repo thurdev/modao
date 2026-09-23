@@ -39,6 +39,8 @@ export const health = {
     noProfile: 'Nenhum perfil ativo',
     noProfileHint:
       'A Saúde roda em cima dos mods que um perfil tem ligados. Ative um na tela de Perfis para checar, ler os crashes ou bisseccionar.',
+    noProfileChecks:
+      'Sem perfil ativo, as checagens que dependem de um perfil ficam de fora — mas as da instalação continuam valendo, e elas é que podem barrar o jogo. O que estiver barrando aparece abaixo, junto com o "Abrir mesmo assim". Ative um perfil na tela de Perfis para ver o resto.',
     running: 'Rodando as checagens na pasta do jogo…',
     crashIntro:
       'Os registros de crash vêm do Visualizador de Eventos do Windows — canal Application, origem "Application Error", filtrando gta_sa.exe. Registros escritos por um mesmo processo que morreu aparecem como um incidente só. Quando a falha é dentro do gta_sa.exe, o endereço é 0x400000 + o deslocamento da falha, e é consultado no CrashList.txt que vem junto; quando é dentro de uma DLL, o deslocamento é relativo àquela DLL, então aparece como módulo+deslocamento e nada é consultado — o CrashList indexa só o executável. Travar sem fechar não gera registro de exceção nenhum: essa ausência já é o diagnóstico, e aponta para deadlock ou loop infinito, não para um endereço.',
@@ -118,6 +120,8 @@ export const health = {
     noProfile: 'No active profile',
     noProfileHint:
       'Health runs against the mods a profile has enabled. Activate one on the Profiles screen to check it, read its crashes or bisect it.',
+    noProfileChecks:
+      'With no profile active the profile-scoped checks stand down - but the ones about this game install still run, and those are the ones that can refuse a launch. Whatever is blocking is listed below, with "Launch anyway" beside it. Activate a profile on the Profiles screen for the rest.',
     running: 'Running checks against the game folder…',
     crashIntro:
       'Crash records come from the Windows Event Log — the Application channel, source "Application Error", matching gta_sa.exe. Records written by one dying process are shown as a single incident. When the fault is inside gta_sa.exe the crash address is 0x400000 plus the fault offset and is looked up in the bundled CrashList.txt; when it is inside a DLL the offset is relative to that DLL, so it is shown as module+offset and no lookup is attempted — CrashList indexes the executable only. A hang leaves no exception record at all: that absence is itself the diagnosis, and points at a deadlock or an infinite loop rather than a faulting address.',

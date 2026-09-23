@@ -30,12 +30,25 @@ export function HealthScreen(): JSX.Element {
   const { profile, pushToast } = useApp()
   const [tab, setTab] = useState<Tab>('check')
 
+  // With no active profile the pre-launch check still runs. A refused launch
+  // sends the user here, and the game-level findings that refuse it - stream.ini
+  // above all - are just as fatal with no profile pointing at them. This screen
+  // used to be an Empty in that state: no blockers, no reason, and no "Launch
+  // anyway", which is the only override in the app. The profile-scoped tabs have
+  // nothing to show and say so.
   if (!profile) {
     return (
-      <Empty
-        title={t('health.noProfile')}
-        hint={t('health.noProfileHint')}
-      />
+      <>
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div className="card-body" style={{ paddingTop: 12, paddingBottom: 12 }}>
+            <strong>{t('health.noProfile')}</strong>
+            <p className="muted" style={{ margin: '6px 0 0' }}>
+              {t('health.noProfileChecks')}
+            </p>
+          </div>
+        </div>
+        <PreLaunch profileId={null} pushToast={pushToast} />
+      </>
     )
   }
 
@@ -66,7 +79,7 @@ export function HealthScreen(): JSX.Element {
 
 // ───────────────────────────── pre-launch ─────────────────────────────
 
-function PreLaunch(props: { profileId: number; pushToast: ToastFn }): JSX.Element {
+function PreLaunch(props: { profileId: number | null; pushToast: ToastFn }): JSX.Element {
   const t = useT()
   const [fixingStream, setFixingStream] = useState(false)
   const [reuniting, setReuniting] = useState(false)

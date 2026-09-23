@@ -1659,9 +1659,57 @@ export async function runE2E(): Promise<number> {
       noProfileReport?.checks.find((c) => c.id === 'stream-ini')?.status === 'fail',
     noProfileReport?.checks.map((c) => `${c.id}:${c.status}`)
   )
+  const noProfileScreenReport = await (await import('./diagnostics/healthCache')).freshHealthReport(null, game)
+  check(
+    'launch: and a report can still be produced for the screen the refusal routes to, with no profile at all',
+    noProfileScreenReport.ok === false && noProfileScreenReport.checks.some((c) => c.id === 'stream-ini' && c.status === 'fail'),
+    noProfileScreenReport.checks.map((c) => `${c.id}:${c.status}`)
+  )
   if (activeBefore) getDb().prepare('UPDATE profile SET is_active = 1 WHERE id = ?').run(activeBefore)
   await fsp.rm(streamIni, { force: true })
   forgetHealthReport()
+
+  // --- final review C3: a refusal the Health screen cannot show is a refusal
+  // the user cannot answer ----------------------------------------------------
+  // The gate refuses on `blocking` OR `missing` (dependencyLaunchBlockers), but
+  // the health report's own `dependencies` check only failed on `blocking`. So
+  // the spec's motivating case - Proper Shaders with neither SilentPatch nor
+  // Open Limit Adjuster, both merely `missing` - produced a report with no fail
+  // in it: the badge read "Ready to launch", "Launch anyway" is drawn only when
+  // the report is NOT ok, and Play refused every single time with no way
+  // through. Both now answer the same predicate.
+  const depProfileId = (getDb().prepare('SELECT id FROM profile WHERE is_active = 1').get() as { id: number } | undefined)?.id
+  const depSubject = depProfileId ? listInstalled(depProfileId).find((m) => m.enabled) : undefined
+  if (depProfileId && depSubject) {
+    const depModId = (
+      getDb()
+        .prepare('SELECT mv.mod_id id FROM install i JOIN mod_version mv ON mv.id = i.mod_version_id WHERE i.id = ?')
+        .get(depSubject.installId) as { id: number }
+    ).id
+    getDb()
+      .prepare(
+        `INSERT INTO dependency (mod_id, mod_slug, requires_mod_id, requires_slug, kind, version_range, alt_group, note)
+         VALUES (?, NULL, NULL, 'e2e-absent-dependency', 'requires', NULL, NULL, NULL)`
+      )
+      .run(depModId)
+    forgetHealthReport()
+    const depPlan = await planLaunch()
+    const depReport = storedHealthReport().report
+    check(
+      'launch: an unsatisfied hard dependency refuses the launch',
+      depPlan.refusal !== null && depPlan.verdict.blockers.some((b) => b.id.startsWith('dependency:')),
+      depPlan.verdict.blockers
+    )
+    check(
+      'launch: and the report the user is sent to reads as blocked too, so the override is on screen',
+      depReport?.ok === false && depReport?.checks.find((c) => c.id === 'dependencies')?.status === 'fail',
+      depReport?.checks.map((c) => `${c.id}:${c.status}`)
+    )
+    getDb().prepare("DELETE FROM dependency WHERE mod_id = ? AND requires_slug = 'e2e-absent-dependency'").run(depModId)
+    forgetHealthReport()
+  } else {
+    check('launch: an unsatisfied hard dependency refuses the launch', false, 'no enabled install to hang a dependency on')
+  }
 
   // --- a variant swap must never be restorable as a profile switch ------------
   // Every other `restorePreviousState()` in this suite runs with a real

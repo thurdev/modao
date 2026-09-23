@@ -870,11 +870,16 @@ export function registerIpc(): void {
   // the game is up - it is made not to write. Its write-access check forces a
   // probe, which creates a file inside modloader\; establishing the running
   // state first is what suppresses that, with no write of its own.
-  ipcMain.handle('health:run', async (_e, profileId: number) => {
+  // `profileId` may be null, because having no active profile is a reachable
+  // state and the launch is STILL gated in it: a stream.ini asking for 13500 MB
+  // refuses a launch with or without a profile pointing at it. Refusing to run
+  // the checks here is what left that user on a screen with no blockers, no
+  // explanation and no "Launch anyway" - a refusal with nowhere to go.
+  ipcMain.handle('health:run', async (_e, profileId: number | null) => {
     await noteWhetherGameIsRunning()
     // "Re-run" means re-run: this always runs the checks. It stores the answer
     // so that pressing Play right after reading it costs nothing.
-    return freshHealthReport(requireProfile(profileId), requireActiveGame().path)
+    return freshHealthReport(profileId === null ? null : requireProfile(profileId), requireActiveGame().path)
   })
   ipcMain.handle('health:crashes', (_e, profileId: number) => listCrashes(requireProfile(profileId)))
   ipcMain.handle('health:incidents', (_e, profileId: number) => listIncidents(requireProfile(profileId)))

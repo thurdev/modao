@@ -178,7 +178,8 @@ export interface ModãoApi {
     importExisting(profileId: number, label: string): Promise<{ snapshotId: number; slots: number }>
   }
   health: {
-    run(profileId: number): Promise<HealthReport>
+    /** `null` is the no-active-profile state: the game-level checks still run. */
+    run(profileId: number | null): Promise<HealthReport>
     crashes(profileId: number): Promise<CrashReport[]>
     /** The same records grouped into one entry per dead process. */
     incidents(profileId: number): Promise<CrashIncident[]>

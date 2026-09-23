@@ -17,6 +17,7 @@ import { checkGameRunning, gameExeNames } from '../game/running'
 import { cleoPluginRequirements, cleoRequirementStatus } from '@shared/cleoPlugins'
 import { listConflicts, listHookCollisions, providesKey } from '../conflicts'
 import { profileDependencyProblems } from '../deps/resolver'
+import { isUnsatisfiedHardDependency } from '@shared/dependencyGraph'
 import { analyzeTxd } from '../formats/txd'
 import { storeDir } from '../store/contentStore'
 import { duplicateAssetCheck, stackedAdjusterCheck } from './duplicateAssets'
@@ -167,7 +168,15 @@ export async function runHealthCheck(profileId: number | null): Promise<HealthRe
     checks.push({
       id: 'dependencies',
       title: t('checks.depsTitle'),
-      status: depProblems.some((d) => d.resolution === 'blocking') ? 'fail' : depProblems.length ? 'warn' : 'pass',
+      // The SAME predicate the launch gate refuses on. It used to be
+      // `resolution === 'blocking'` here and `blocking || missing` there
+      // (dependencyLaunchBlockers), so the spec's own motivating case - Proper
+      // Shaders with neither SilentPatch nor Open Limit Adjuster, both merely
+      // `missing` - produced a report with no fail in it: Health said "Ready to
+      // launch", hid "Launch anyway" because it only renders on !ok, and Play
+      // refused every time. A refusal the user cannot see is a refusal the user
+      // cannot answer.
+      status: depProblems.some(isUnsatisfiedHardDependency) ? 'fail' : depProblems.length ? 'warn' : 'pass',
       summary: depProblems.length === 0 ? t('checks.depsOk') : t('checks.depsUnresolved', { count: depProblems.length }),
       items: depProblems.map(
         (d) =>
