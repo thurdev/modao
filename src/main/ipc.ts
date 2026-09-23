@@ -48,9 +48,9 @@ import {
   restoreSnapshot,
   snapshot
 } from './profiles/saves'
-import { listInstalled, applyPriorities, readInstallReadme, setEnabled, setPriority, setSubModEnabled } from './library'
+import { listInstalled, applyPriorities, readInstallReadme, setEnabled, setPriority, setSubModEnabled, switchVariant } from './library'
 import { annotateConflicts, listConflicts } from './conflicts'
-import { applyPlan, createPlan, choose, discardPlan, rollbackPreview, setDestination, uninstall } from './install/engine'
+import { applyPlan, createPlan, choose, chooseAddOn, discardPlan, rollbackPreview, setDestination, uninstall } from './install/engine'
 import { getCatalogMod, listCatalog, loadSeedCatalog, seedInfo } from './catalog/service'
 import { crawl, refreshMod } from './catalog/mixmods'
 import { analyzeTxd } from './formats/txd'
@@ -621,6 +621,10 @@ export function registerIpc(): void {
     await requireIdleGame()
     return setSubModEnabled(installId, rel, enabled)
   })
+  ipcMain.handle('library:setVariant', async (_e, installId: number, groupId: string, optionId: string) => {
+    await requireIdleGame()
+    return switchVariant(installId, groupId, optionId)
+  })
 
   // --- catalog --------------------------------------------------------------
   ipcMain.handle('catalog:list', async (_e, query: Parameters<typeof listCatalog>[0]) => {
@@ -721,6 +725,7 @@ export function registerIpc(): void {
   })
 
   ipcMain.handle('install:choose', (_e, planId: string, groupId: string, optionId: string) => choose(planId, groupId, optionId))
+  ipcMain.handle('install:chooseAddOn', (_e, planId: string, addOnId: string, enabled: boolean) => chooseAddOn(planId, addOnId, enabled))
   ipcMain.handle('install:setDestination', (_e, planId: string, sourcePath: string, destination: string) =>
     setDestination(planId, sourcePath, destination as DestinationClass)
   )

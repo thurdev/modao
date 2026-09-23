@@ -77,6 +77,20 @@ function installedMods(): unknown[] {
             { relativePath: 'models', fileCount: 18, size: 2_400_000, enabled: true },
             { relativePath: 'optional dirt', fileCount: 6, size: 800_000, enabled: false }
           ]
+        : [],
+    variantGroups:
+      m[0] === 'Loadscreens 2K Definitive'
+        ? [
+            {
+              id: 'variant:<root>',
+              question: 'Which resolution do you want to install?',
+              chosenOptionId: 'Loadscreens 2K Definitive',
+              options: [
+                { id: 'Loadscreens 2K Definitive', label: 'Loadscreens 2K Definitive' },
+                { id: 'Loadscreens 4K Definitive', label: 'Loadscreens 4K Definitive' }
+              ]
+            }
+          ]
         : []
   }))
 }
@@ -204,6 +218,7 @@ function mockPlan(chosenGroup: string): unknown {
       {
         id: 'variant:<root>',
         parentPath: '',
+        attachedToPath: null,
         kind: 'resolution',
         question: 'Which resolution do you want to install?',
         hint: 'A versao 2K e recomendada para 1920x1080.',
@@ -230,6 +245,7 @@ function mockPlan(chosenGroup: string): unknown {
       { severity: resolved ? 'warn' : 'warn', code: 'overwrite', message: '2 file(s) already exist at their destination.', detail: 'Every one of them is backed up before it is replaced and restored on uninstall.' },
       { severity: 'info', code: 'npot-texture', message: 'LOADSCS.txd tem 1 textura fora de potência de dois.', detail: 'hud_bad 300x128' }
     ],
+    addOns: [],
     totalSize: 107_257_856,
     requiresVariantChoice: !resolved
   }
@@ -344,7 +360,12 @@ export function installDevBridge(): void {
           ]
         })
       }
-      if (channel === 'install:planFromCatalog' || channel === 'install:planFromFile' || channel === 'install:choose') {
+      if (
+        channel === 'install:planFromCatalog' ||
+        channel === 'install:planFromFile' ||
+        channel === 'install:choose' ||
+        channel === 'install:chooseAddOn'
+      ) {
         const chosen = channel === 'install:choose' ? String(args[1] ?? '') : ''
         return Promise.resolve(mockPlan(chosen))
       }

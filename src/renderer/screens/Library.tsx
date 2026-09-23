@@ -430,6 +430,7 @@ function ReadmeModal(props: { mod: InstalledMod; onClose: () => void }): JSX.Ele
 function DetailModal(props: { mod: InstalledMod; onClose: () => void; onChanged: () => void }): JSX.Element {
   const t = useT()
   const m = props.mod
+  const pushToast = useApp((s) => s.pushToast)
   const [busy, setBusy] = useState<string | null>(null)
   return (
     <Modal
@@ -458,6 +459,35 @@ function DetailModal(props: { mod: InstalledMod; onClose: () => void; onChanged:
         <dt>Conflicts</dt>
         <dd>{m.conflictCount || t('app.none')}</dd>
       </dl>
+
+      {m.variantGroups.map((g) => (
+        <div key={g.id} style={{ marginTop: 10 }}>
+          <div className="faint">{t('library.variantGroupLabel')}: {g.question}</div>
+          <div className="row wrap" style={{ gap: 6, marginTop: 4 }}>
+            {g.options.map((o) => (
+              <Button
+                key={o.id}
+                size="sm"
+                variant={o.id === g.chosenOptionId ? 'accent' : undefined}
+                disabled={busy === `variant:${g.id}` || o.id === g.chosenOptionId}
+                onClick={async () => {
+                  setBusy(`variant:${g.id}`)
+                  try {
+                    await api.setVariant(m.installId, g.id, o.id)
+                    props.onChanged()
+                  } catch (e) {
+                    pushToast('error', (e as Error).message)
+                  } finally {
+                    setBusy(null)
+                  }
+                }}
+              >
+                {busy === `variant:${g.id}` && o.id !== g.chosenOptionId ? t('library.switchingVariant') : o.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+      ))}
 
       {m.subMods.length > 0 ? (
         <>

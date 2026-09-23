@@ -148,6 +148,8 @@ export const api = {
   readme: (installId: number) => call<string | null>('library:readme', installId),
   setSubModEnabled: (installId: number, rel: string, enabled: boolean) =>
     call<void>('library:subModSetEnabled', installId, rel, enabled),
+  setVariant: (installId: number, groupId: string, optionId: string) =>
+    call<void>('library:setVariant', installId, groupId, optionId),
 
   catalog: (query: {
     search?: string
@@ -169,6 +171,8 @@ export const api = {
   planFromSlug: (slug: string, profileId: number) => call<InstallPlan>('install:planFromSlug', slug, profileId),
   planFromFile: (profileId: number) => call<InstallPlan | null>('install:planFromFile', profileId),
   choose: (planId: string, groupId: string, optionId: string) => call<InstallPlan>('install:choose', planId, groupId, optionId),
+  chooseAddOn: (planId: string, addOnId: string, enabled: boolean) =>
+    call<InstallPlan>('install:chooseAddOn', planId, addOnId, enabled),
   setDestination: (planId: string, sourcePath: string, destination: string) =>
     call<InstallPlan>('install:setDestination', planId, sourcePath, destination),
   applyPlan: (planId: string, profileId: number) =>

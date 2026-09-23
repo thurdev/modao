@@ -54,6 +54,17 @@ export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | 
     }
   }
 
+  async function chooseAddOn(addOnId: string, enabled: boolean): Promise<void> {
+    setBusy(true)
+    try {
+      setPlan(await api.chooseAddOn(plan!.planId, addOnId, enabled))
+    } catch (e) {
+      pushToast('error', (e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function retarget(sourcePath: string, destination: string): Promise<void> {
     setBusy(true)
     try {
@@ -229,6 +240,40 @@ export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | 
             </div>
           </motion.section>
         ))}
+
+        {plan.addOns.length > 0 ? (
+          <motion.section variants={itemVariants} className="panel">
+            <header>
+              <Badge>{t('install.plan.addOnsTitle')}</Badge>
+              <span className="faint" style={{ fontWeight: 400 }}>
+                {t('install.plan.addOnsHint')}
+              </span>
+            </header>
+            <div className="panel-body col">
+              {plan.addOns.map((a) => {
+                const enabled = plan.files.some((f) => f.sourcePath.startsWith(`${a.path}/`))
+                return (
+                  <label key={a.id} className="choice" data-selected={enabled}>
+                    <input
+                      type="checkbox"
+                      checked={enabled}
+                      disabled={busy}
+                      onChange={(e) => void chooseAddOn(a.id, e.target.checked)}
+                    />
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <strong>{a.label}</strong>
+                      <span className="faint">
+                        {' '}
+                        {t('install.plan.fileCountSize', { count: a.fileCount, size: formatBytes(a.size) })}
+                        {enabled ? ` — ${t('install.plan.addOnAsOwnMod')}` : ''}
+                      </span>
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+          </motion.section>
+        ) : null}
 
         {plan.readmes.length > 0 ? (
           <motion.section variants={itemVariants} className="panel">

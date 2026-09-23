@@ -20,7 +20,7 @@ import { detectExistingSaves, listSnapshots } from './profiles/saves'
 import { clearCache, storageReport } from './ipc'
 import { Paths } from './util/paths'
 import { applyPlan, createPlan, choose, uninstall } from './install/engine'
-import { listInstalled, setPriority, setSubModEnabled } from './library'
+import { listInstalled, setPriority, setSubModEnabled, switchVariant } from './library'
 import { listConflicts } from './conflicts'
 import { readIniFile, readKeys, getSection } from './game/modloaderIni'
 import { walk, sha256File, createJunction, removeLinkOrDir } from './util/fsx'
@@ -194,6 +194,73 @@ export async function runE2E(): Promise<number> {
   check('priority written into the profile block in modloader.ini', block['Loadscreens 2K Definitive'] === '80', block)
   check('Mod Loader profile pointer written', readKeys(getSection(ini, 'Folder.Config'))['Profile'] === 'Adopted')
   check('user comment in modloader.ini preserved', (await fsp.readFile(path.join(game, 'modloader', 'modloader.ini'), 'latin1')).includes('; hand written by the user'))
+
+  // --- field audit item 09: every variant option stays switchable in the store,
+  // without ever touching the archive again -----------------------------------
+  const beforeShaders = await snapshotDir(game)
+  const shadersSource = path.join(tmp, 'Proper Shaders')
+  for (const preset of ['(3a- medium - DEFAULT)', '(5 - very high)']) {
+    await fsp.mkdir(path.join(shadersSource, 'Proper Shaders', preset), { recursive: true })
+    await fsp.writeFile(path.join(shadersSource, 'Proper Shaders', preset, 'ProperShaders.ini'), preset)
+  }
+  const shadersPlan = await createPlan({
+    archivePath: shadersSource,
+    profileId: adopted.profileId,
+    modId: null,
+    modVersionId: null,
+    title: 'Proper Shaders',
+    author: 'V!Rus_Káin',
+    sourceUrl: null
+  })
+  const shadersOption = shadersPlan.variants[0].options.find((o) => o.label.includes('DEFAULT'))!
+  const shadersChosenPlan = await choose(shadersPlan.planId, shadersPlan.variants[0].id, shadersOption.id)
+  const shadersApplied = await applyPlan(shadersChosenPlan.planId, adopted.profileId)
+  check('field audit 09: the quality preset installed', shadersApplied.written >= 1, shadersApplied)
+
+  const shadersFile = path.join(game, 'ProperShaders.ini')
+  check('field audit 09: the DEFAULT preset content was written', (await fsp.readFile(shadersFile, 'utf8')) === '(3a- medium - DEFAULT)')
+
+  // The archive is gone. Nothing that follows may need it again.
+  await fsp.rm(shadersSource, { recursive: true, force: true })
+
+  const shadersMod = listInstalled(adopted.profileId).find((m) => m.title === 'Proper Shaders')!
+  const shadersGroup = shadersMod.variantGroups[0]
+  check(
+    'field audit 09: both presets remain recorded on the install, not just the chosen one',
+    shadersGroup?.options.length === 2 && shadersGroup.chosenOptionId === shadersOption.id,
+    shadersGroup
+  )
+
+  const veryHigh = shadersGroup!.options.find((o) => o.label.includes('very high'))!
+  await switchVariant(shadersMod.installId, shadersGroup!.id, veryHigh.id)
+  check(
+    'field audit 09: switching writes the other preset, with the archive long gone',
+    (await fsp.readFile(shadersFile, 'utf8')) === '(5 - very high)'
+  )
+  const shadersModAfter = listInstalled(adopted.profileId).find((m) => m.title === 'Proper Shaders')!
+  check(
+    'field audit 09: the install record now shows the new choice',
+    shadersModAfter.variantGroups[0]?.chosenOptionId === veryHigh.id,
+    shadersModAfter.variantGroups[0]
+  )
+
+  // Switching rewrote a file Modão had already recorded a hash for. If the
+  // switch left that hash stale the file reads as user-edited, uninstall
+  // quarantines it instead of removing it, and it survives in the game folder
+  // - which is exactly how this landed as two byte-for-byte uninstall
+  // failures further down. Assert the switch stayed honest, here, where the
+  // cause is visible.
+  const shadersUninstalled = await uninstall(shadersMod.installId)
+  check(
+    'field audit 09: uninstalling after a switch removes the switched file instead of quarantining it',
+    shadersUninstalled.quarantined.length === 0 && !fs.existsSync(shadersFile),
+    shadersUninstalled
+  )
+  check(
+    'field audit 09: the variant install leaves the game folder byte-for-byte as it found it',
+    sameTree(beforeShaders, await snapshotDir(game)),
+    diff(beforeShaders, await snapshotDir(game))
+  )
 
   // --- profiles and saves -----------------------------------------------------
   await fsp.writeFile(path.join(saves, 'GTASAsf1.b'), 'adopted profile save')

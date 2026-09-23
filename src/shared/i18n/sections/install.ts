@@ -92,7 +92,10 @@ export const install = {
       showEveryFile: 'Mostrar todos os arquivos',
       replacesMod: 'substitui {mod}',
       overwritesLabel: 'sobrescreve',
-      gameRoot: '<raiz do jogo>'
+      gameRoot: '<raiz do jogo>',
+      addOnsTitle: 'Extras opcionais',
+      addOnsHint: 'Sozinhas, estas pastas não fazem nada — ligue para mesclá-las no mod a que pertencem.',
+      addOnAsOwnMod: 'mesclada na pasta do mod'
     },
     access: {
       writeConfirmed: 'Acesso de escrita confirmado.',
@@ -197,7 +200,10 @@ export const install = {
       showEveryFile: 'Show every file',
       replacesMod: 'replaces {mod}',
       overwritesLabel: 'overwrites',
-      gameRoot: '<game root>'
+      gameRoot: '<game root>',
+      addOnsTitle: 'Optional add-ons',
+      addOnsHint: 'Installed alone these folders do nothing — enable one to merge it into the mod it belongs to.',
+      addOnAsOwnMod: 'merged into the mod folder'
     },
     access: {
       writeConfirmed: 'Write access confirmed.',

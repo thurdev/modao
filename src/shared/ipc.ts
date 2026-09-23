@@ -116,6 +116,8 @@ export interface ModãoApi {
     rollbackPreview(installId: number): Promise<{ relativePath: string; action: string }[]>
     readme(installId: number): Promise<string | null>
     subModSetEnabled(installId: number, relativePath: string, enabled: boolean): Promise<void>
+    /** Switches to another option of a variant group already installed, without re-downloading. */
+    setVariant(installId: number, groupId: string, optionId: string): Promise<void>
   }
   catalog: {
     list(query: {
@@ -137,6 +139,8 @@ export interface ModãoApi {
     planFromSlug(slug: string, profileId: number): Promise<InstallPlan>
     planFromFile(profileId: number): Promise<InstallPlan | null>
     choose(planId: string, groupId: string, optionId: string): Promise<InstallPlan>
+    /** Enables or drops an add-on folder offered beside the plan. */
+    chooseAddOn(planId: string, addOnId: string, enabled: boolean): Promise<InstallPlan>
     setDestination(planId: string, sourcePath: string, destination: string): Promise<InstallPlan>
     apply(planId: string, profileId: number): Promise<{ installId: number; written: number; backedUp: number }>
     discard(planId: string): Promise<void>
@@ -238,6 +242,7 @@ export const IPC_CHANNELS = [
   'library:rollbackPreview',
   'library:readme',
   'library:subModSetEnabled',
+  'library:setVariant',
   'catalog:list',
   'catalog:get',
   'catalog:refresh',
@@ -248,6 +253,7 @@ export const IPC_CHANNELS = [
   'install:planFromSlug',
   'install:planFromFile',
   'install:choose',
+  'install:chooseAddOn',
   'install:setDestination',
   'install:apply',
   'install:discard',

@@ -34,6 +34,7 @@ import {
   parseReadmeText
 } from '../src/main/install/readme'
 import { classifyTree } from '../src/main/install/classify'
+import { buildPersistedVariantGroups, configVariantParent, isAddonFolder } from '../src/shared/variantGroups'
 import { displaceForeign, isOwned, ownedKey } from '../src/main/store/displace'
 import {
   describeFsError,
@@ -655,6 +656,187 @@ check(
   splitOut.files.some((f) => f.targetRelative === 'modloader/VHud/VHud.asi') ||
     splitOut.warnings.some((w) => w.code === 'asi-split'),
   splitOut.files.map((f) => f.targetRelative)
+)
+
+// --- field audit item 09: nine mutually exclusive presets, all installed ----
+// The real archive: nine quality presets, each holding its own ProperShaders.ini.
+// Mod Loader logged "No handler or callme for file ProperShaders.ini" nine times
+// because every one of them was installed at once.
+const shadersDir = path.join(tmp, 'proper-shaders')
+function sh(rel: string, content = 'x'): void {
+  const p = path.join(shadersDir, rel)
+  fs.mkdirSync(path.dirname(p), { recursive: true })
+  fs.writeFileSync(p, content)
+}
+const presetNames = [
+  '(0a- only improvements + postfx)',
+  '(0b- only improvements)',
+  '(1a- very low)',
+  '(1b- very low - no shadows)',
+  '(2- low)',
+  '(3a- medium - DEFAULT)',
+  '(3b- medium-high)',
+  '(4- high)',
+  '(5 - very high)'
+]
+for (const preset of presetNames) sh(`Proper Shaders/${preset}/ProperShaders.ini`, preset)
+const shadersOut = await classifyTree(shadersDir, { asiRelative: 'scripts', readmes: [], fallbackName: 'Proper Shaders' }, {})
+const shaderGroup = shadersOut.variants.find((v) => v.options.length === presetNames.length)
+check('field audit 09: all nine presets are one exclusive group', !!shaderGroup, shadersOut.variants.map((v) => v.options.length))
+check(
+  'field audit 09: the author-marked DEFAULT preset is preselected',
+  shaderGroup?.options.find((o) => o.label.includes('DEFAULT'))?.recommended === true,
+  shaderGroup?.options.map((o) => `${o.label}:${o.recommended}`)
+)
+const chosenPreset = shaderGroup!.options.find((o) => o.label.includes('DEFAULT'))!
+const shadersChosen = await classifyTree(
+  shadersDir,
+  { asiRelative: 'scripts', readmes: [], fallbackName: 'Proper Shaders' },
+  { [shaderGroup!.id]: chosenPreset.id }
+)
+check(
+  'field audit 09: choosing one preset installs exactly one ProperShaders.ini',
+  shadersChosen.files.filter((f) => f.targetRelative.toLowerCase().endsWith('propershaders.ini')).length === 1,
+  shadersChosen.files.map((f) => f.targetRelative)
+)
+// The other eight are never lost: every option is still on record, ready to be
+// snapshotted into the store and switched to later without touching the archive.
+const persisted = buildPersistedVariantGroups(
+  shadersOut.variants,
+  { [shaderGroup!.id]: chosenPreset.id },
+  shadersChosen.files.map((f) => ({ sourcePath: f.sourcePath, targetRelative: f.targetRelative }))
+)
+check(
+  'field audit 09: all nine presets remain recorded and switchable, not just the chosen one',
+  persisted.find((g) => g.id === shaderGroup!.id)?.options.length === presetNames.length,
+  persisted.find((g) => g.id === shaderGroup!.id)?.options.map((o) => o.id)
+)
+check(
+  'field audit 09: the persisted record names which preset is active',
+  persisted.find((g) => g.id === shaderGroup!.id)?.chosenOptionId === chosenPreset.id
+)
+
+// --- field audit item 10: "(alt - blue paint)" must not become a top-level mod
+const altCase = path.join(tmp, 'alt-case')
+function altw(rel: string): void {
+  const p = path.join(altCase, rel)
+  fs.mkdirSync(path.dirname(p), { recursive: true })
+  fs.writeFileSync(p, 'x')
+}
+altw('Cool Cars/models/a.dff')
+altw('(alt - blue paint)/models/a.dff')
+const altOut = await classifyTree(altCase, { asiRelative: 'scripts', readmes: [], fallbackName: 'Cool Cars' }, {})
+check(
+  'field audit 10: "(alt - blue paint)" never becomes a top-level modloader\\ entry',
+  !altOut.files.some((f) => f.targetRelative.toLowerCase().startsWith('modloader/(alt')),
+  altOut.files.map((f) => f.targetRelative)
+)
+check('field audit 10: isAddonFolder now matches a qualified alt folder', isAddonFolder('(alt - blue paint)'))
+check(
+  'field audit 10: it is offered back as an add-on rather than silently dropped',
+  altOut.addOns.some((a) => a.label === '(alt - blue paint)'),
+  altOut.addOns
+)
+const altEnabled = await classifyTree(
+  altCase,
+  { asiRelative: 'scripts', readmes: [], fallbackName: 'Cool Cars' },
+  {},
+  { '(alt - blue paint)': true }
+)
+check(
+  'field audit 10: enabling the add-on merges it into the mod it overrides',
+  altEnabled.files.some(
+    (f) => f.targetRelative === 'modloader/Cool Cars/models/a.dff' && f.sourcePath === '(alt - blue paint)/models/a.dff'
+  ),
+  altEnabled.files.map((f) => `${f.sourcePath} -> ${f.targetRelative}`)
+)
+check(
+  'field audit 10: enabled or not, it is never a top-level modloader\\ entry of its own',
+  !altEnabled.files.some((f) => f.targetRelative.toLowerCase().startsWith('modloader/(alt')),
+  altEnabled.files.map((f) => f.targetRelative)
+)
+check(
+  'field audit 10: the file it overrides is replaced, not installed twice',
+  altEnabled.files.filter((f) => f.targetRelative === 'modloader/Cool Cars/models/a.dff').length === 1,
+  altEnabled.files.map((f) => f.targetRelative)
+)
+check(
+  'field audit 10: and the install says which files the add-on replaced',
+  altEnabled.warnings.some((w) => w.code === 'addon-enabled' && w.message.includes('Cool Cars')),
+  altEnabled.warnings.map((w) => `${w.code}: ${w.message}`)
+)
+
+// The field report's own shape: "Extra\GTA UG\VHud\data" repeats the mod's
+// folder name inside itself, so enabling it must land on VHud's own data\,
+// not at modloader\Extra\ nor at modloader\VHud\GTA UG\VHud\data\.
+const extraCase = path.join(tmp, 'extra-case')
+function ex(rel: string, content = 'x'): void {
+  const p = path.join(extraCase, rel)
+  fs.mkdirSync(path.dirname(p), { recursive: true })
+  fs.writeFileSync(p, content)
+}
+ex('VHud/data/hud.dat', 'stock')
+ex('VHud/map/map.txd')
+ex('Extra/GTA UG/VHud/data/hud.dat', 'override')
+const extraEnabled = await classifyTree(
+  extraCase,
+  { asiRelative: 'scripts', readmes: [], fallbackName: 'GTA V HUD' },
+  {},
+  { Extra: true }
+)
+check(
+  'field audit 10: "Extra\\GTA UG\\VHud\\data" lands on VHud\'s own data folder',
+  extraEnabled.files.some(
+    (f) => f.targetRelative === 'modloader/VHud/data/hud.dat' && f.sourcePath === 'Extra/GTA UG/VHud/data/hud.dat'
+  ),
+  extraEnabled.files.map((f) => `${f.sourcePath} -> ${f.targetRelative}`)
+)
+check(
+  'field audit 10: and nothing of it reaches modloader\\Extra',
+  !extraEnabled.files.some((f) => f.targetRelative.toLowerCase().startsWith('modloader/extra')),
+  extraEnabled.files.map((f) => f.targetRelative)
+)
+
+// --- field audit item 09b: "(configurações)" attaches to Zone Text ----------
+const zoneText = path.join(tmp, 'zone-text')
+function zt(rel: string, content = 'x'): void {
+  const p = path.join(zoneText, rel)
+  fs.mkdirSync(path.dirname(p), { recursive: true })
+  fs.writeFileSync(p, content)
+}
+zt('Zone Text/cleo/zonetext.cs')
+zt('Zone Text/cleo/zonetext.ini', 'original')
+zt('(configurações)/(minimalista)/zonetext.ini', 'minimalista')
+zt('(configurações)/(padrão)/zonetext.ini', 'padrão')
+const zoneOut = await classifyTree(zoneText, { asiRelative: 'scripts', readmes: [], fallbackName: 'Zone Text' }, {})
+const zoneGroup = zoneOut.variants.find((v) => v.parentPath === '(configurações)')
+check('field audit 09b: the config folder is detected as a variant group', !!zoneGroup, zoneOut.variants)
+check(
+  'field audit 09b: it is attached to Zone Text, not left standalone',
+  zoneGroup?.attachedToPath === 'Zone Text',
+  zoneGroup?.attachedToPath
+)
+const zoneChosen = await classifyTree(
+  zoneText,
+  { asiRelative: 'scripts', readmes: [], fallbackName: 'Zone Text' },
+  { [zoneGroup!.id]: '(configurações)/(minimalista)' }
+)
+check(
+  'field audit 09b: "(configurações)" never becomes a top-level modloader\\ entry',
+  !zoneChosen.files.some((f) => f.targetRelative.toLowerCase().startsWith('modloader/(')),
+  zoneChosen.files.map((f) => f.targetRelative)
+)
+check(
+  'field audit 09b: the chosen config lands inside Zone Text\'s own folder',
+  zoneChosen.files.some((f) => f.targetRelative.toLowerCase() === 'modloader/zone text/zonetext.ini'),
+  zoneChosen.files.map((f) => f.targetRelative)
+)
+check(
+  'configVariantParent: a plain (parenthesised) folder sharing a config filename with a sibling names that sibling',
+  configVariantParent(
+    { name: '(x)', rel: '(x)', isDir: true, fileCount: 1, size: 1, children: [{ name: 'a.ini', rel: '(x)/a.ini', isDir: false, fileCount: 1, size: 1, children: [] }] },
+    [{ name: 'Sibling', rel: 'Sibling', isDir: true, fileCount: 1, size: 1, children: [{ name: 'a.ini', rel: 'Sibling/a.ini', isDir: false, fileCount: 1, size: 1, children: [] }] }]
+  )?.rel === 'Sibling'
 )
 
 // --- modloader.log is the only honest answer to "did it install?" -----------

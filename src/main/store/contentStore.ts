@@ -58,6 +58,44 @@ export async function ingest(
   return out
 }
 
+/** Where one variant option's raw, unclassified bytes live in the store. */
+export function variantOptionDir(key: string, optionId: string): string {
+  return path.join(storeDir(key), '.variants', optionId)
+}
+
+/**
+ * Snapshots EVERY option of every variant group into the store, not only the
+ * one that was chosen - so a later switch never needs the archive again.
+ * Copied as the archive shipped it (raw, one option per folder), not
+ * reclassified: only the chosen option goes through the full plan/materialise
+ * path, and the store copy is later used to overwrite the active files at
+ * `switchVariant`'s direction, matched by basename.
+ */
+export async function ingestVariantOptions(
+  key: string,
+  extractRoot: string,
+  groups: { options: { id: string; path: string }[] }[]
+): Promise<void> {
+  for (const g of groups) {
+    for (const o of g.options) {
+      const from = path.join(extractRoot, o.path)
+      if (!exists(from)) continue
+      await copyRecursive(from, variantOptionDir(key, o.id))
+    }
+  }
+}
+
+/** Finds a file by basename anywhere under a variant option's stored snapshot. */
+export async function findInVariantOption(key: string, optionId: string, basename: string): Promise<string | null> {
+  const dir = variantOptionDir(key, optionId)
+  if (!exists(dir)) return null
+  const needle = basename.toLowerCase()
+  for (const f of await walk(dir)) {
+    if (path.basename(f.rel).toLowerCase() === needle) return f.abs
+  }
+  return null
+}
+
 export async function storeSize(key: string): Promise<number> {
   const dir = storeDir(key)
   if (!exists(dir)) return 0

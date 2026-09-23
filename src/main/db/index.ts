@@ -369,6 +369,18 @@ const MIGRATIONS: Migration[] = [
       d.exec('DELETE FROM install_file WHERE install_id NOT IN (SELECT id FROM install)')
       d.exec('DELETE FROM provides WHERE install_id NOT IN (SELECT id FROM install)')
     }
+  },
+  {
+    version: 9,
+    name: 'variant-groups-switchable-without-redownload',
+    up: (d) => {
+      // Every option of a variant group ("(0a- lowest)" … "(5 - very high)")
+      // is snapshotted into the store at install time now, not just the one
+      // chosen. This records which groups an install has and what its current
+      // choice is, so a later switch can find and replace the right files
+      // without ever needing the archive again.
+      d.exec('ALTER TABLE install ADD COLUMN variant_groups_json TEXT')
+    }
   }
 ]
 

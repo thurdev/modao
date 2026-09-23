@@ -1,13 +1,14 @@
 import path from 'node:path'
 import fsp from 'node:fs/promises'
-import type { DestinationClass, InstalledMod, SubMod } from '@shared/types'
+import type { DestinationClass, InstalledMod, InstalledVariantGroup, SubMod } from '@shared/types'
+import type { PersistedVariantGroup } from '@shared/variantGroups'
 import { getDb } from '../db'
 import { clampPriority } from '../game/modloaderIni'
 import { remateriliseInstall, syncProfileIni } from '../profiles/materialize'
 import { recordEarlyDisable } from '../catalog/rating'
 import { requireActiveGame } from '../game/detect'
-import { exists } from '../util/fsx'
-import { storeDir } from '../store/contentStore'
+import { exists, sha256File } from '../util/fsx'
+import { findInVariantOption, storeDir } from '../store/contentStore'
 
 interface Row {
   install_id: number
@@ -25,6 +26,17 @@ interface Row {
   priority: number
   store_key: string | null
   folder_name: string | null
+  variant_groups_json: string | null
+}
+
+function parseVariantGroups(json: string | null): PersistedVariantGroup[] {
+  if (!json) return []
+  try {
+    const parsed = JSON.parse(json)
+    return Array.isArray(parsed) ? (parsed as PersistedVariantGroup[]) : []
+  } catch {
+    return []
+  }
 }
 
 export function listInstalled(profileId: number): InstalledMod[] {
@@ -33,7 +45,7 @@ export function listInstalled(profileId: number): InstalledMod[] {
     .prepare(
       `SELECT i.id AS install_id, m.id AS mod_id, i.mod_version_id, m.slug, m.title, m.author, m.source_url,
               mv.version_label, i.installed_at, i.destination_class, i.variant_choice, i.enabled, i.priority,
-              i.store_key, i.folder_name
+              i.store_key, i.folder_name, i.variant_groups_json
          FROM install i
          JOIN mod_version mv ON mv.id = i.mod_version_id
          JOIN mod m ON m.id = mv.mod_id
@@ -90,7 +102,15 @@ export function listInstalled(profileId: number): InstalledMod[] {
       conflictCount: conflictCounts.get(r.install_id) ?? 0,
       updateAvailable,
       latestVersionLabel: newest?.version_label ?? null,
-      subMods: listSubMods(r.install_id)
+      subMods: listSubMods(r.install_id),
+      variantGroups: parseVariantGroups(r.variant_groups_json).map(
+        (g): InstalledVariantGroup => ({
+          id: g.id,
+          question: g.question,
+          chosenOptionId: g.chosenOptionId,
+          options: g.options.map((o) => ({ id: o.id, label: o.label }))
+        })
+      )
     }
   })
 }
@@ -183,4 +203,60 @@ export async function setSubModEnabled(installId: number, relativePath: string, 
       await copyRecursive(src, target)
     }
   }
+}
+
+/**
+ * Switches an already-installed mutually-exclusive variant to another option,
+ * without touching the archive - every option's bytes were snapshotted into
+ * the store at install time (`contentStore.ingestVariantOptions`).
+ *
+ * Matched by basename: the group's current on-disk paths (`targetRelatives`,
+ * recorded when the plan was applied) each get their bytes replaced by the
+ * file of the same name in the new option's own snapshot. This is exact for
+ * the cases the field audit found - Proper Shaders' quality ladder and a
+ * "(configurações)" config folder both hold one identically-named file per
+ * option - and best-effort for a group whose options do not share file names.
+ */
+export async function switchVariant(installId: number, groupId: string, optionId: string): Promise<void> {
+  const db = getDb()
+  const row = db.prepare('SELECT profile_id, store_key, variant_groups_json FROM install WHERE id = ?').get(installId) as
+    | { profile_id: number; store_key: string | null; variant_groups_json: string | null }
+    | undefined
+  if (!row) throw new Error('That install no longer exists.')
+  if (!row.store_key) throw new Error('This install has no store payload to switch within.')
+
+  const groups = parseVariantGroups(row.variant_groups_json)
+  const group = groups.find((g) => g.id === groupId)
+  if (!group) throw new Error('That variant group is not recorded on this install.')
+  if (!group.options.some((o) => o.id === optionId)) throw new Error('That option does not belong to this group.')
+  if (group.chosenOptionId === optionId) return
+
+  const storeRoot = storeDir(row.store_key)
+  const fileStmt = db.prepare('UPDATE install_file SET sha256 = ?, size = ? WHERE install_id = ? AND relative_path = ?')
+  const provStmt = db.prepare('UPDATE provides SET sha256 = ?, size = ? WHERE install_id = ? AND relative_path = ?')
+  for (const targetRelative of group.targetRelatives) {
+    const basename = path.basename(targetRelative)
+    const source = await findInVariantOption(row.store_key, optionId, basename)
+    if (!source) continue // this option never shipped a file of that name; the old one is left as-is
+    const dest = path.join(storeRoot, targetRelative)
+    await fsp.mkdir(path.dirname(dest), { recursive: true })
+    await fsp.copyFile(source, dest)
+    const sha = await sha256File(dest)
+    const size = (await fsp.stat(dest)).size
+    fileStmt.run(sha, size, installId, targetRelative)
+    provStmt.run(sha, size, installId, targetRelative)
+  }
+
+  group.chosenOptionId = optionId
+  const chosenLabel = group.options.find((o) => o.id === optionId)?.label ?? optionId
+  db.prepare('UPDATE install SET variant_groups_json = ?, variant_choice = ? WHERE id = ?').run(
+    JSON.stringify(groups),
+    chosenLabel,
+    installId
+  )
+
+  // The store now holds the new bytes; re-link (or re-copy) so the game
+  // folder picks them up too. Junctioned mod folders already see the change
+  // for free since they point straight at the store.
+  await remateriliseInstall(installId)
 }

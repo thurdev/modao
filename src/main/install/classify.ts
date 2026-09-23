@@ -1,15 +1,23 @@
 import path from 'node:path'
 import fsp from 'node:fs/promises'
 import type {
+  AddOn,
   DestinationClass,
   PlanWarning,
   PlannedFile,
   ReadmeParse,
-  VariantGroup,
-  VariantOption
+  VariantGroup
 } from '@shared/types'
 import { walk } from '../util/fsx'
 import { findVariantHint } from './readme'
+import {
+  addOnParentName,
+  addOnRelativePath,
+  detectVariantGroups,
+  isAddonFolder,
+  variantNameHint as sharedVariantNameHint,
+  MOD_SUBFOLDERS
+} from '@shared/variantGroups'
 
 export interface OverlayMatch {
   installId: number
@@ -34,21 +42,9 @@ export interface ClassifyResult {
   warnings: PlanWarning[]
   /** Documentation kept with the install record but never copied into the game. */
   docs: string[]
+  /** Add-on folders offered beside the plan - enable to merge or install separately. */
+  addOns: AddOn[]
 }
-
-const MOD_SUBFOLDERS = new Set([
-  'models',
-  'data',
-  'cleo',
-  'anim',
-  'text',
-  'audio',
-  'movies',
-  'effects',
-  'sfx',
-  'streams',
-  'fonts'
-])
 
 const ASSET_EXT = /\.(dff|txd|ifp|col|ide|ipl|dat|img|fxp|cfg|wav|mp3|bik|rrr|ifs)$/i
 /** Always documentation, wherever it sits. */
@@ -203,161 +199,22 @@ function asiBundleName(parent: Node, asi: Node, fallback: string): string {
   return stem || fallback
 }
 
-/**
- * Folders that are add-ons to a mod rather than mods of their own.
- *
- * "Extra\GTA UG\VHud\data" is an optional override for VHud's own data. Mod
- * Loader has no idea what to do with it on its own and ignores it, so
- * installing it as a separate mod folder produces a mod that does nothing.
- */
-const ADDON_FOLDER = /^\(?(extras?|bonus|optional|opcionais?|opcional|translations?|tradu[cç][aã]o|tradu[cç][oõ]es|alt|alternativ[eo]s?)\)?$/i
-
-function isAddonFolder(name: string): boolean {
-  return ADDON_FOLDER.test(name.trim())
-}
-
 // ---------------------------------------------------------------------------
-// Variants: mutually exclusive sibling folders the user must choose between
+// Variants and add-ons: the detection itself lives in `@shared/variantGroups`
+// so it stays pure and unit-testable outside Electron. `isAddonFolder` is
+// used here too, both for the fallback dispatch below and for a directory
+// that turns out to be a config-variant container for a sibling mod.
 // ---------------------------------------------------------------------------
 
-interface VariantRule {
-  kind: VariantGroup['kind']
-  test: (name: string) => boolean
-  question: string
-}
-
-const VARIANT_RULES: VariantRule[] = [
-  {
-    kind: 'resolution',
-    test: (n) => /(^|\W)(1k|2k|4k|8k|512|1024|2048|4096)(\W|$)/i.test(n),
-    question: 'Which resolution do you want to install?'
-  },
-  {
-    kind: 'language',
-    test: (n) => /^(pt|pt-?br|br|en|eng|es|esp|ru|rus|fr|de|it|pl)(\W|$)/i.test(n.trim()) || /\((pt|en|es|ru)\)/i.test(n),
-    question: 'Which language do you want to install?'
-  },
-  {
-    kind: 'game',
-    test: (n) => /^(iii|gta3|vc|vice ?city|sa|sa-?mp|samp|mta)(\W|$)/i.test(n.replace(/[()]/g, '').trim()),
-    question: 'Which game or multiplayer variant is this for?'
-  },
-  {
-    kind: 'extra',
-    test: (n) => /\((alt|alternative|translations?|bonus|extra|opcional|optional)/i.test(n),
-    question: 'This mod ships optional extras - pick the one you want:'
-  },
-  {
-    kind: 'style',
-    test: (n) => /^\(.+\)$/.test(n.trim()),
-    question: 'This mod ships mutually exclusive versions - pick one:'
-  },
-  {
-    kind: 'generic',
-    test: (n) => /(definitive|version|vers[aã]o|escolha|choose|option)/i.test(n),
-    question: 'Pick the version to install:'
-  },
-  {
-    // Proper Shaders ships "(0a- lowest)" … "(5 - very high)": a quality ladder
-    // where each folder holds the same ProperShaders.ini with different values.
-    kind: 'style',
-    test: (n) => /^\(?\s*\d+[a-z]?\s*[-–—]/i.test(n.trim()) || /(lowest|very low|low|medium|high|very high|ultra|max)/i.test(n),
-    question: 'This mod ships quality presets - pick one:'
+function toVariantTree(node: Node): import('@shared/variantGroups').VariantTreeNode {
+  return {
+    name: node.name,
+    rel: node.rel,
+    isDir: node.isDir,
+    fileCount: node.fileCount,
+    size: node.size,
+    children: node.children.map(toVariantTree)
   }
-]
-
-/** The set of file names directly inside a folder, lowercased. */
-function fileNameSet(node: Node): string {
-  return node.children
-    .filter((c) => !c.isDir)
-    .map((c) => c.name.toLowerCase())
-    .sort()
-    .join('|')
-}
-
-/**
- * Sibling folders holding the SAME file names are alternatives, whatever they
- * are called. Proper Shaders' nine quality folders each hold one
- * ProperShaders.ini; installing all nine put nine copies of the same file into
- * the game and Mod Loader logged "No handler or callme for file
- * ProperShaders.ini" nine times over.
- */
-function sameContentGroup(dirs: Node[]): Node[] | null {
-  const bySet = new Map<string, Node[]>()
-  for (const d of dirs) {
-    const key = fileNameSet(d)
-    if (!key) continue
-    const list = bySet.get(key)
-    if (list) list.push(d)
-    else bySet.set(key, [d])
-  }
-  for (const [, list] of bySet) {
-    if (list.length >= 2 && list.length === dirs.filter((d) => fileNameSet(d)).length) return list
-  }
-  return null
-}
-
-function detectVariantGroups(root: Node, readmes: ReadmeParse[]): VariantGroup[] {
-  const groups: VariantGroup[] = []
-
-  function consider(parent: Node): void {
-    const dirs = parent.children.filter(
-      (c) => c.isDir && !MOD_SUBFOLDERS.has(c.name.toLowerCase()) && !isAddonFolder(c.name)
-    )
-    if (dirs.length >= 2) {
-      const identical = sameContentGroup(dirs)
-      const rule =
-        VARIANT_RULES.find((r) => dirs.filter((d) => r.test(d.name)).length >= 2) ??
-        (identical
-          ? { kind: 'style' as const, test: () => true, question: 'These are alternatives - pick the one to install:' }
-          : undefined)
-      if (rule) {
-        const matching = identical ?? dirs.filter((d) => rule.test(d.name))
-        const chosen = matching.length === dirs.length ? dirs : matching.length >= 2 ? matching : dirs
-        const options: VariantOption[] = chosen.map((d) => ({
-          id: d.rel,
-          path: d.rel,
-          label: d.name,
-          fileCount: d.fileCount,
-          size: d.size,
-          recommended: false,
-          note: null
-        }))
-        const hint = findVariantHint(
-          readmes,
-          options.map((o) => o.label)
-        )
-        if (hint) {
-          for (const o of options) {
-            if (hint.toLowerCase().includes(o.label.toLowerCase())) {
-              o.recommended = /recomend|recommend|ideal|melhor|best/i.test(hint)
-              o.note = hint
-            }
-          }
-        }
-        // Mod authors mark their own pick in the folder name.
-        for (const o of options) {
-          if (/\b(default|padr[aã]o|recomendad[oa])\b/i.test(o.label)) {
-            o.recommended = true
-            o.note = o.note ?? 'The mod author marked this one as the default.'
-          }
-        }
-        groups.push({
-          id: `variant:${parent.rel || '<root>'}`,
-          parentPath: parent.rel,
-          kind: rule.kind,
-          question: rule.question,
-          hint,
-          options
-        })
-        return // never descend into a group's own branches
-      }
-    }
-    for (const c of parent.children) if (c.isDir) consider(c)
-  }
-
-  consider(root)
-  return groups
 }
 
 /**
@@ -399,22 +256,43 @@ const CLOTHES_HINT = /(player\.img|clothes|roupas?)/i
 export async function classifyTree(
   root: string,
   ctx: ClassifyContext,
-  selections: Record<string, string> = {}
+  selections: Record<string, string> = {},
+  addOnSelections: Record<string, boolean> = {}
 ): Promise<ClassifyResult> {
   const tree = await buildTree(root)
-  const variants = detectVariantGroups(tree, ctx.readmes)
+  const variantTree = toVariantTree(tree)
+  const variants = detectVariantGroups(variantTree, {
+    findHint: (labels) => findVariantHint(ctx.readmes, labels)
+  })
   const warnings: PlanWarning[] = []
   const docs: string[] = []
   const files: PlannedFile[] = []
+  const addOns: AddOn[] = []
 
   const excluded: string[] = []
   const chosenPaths = new Set<string>()
+  // Every directory's sibling list, so an add-on can name the mod it overrides.
+  const siblingsOf = new Map<string, Node[]>()
+  ;(function indexSiblings(n: Node): void {
+    for (const c of n.children) {
+      siblingsOf.set(c.rel, n.children)
+      if (c.isDir) indexSiblings(c)
+    }
+  })(tree)
+  // Enabled add-ons are emitted last, once the mods they override are planned,
+  // so an override really overrides instead of racing the walk order.
+  const pendingAddOns: { node: Node; parentName: string }[] = []
+  // A group whose container is itself a config-variant of a sibling mod
+  // ("(configurações)" holding zonetext.ini beside "Zone Text") never becomes
+  // a mod of its own: its chosen option is routed into the owner's folder.
+  const attachedContainers = new Map<string, string>()
   for (const g of variants) {
     const chosen = selections[g.id]
     for (const o of g.options) {
       if (o.id === chosen) chosenPaths.add(o.path)
       else excluded.push(o.path)
     }
+    if (g.attachedToPath) attachedContainers.set(g.parentPath, g.attachedToPath)
     if (!chosen) {
       warnings.push({
         severity: 'warn',
@@ -480,6 +358,65 @@ export async function classifyTree(
     }
   }
 
+  /**
+   * Records an add-on folder as something the user may switch on, and either
+   * queues it for the merge below or explains why it was left out.
+   *
+   * Either way it never installs as a mod folder of its own: that is exactly
+   * what put "Extra\GTA UG\VHud\data" and "(alt - blue paint)" at the top of
+   * modloader\, where Mod Loader ignored them.
+   */
+  function offerAddOn(node: Node, nameHint: string): void {
+    addOns.push({ id: node.rel, path: node.rel, label: node.name, fileCount: node.fileCount, size: node.size })
+    // The container itself is never walked into by anything else.
+    excluded.push(node.rel)
+    if (addOnSelections[node.rel]) {
+      const siblings = siblingsOf.get(node.rel) ?? []
+      pendingAddOns.push({
+        node,
+        parentName: addOnParentName(toVariantTree(node), siblings.map(toVariantTree), nameHint)
+      })
+      return
+    }
+    warnings.push({
+      severity: 'info',
+      code: 'addon-folder',
+      message: `"${node.name}" holds optional extras for this mod, not a mod of its own.`,
+      detail:
+        'Modão leaves it out of the install. Its files replace files inside the mod they belong to, ' +
+        'so installing it as a separate folder would make Mod Loader ignore it. Enable it and Modão merges ' +
+        'it into that mod instead.'
+    })
+  }
+
+  /** Merges one enabled add-on into the mod folder it overrides. */
+  async function emitAddOn(node: Node, parentName: string): Promise<void> {
+    const replaced: string[] = []
+    for (const f of await walk(node.abs)) {
+      const rel = node.rel ? `${node.rel}/${f.rel}` : f.rel
+      if (/^(readme|leiame)/i.test(path.basename(f.rel)) && DOC_EXT.test(f.rel)) {
+        docs.push(rel)
+        continue
+      }
+      const target = `modloader/${parentName}/${addOnRelativePath(f.rel, parentName)}`
+      const i = files.findIndex((x) => x.targetRelative.toLowerCase() === target.toLowerCase())
+      if (i >= 0) {
+        replaced.push(files[i].targetRelative)
+        files.splice(i, 1)
+      }
+      files.push(makeFile(rel, target, 'modloader-folder', f.size))
+    }
+    warnings.push({
+      severity: 'info',
+      code: 'addon-enabled',
+      message: `"${node.name}" was merged into ${parentName}, as requested.`,
+      detail: replaced.length
+        ? `It replaces ${replaced.length} file(s) the mod ships itself: ${replaced.slice(0, 4).join(', ')}` +
+          (replaced.length > 4 ? ', …' : '')
+        : 'Its files were added to that mod folder, which is the only place Mod Loader reads them from.'
+    })
+  }
+
   async function handleNode(node: Node, nameHint: string): Promise<void> {
     if (isExcluded(node.rel)) return
     const lower = node.name.toLowerCase()
@@ -523,23 +460,34 @@ export async function classifyTree(
     }
 
     // Rule 3: an extras/translations/optional folder is an add-on to the mod
-    // beside it, not a mod. Installed on its own, Mod Loader ignores it.
+    // beside it, not a mod. Installed on its own, Mod Loader ignores it -
+    // enabled, it merges into the mod it overrides (see emitAddOn).
     if (isAddonFolder(node.name)) {
-      warnings.push({
-        severity: 'info',
-        code: 'addon-folder',
-        message: `"${node.name}" holds optional extras for this mod, not a mod of its own.`,
-        detail:
-          'Modão leaves it out of the install. Its files replace files inside the mod they belong to, ' +
-          'so installing it as a separate folder would make Mod Loader ignore it.'
-      })
-      for (const f of await walk(node.abs)) docs.push(node.rel ? `${node.rel}/${f.rel}` : f.rel)
+      offerAddOn(node, nameHint)
+      if (!addOnSelections[node.rel]) for (const f of await walk(node.abs)) docs.push(node.rel ? `${node.rel}/${f.rel}` : f.rel)
+      return
+    }
+
+    // A parenthesised config container attached to a sibling mod: its chosen
+    // option merges straight into that mod's own folder, and the container
+    // itself never becomes a top-level entry.
+    if (attachedContainers.has(node.rel)) {
+      const ownerRel = attachedContainers.get(node.rel) as string
+      const ownerName = path.basename(ownerRel)
+      const group = variants.find((v) => v.parentPath === node.rel)
+      const chosenId = group ? selections[group.id] : undefined
+      const chosenChild = chosenId ? node.children.find((c) => c.rel === chosenId) : undefined
+      // Merges straight into the owner's own folder, preserving the archive's
+      // relative structure verbatim - these files replace or extend config the
+      // owner already ships (Zone Text's own "cleo/zonetext.ini"), so a bare
+      // .ini here belongs beside it, not reclassified to the game root.
+      if (chosenChild) await emitDir(chosenChild, 'modloader-folder', `modloader/${ownerName}`)
       return
     }
 
     // A chosen variant folder is a passthrough: its contents are the mod.
     if (chosenPaths.has(node.rel)) {
-      const hint = variantNameHint(node, nameHint)
+      const hint = sharedVariantNameHint(node.name, nameHint)
       if (holdsModContent(node)) {
         await emitDir(node, 'modloader-folder', `modloader/${hint}`)
         return
@@ -685,6 +633,15 @@ export async function classifyTree(
   }
 
   if (rootLooksLikeMod && !rootHasStructure) {
+    // A bare pile of assets skips handleNode entirely, so an add-on folder
+    // sitting beside them (root/models/, root/Extra/) would otherwise never
+    // be filtered: it walked straight into modloader\<mod>\Extra\ instead of
+    // being offered separately.
+    for (const c of tree.children) {
+      if (!c.isDir || !isAddonFolder(c.name)) continue
+      offerAddOn(c, ctx.fallbackName)
+      if (!addOnSelections[c.rel]) for (const f of await walk(c.abs)) docs.push(c.rel ? `${c.rel}/${f.rel}` : f.rel)
+    }
     await emitDir(tree, 'modloader-folder', `modloader/${ctx.fallbackName}`)
     for (const f of files) {
       if (/^(readme|leiame)/i.test(path.basename(f.sourcePath))) docs.push(f.sourcePath)
@@ -697,6 +654,9 @@ export async function classifyTree(
     }
     rejoinSplitAsi()
   }
+
+  // Last, so an add-on's files land on top of the very files they override.
+  for (const a of pendingAddOns) await emitAddOn(a.node, a.parentName)
 
   // Mechanics Mod Loader enforces, checked once the whole plan is known.
   for (const f of files) {
@@ -777,7 +737,8 @@ export async function classifyTree(
     files: files.filter((f) => !isDocumentation(f.sourcePath) || f.destination === 'root-file'),
     variants,
     warnings,
-    docs
+    docs,
+    addOns
   }
 }
 
@@ -786,19 +747,6 @@ function holdsModContent(node: Node): boolean {
   return node.children.some(
     (c) => (c.isDir && MOD_SUBFOLDERS.has(c.name.toLowerCase())) || (!c.isDir && ASSET_EXT.test(c.name))
   )
-}
-
-/**
- * A descriptive variant folder ("Loadscreens 2K Definitive") makes a good mod
- * folder name. An uninformative one ("(original)", "PT", "4K") does not, so
- * the archive name is used instead.
- */
-function variantNameHint(node: Node, fallback: string): string {
-  const name = node.name.trim()
-  if (/^\(.*\)$/.test(name)) return fallback
-  if (/^(pt|pt-?br|br|en|eng|es|esp|ru|rus|fr|de|it|pl|sa|vc|iii|samp)$/i.test(name)) return fallback
-  if (/^\d?[1-8]k$/i.test(name)) return fallback
-  return name
 }
 
 function destinationPrefix(dest: DestinationClass, asiPrefix: string): string {

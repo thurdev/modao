@@ -28,7 +28,16 @@ import {
   signatureForArchive
 } from '../knowledge/learn'
 import { t } from '../util/i18n'
-import { dematerialise, ingest, materialise, ownedKey, quarantineEdited, storeKey } from '../store/contentStore'
+import {
+  dematerialise,
+  ingest,
+  ingestVariantOptions,
+  materialise,
+  ownedKey,
+  quarantineEdited,
+  storeKey
+} from '../store/contentStore'
+import { buildPersistedVariantGroups } from '@shared/variantGroups'
 import { requireActiveGame } from '../game/detect'
 import { syncProfileIni } from '../profiles/materialize'
 
@@ -37,6 +46,7 @@ interface PlanState {
   extractRoot: string
   stagingDir: string
   selections: Record<string, string>
+  addOnSelections: Record<string, boolean>
   overrides: Record<string, DestinationClass>
   readmes: ReadmeParse[]
   profileId: number
@@ -80,6 +90,7 @@ export async function createPlan(input: CreatePlanInput): Promise<InstallPlan> {
     extractRoot,
     stagingDir,
     selections: {},
+    addOnSelections: {},
     overrides: {},
     readmes,
     profileId: input.profileId,
@@ -129,7 +140,8 @@ async function buildPlan(planId: string, meta: BuildMeta): Promise<InstallPlan> 
       fallbackName,
       findOverlayTarget: (rel, base) => findOverlay(profileId, rel, base)
     },
-    state.selections
+    state.selections,
+    state.addOnSelections
   )
 
   const files = classified.files.map((f) =>
@@ -231,6 +243,7 @@ async function buildPlan(planId: string, meta: BuildMeta): Promise<InstallPlan> 
     extractRoot,
     readmes,
     variants: classified.variants,
+    addOns: classified.addOns,
     files,
     dependencies,
     missingRequirements,
@@ -342,6 +355,14 @@ export async function choose(planId: string, groupId: string, optionId: string):
   return rebuild(planId)
 }
 
+/** Enables or drops an add-on folder offered beside the plan (merged into its own mod folder when enabled). */
+export async function chooseAddOn(planId: string, addOnId: string, enabled: boolean): Promise<InstallPlan> {
+  const s = PLANS.get(planId)
+  if (!s) throw new Error('This install plan has expired. Start the install again.')
+  s.addOnSelections[addOnId] = enabled
+  return rebuild(planId)
+}
+
 export async function setDestination(planId: string, sourcePath: string, destination: DestinationClass): Promise<InstallPlan> {
   const s = PLANS.get(planId)
   if (!s) throw new Error('This install plan has expired. Start the install again.')
@@ -425,6 +446,12 @@ export async function applyPlan(
 
   onProgress?.('store', 0, plan.files.length)
   const stored = await ingest(key, plan.extractRoot, plan.files, (d, t) => onProgress?.('store', d, t))
+  // Every option of every variant group is snapshotted too, not only the one
+  // that was chosen, so switching later never needs the archive again.
+  await ingestVariantOptions(key, plan.extractRoot, plan.variants)
+  const variantGroupsJson = JSON.stringify(
+    buildPersistedVariantGroups(plan.variants, state.selections, stored)
+  )
 
   const folderName = primaryFolder(stored)
   const readmeText = state.readmes[0]?.raw ?? null
@@ -433,8 +460,8 @@ export async function applyPlan(
     const info = db
       .prepare(
         `INSERT INTO install (profile_id, mod_version_id, installed_at, destination_class, variant_choice,
-                              enabled, priority, store_key, folder_name, readme_text, source_archive)
-         VALUES (?,?,?,?,?,1,?,?,?,?,?)`
+                              enabled, priority, store_key, folder_name, readme_text, source_archive, variant_groups_json)
+         VALUES (?,?,?,?,?,1,?,?,?,?,?,?)`
       )
       .run(
         profileId,
@@ -446,7 +473,8 @@ export async function applyPlan(
         key,
         folderName,
         readmeText,
-        plan.archivePath
+        plan.archivePath,
+        variantGroupsJson
       )
     const id = Number(info.lastInsertRowid)
     const fileStmt = db.prepare(

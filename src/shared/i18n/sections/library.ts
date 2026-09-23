@@ -60,7 +60,11 @@ export const library = {
     uninstall: 'Desinstalar',
     readmeTitle: 'Leiame — {name}',
     subMods: 'Sub-mods',
-    uninstallTitle: 'Desinstalar {name}?'
+    uninstallTitle: 'Desinstalar {name}?',
+    variantGroupLabel: 'Variante',
+    switchVariant: 'Trocar',
+    switchingVariant: 'Trocando…',
+    variantSwitched: 'Trocado para {label}. Nada foi baixado de novo.'
   },
   en: {
     intro:
@@ -116,6 +120,10 @@ export const library = {
     uninstall: 'Uninstall',
     readmeTitle: 'Readme — {name}',
     subMods: 'Sub-mods',
-    uninstallTitle: 'Uninstall {name}?'
+    uninstallTitle: 'Uninstall {name}?',
+    variantGroupLabel: 'Variant',
+    switchVariant: 'Switch',
+    switchingVariant: 'Switching…',
+    variantSwitched: 'Switched to {label}. Nothing was re-downloaded.'
   }
 } as const
