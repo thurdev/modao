@@ -98,6 +98,10 @@ export const messages = {
         'O autor escreveu instruções e o Modão não conseguiu lê-las, então o plano abaixo é palpite a partir do formato do arquivo. Leia o leiame bruto e confirme antes de instalar.',
       readmeUnparsedRefusal:
         'Este arquivo traz um leiame que o Modão não conseguiu ler, e nada foi instalado. Leia o leiame bruto no plano e confirme que quer instalar assim mesmo.',
+      archivePasswordProtected:
+        '{file} está protegido por senha, e a senha do MixMods ({password}) não abriu. O arquivo não está corrompido — baixar de novo não vai adiantar. Veja na página do mod qual é a senha, extraia com o 7-Zip e instale a partir do arquivo extraído.',
+      archiveRarUnsupported:
+        'O Modão não abre .rar ({file}): o extrator que vem junto faz .7z e .zip, e nenhum outro. Extraia com o 7-Zip ou o WinRAR, compacte a pasta como .zip e instale esse .zip.',
       mode: {
         junction: 'junção',
         hardlink: 'hard link',
@@ -214,6 +218,10 @@ export const messages = {
         'The author wrote instructions and Modão could not read them, so the plan below is a guess from the archive shape. Read the raw readme and confirm before installing.',
       readmeUnparsedRefusal:
         'This archive ships a readme Modão could not read, and nothing was installed. Read the raw readme on the plan and confirm you want to install anyway.',
+      archivePasswordProtected:
+        '{file} is password protected, and the MixMods password ({password}) did not open it. The file is not corrupt - downloading it again will not help. Check the mod page for the password, extract it with 7-Zip, and install from what comes out.',
+      archiveRarUnsupported:
+        'Modão cannot open .rar files ({file}): the extractor it ships handles .7z and .zip, and nothing else. Extract it with 7-Zip or WinRAR, zip the folder up, and install that .zip.',
       mode: {
         junction: 'junction',
         hardlink: 'hard link',
