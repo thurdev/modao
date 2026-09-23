@@ -40,12 +40,12 @@ export function forgetHealthReport(): void {
  * What the report was computed from, as cheaply as it can be asked.
  *
  * Covers the things that change under a user's hands between one Play and the
- * next: what the profile has installed and enabled, which variant each install
- * has chosen - `switchVariant` rewrites only `variant_choice` on a row already
- * counted, so the count/enabled-sum/max-id alone would not see a preset swapped
- * in after a clean report was cached - and stream.ini, the file the whole gate
- * exists for, which the offered fix rewrites. Everything slower-moving is left
- * to the age backstop.
+ * next: which installs the profile has, whether each one is enabled, which
+ * variant each one has chosen - both of those per row and not as a total, since
+ * a count cannot tell "disable A, enable B" from "nothing happened", and
+ * `switchVariant` rewrites only `variant_choice` on a row already counted - and
+ * stream.ini, the file the whole gate exists for, which the offered fix
+ * rewrites. Everything slower-moving is left to the age backstop.
  */
 function fingerprint(profileId: number | null, gamePath: string): string {
   const parts: string[] = []

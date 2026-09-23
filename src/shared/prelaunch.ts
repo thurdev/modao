@@ -71,24 +71,30 @@ export interface InstallFingerprintRow {
 /**
  * What a profile's installs contribute to the fingerprint.
  *
- * Count, the enabled sum and the max id catch an install, an uninstall or a
- * plain on/off toggle. None of those three move when a variant is swapped:
- * `switchVariant` only rewrites `variant_choice` (and `variant_groups_json`,
- * which mirrors it) on the row's own id - so a swap that trades in a preset
- * shipping a second limit adjuster, or a `.cleo` plugin the installed CLEO is
- * too old for, would otherwise leave a clean cached report standing. So every
- * row's own choice travels too, in id order.
+ * Count and the max id catch an install or an uninstall. Neither moves when a
+ * variant is swapped: `switchVariant` only rewrites `variant_choice` (and
+ * `variant_groups_json`, which mirrors it) on the row's own id - so a swap that
+ * trades in a preset shipping a second limit adjuster, or a `.cleo` plugin the
+ * installed CLEO is too old for, would otherwise leave a clean cached report
+ * standing. So every row's own choice travels, in id order.
+ *
+ * Enabled travels the same way, PER ROW, for the same reason and one the sum
+ * could not express. A sum is blind to a swap: disable mod A, enable mod B, and
+ * count, sum and max id are all unchanged - so a report computed before the two
+ * clicks was reused after them, and if B is what would have refused the launch
+ * (a second limit adjuster, a .cleo the installed CLEO is too old for) a
+ * refusal that should stand is allowed through. That is the dangerous
+ * direction. Identity, not arithmetic.
  */
 export function installFingerprint(rows: readonly InstallFingerprintRow[]): string {
   const count = rows.length
-  const enabledSum = rows.reduce((sum, r) => sum + (r.enabled ? 1 : 0), 0)
   const maxId = rows.reduce((max, r) => Math.max(max, r.id), 0)
-  const variants = rows
+  const perRow = rows
     .slice()
     .sort((a, b) => a.id - b.id)
-    .map((r) => `${r.id}:${r.variantChoice ?? ''}`)
+    .map((r) => `${r.id}:${r.enabled ? 1 : 0}:${r.variantChoice ?? ''}`)
     .join(',')
-  return `i:${count}/${enabledSum}/${maxId};v:${variants}`
+  return `i:${count}/${maxId};v:${perRow}`
 }
 
 export interface LaunchInputs {

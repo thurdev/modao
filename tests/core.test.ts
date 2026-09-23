@@ -3317,6 +3317,30 @@ check(
       { id: 7, enabled: 0, variantChoice: null }
     ])
 )
+// The same lesson, learned a second time on the half that was still a SUM.
+// Inside the 120 s TTL: open Health (clean report cached), disable mod A,
+// enable mod B - where B ships a second limit adjuster or a .cleo the installed
+// CLEO is too old for - and press Play. Count, max id and every variantChoice
+// are unchanged, and the enabled SUM is unchanged too, so the stale clean
+// report answered and a launch that should have been refused went through. The
+// dangerous direction. It fails the moment per-row enabled is folded back into
+// a total.
+check(
+  'fingerprint: disabling one mod and enabling another changes the fingerprint, though the enabled count does not',
+  installFingerprint([
+    { id: 3, enabled: 1, variantChoice: null },
+    { id: 7, enabled: 0, variantChoice: null }
+  ]) !==
+    installFingerprint([
+      { id: 3, enabled: 0, variantChoice: null },
+      { id: 7, enabled: 1, variantChoice: null }
+    ])
+)
+check(
+  'fingerprint: and a plain on/off toggle still changes it',
+  installFingerprint([{ id: 3, enabled: 1, variantChoice: null }]) !==
+    installFingerprint([{ id: 3, enabled: 0, variantChoice: null }])
+)
 check(
   'fingerprint: row order does not matter, only which id chose what',
   installFingerprint([
