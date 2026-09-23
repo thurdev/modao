@@ -189,6 +189,23 @@ export interface InstalledMod {
   variantChoice: string | null
   enabled: boolean
   priority: number
+  /**
+   * The mod folder this install owns in modloader\, canonical - without the
+   * ". " disable prefix or the "$" load-first prefix it may wear on disk.
+   */
+  folderName: string | null
+  /**
+   * The folder is spelled with a leading "$", so its .asi hooks the game before
+   * the others. LOAD ORDER, not priority: it decides nothing about who wins a
+   * duplicated file, and priority decides nothing about load order.
+   */
+  loadFirst: boolean
+  /**
+   * 1-based position in Mod Loader's alphabetical .asi load order, or null when
+   * Mod Loader does not load this folder at all. Derived from the folder names,
+   * never from priority.
+   */
+  loadOrderRank: number | null
   fileCount: number
   size: number
   conflictCount: number

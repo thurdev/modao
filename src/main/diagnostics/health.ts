@@ -7,13 +7,15 @@ import { limitAdjusterNames, readStreamIni, RISKY_STREAMING_MEMORY_MB, SAFE_STRE
 import { reportFromGame } from './modloaderLog'
 import { outdatedBuildCheck } from './upstream'
 import { gameDefinition } from '@shared/games'
-import { exists, walk } from '../util/fsx'
+import { exists, isLink, moveSafe, timestampSlug, walk } from '../util/fsx'
+import { Paths } from '../util/paths'
+import { findOrphanConfigs, orphanPluginFolder, type OrphanFinding } from '@shared/orphanConfigs'
 import { requireActiveGame } from '../game/detect'
 import { checkGameExe } from '../game/pe'
 import { cachedWriteAccess, probeWriteAccess } from '../game/access'
 import { checkGameRunning, gameExeNames } from '../game/running'
 import { cleoPluginRequirements, cleoRequirementStatus } from '@shared/cleoPlugins'
-import { listConflicts, listHookCollisions } from '../conflicts'
+import { listConflicts, listHookCollisions, providesKey } from '../conflicts'
 import { profileDependencyProblems } from '../deps/resolver'
 import { analyzeTxd } from '../formats/txd'
 import { storeDir } from '../store/contentStore'
@@ -235,7 +237,7 @@ export async function runHealthCheck(profileId: number | null): Promise<HealthRe
   )
 
   // 9. Configs whose plugin is gone
-  checks.push(await orphanedConfigCheck(game))
+  checks.push(await orphanedConfigCheck(game, profileId))
 
   // 10. Frame limiter
   checks.push(await fpsCapCheck(game))
@@ -545,31 +547,127 @@ async function modLoaderVerdictCheck(profileId: number, game: GameInstall): Prom
  * diagnosing it: the file reads as evidence that a mod is installed when it is
  * not. After an uninstall these are exactly what is left behind.
  */
-async function orphanedConfigCheck(game: GameInstall): Promise<HealthCheck> {
+async function orphanedConfigCheck(game: GameInstall, profileId: number | null): Promise<HealthCheck> {
   const dir = game.asiDirectory ?? game.path
   if (!game.supportsAsi || !exists(dir)) {
     return { id: 'orphan-config', title: t('checks.orphanTitle'), status: 'skip', summary: t('checks.orphanNone') }
   }
-  const entries: string[] = await fsp.readdir(dir).catch(() => [])
-  const plugins = new Set(
-    entries.filter((f) => /\.(asi|dll)$/i.test(f)).map((f) => f.replace(/\.(asi|dll)$/i, '').toLowerCase())
-  )
-  const orphans = entries.filter((f) => {
-    if (!/\.(ini|json|cfg|dat)$/i.test(f)) return false
-    const stem = f.replace(/\.(ini|json|cfg|dat)$/i, '').toLowerCase()
-    // A config shared by the game itself is not an orphan.
-    if (['stream', 'modloader', 'cleo', 'gta_sa', 'settings'].includes(stem)) return false
-    return !plugins.has(stem)
-  })
+  const findings = await orphanFindings(game, profileId)
+  const reunitable = findings.filter((f) => f.action === 'move-back')
 
   return {
     id: 'orphan-config',
     title: t('checks.orphanTitle'),
-    status: orphans.length ? 'warn' : 'pass',
-    summary: orphans.length ? t('checks.orphanFound', { count: orphans.length }) : t('checks.orphanNone'),
-    detail: orphans.length ? t('checks.orphanDetail') : undefined,
-    items: orphans.slice(0, 12)
+    status: findings.length ? 'warn' : 'pass',
+    summary: findings.length ? t('checks.orphanFound', { count: findings.length }) : t('checks.orphanNone'),
+    detail: findings.length
+      ? reunitable.length
+        ? `${t('checks.orphanDetail')} ${t('checks.orphanReunite', { count: reunitable.length })}`
+        : t('checks.orphanDetail')
+      : undefined,
+    items: findings.slice(0, 12).map((f) =>
+      f.action === 'move-back'
+        ? t('checks.orphanItemMoveBack', {
+            config: f.config,
+            plugin: f.plugin ?? '',
+            folder: orphanPluginFolder(f),
+            where: asiRelativeOf(game).replace(/\//g, '\\') || '.'
+          })
+        : t('checks.orphanItemNoPlugin', { config: f.config, plugin: `${f.stem}.asi` })
+    )
   }
+}
+
+/** Where the detected ASI directory sits, relative to the game folder. */
+function asiRelativeOf(game: GameInstall): string {
+  const dir = game.asiDirectory ?? game.path
+  return path.relative(game.path, dir).split(path.sep).join('/')
+}
+
+/**
+ * The orphans and, for each, where its plugin actually went.
+ *
+ * Shared by the check and by the fix it offers, so the two can never describe
+ * different files.
+ */
+export async function orphanFindings(game: GameInstall, profileId: number | null): Promise<OrphanFinding[]> {
+  const dir = game.asiDirectory ?? game.path
+  if (!game.supportsAsi || !exists(dir)) return []
+  const entries: string[] = await fsp.readdir(dir).catch(() => [])
+  const tracked = (
+    profileId === null
+      ? (getDb().prepare('SELECT relative_path FROM install_file').all() as { relative_path: string }[])
+      : (getDb()
+          .prepare(
+            `SELECT f.relative_path FROM install_file f JOIN install i ON i.id = f.install_id
+              WHERE i.profile_id = ?`
+          )
+          .all(profileId) as { relative_path: string }[])
+  ).map((r) => r.relative_path)
+  return findOrphanConfigs({ entries, asiRelative: asiRelativeOf(game), tracked })
+}
+
+/**
+ * Puts an orphan's plugin back in the ASI directory - or, when no plugin
+ * exists anywhere, puts the stray config in quarantine.
+ *
+ * NOTHING IS DELETED. A plugin is MOVED, and the records that name its old path
+ * are rewritten in the same transaction so the database still describes the
+ * disk. A config with no plugin is MOVED to the quarantine folder, which is
+ * never cleared on its own, so a config that turns out to matter is one copy
+ * away.
+ *
+ * A plugin sitting inside a junctioned mod folder is refused, not moved: that
+ * folder IS Modão's content store, and moving a file out of it would take the
+ * only copy with it. The user is told where it is and left to decide.
+ */
+export async function reuniteOrphans(profileId: number | null): Promise<{ moved: string[]; quarantined: string[]; refused: string[] }> {
+  const game = requireActiveGame()
+  const asiDir = game.asiDirectory ?? game.path
+  const db = getDb()
+  const moved: string[] = []
+  const quarantined: string[] = []
+  const refused: string[] = []
+
+  for (const f of await orphanFindings(game, profileId)) {
+    if (f.action === 'no-plugin') {
+      const from = path.join(asiDir, f.config)
+      if (!exists(from)) continue
+      const to = path.join(Paths.quarantine(), 'orphan-config', timestampSlug(), f.config)
+      await moveSafe(from, to)
+      quarantined.push(`${f.config} → ${to}`)
+      continue
+    }
+    const from = path.join(game.path, f.pluginPath!.replace(/\//g, path.sep))
+    const to = path.join(asiDir, f.plugin!)
+    if (!exists(from)) {
+      refused.push(`${f.plugin} is on record at ${f.pluginPath} but is not there any more`)
+      continue
+    }
+    if (exists(to)) {
+      refused.push(`${f.plugin} is already in the ASI directory; the records say it is also at ${f.pluginPath}`)
+      continue
+    }
+    const modFolder = /^modloader\/([^/]+)\//.exec(f.pluginPath!)?.[1]
+    if (modFolder && isLink(path.join(game.path, 'modloader', modFolder))) {
+      refused.push(
+        `${f.plugin} is inside modloader\\${modFolder}\\, which is a link into Modão's content store. ` +
+          'Moving it out would take the only copy; move it by hand if that is what you want.'
+      )
+      continue
+    }
+    await moveSafe(from, to)
+    const newRel = path.relative(game.path, to).split(path.sep).join('/')
+    db.transaction(() => {
+      db.prepare('UPDATE install_file SET relative_path = ? WHERE relative_path = ?').run(newRel, f.pluginPath)
+      db.prepare('UPDATE provides SET relative_path = ? WHERE relative_path = ?').run(
+        providesKey(newRel),
+        providesKey(f.pluginPath!)
+      )
+    })()
+    moved.push(`${f.pluginPath} → ${newRel}`)
+  }
+  return { moved, quarantined, refused }
 }
 
 /** Frame limiters worth reading, and the key each one keeps the number under. */

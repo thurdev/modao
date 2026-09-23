@@ -28,7 +28,15 @@ import { detectExistingSaves, listSnapshots } from './profiles/saves'
 import { clearCache, storageReport } from './ipc'
 import { Paths } from './util/paths'
 import { applyPlan, createPlan, choose, uninstall } from './install/engine'
-import { listInstalled, recoverStaleVariantSwaps, setPriority, setSubModEnabled, switchVariant } from './library'
+import {
+  listInstalled,
+  recoverStaleVariantSwaps,
+  setEnabled,
+  setLoadFirst,
+  setPriority,
+  setSubModEnabled,
+  switchVariant
+} from './library'
 import { listConflicts } from './conflicts'
 import { readIniFile, readKeys, getSection } from './game/modloaderIni'
 import { walk, sha256File, createJunction, isLink, removeLinkOrDir } from './util/fsx'
@@ -721,7 +729,16 @@ export async function runE2E(): Promise<number> {
   const afterDisable = listInstalled(adopted.profileId).find((m) => m.installId === packApplied.installId)!
   check('a disabled sub-mod reports enabled: false', subOf(afterDisable, 'data')?.enabled === false, afterDisable.subMods)
   check('its sibling is untouched', subOf(afterDisable, 'models')?.enabled === true, afterDisable.subMods)
-  check('disabling a sub-mod removes only that folder from the game', !fs.existsSync(subFile))
+  check('disabling a sub-mod takes only that folder out of Mod Loader reach', !fs.existsSync(subFile))
+  // Mod Loader's own non-destructive disable: the folder is RENAMED to ". data",
+  // which it skips. Nothing is removed - this used to be an fsp.rm that deleted
+  // straight through the junction into Modao's only copy of the payload.
+  const disabledSubFile = path.join(game, 'modloader', 'Sub Mod Pack', '. data', 'handling.dat')
+  check(
+    'and it is a rename to ". data", not a removal - every byte is still on disk',
+    fs.existsSync(disabledSubFile) && (await fsp.readFile(disabledSubFile, 'utf8')) === 'handling lines',
+    await fsp.readdir(path.join(game, 'modloader', 'Sub Mod Pack'))
+  )
   check('the rest of the mod stays materialised', fs.existsSync(path.join(game, 'modloader', 'Sub Mod Pack', 'models', 'wheel.dff')))
 
   await setSubModEnabled(packApplied.installId, 'data', true)
@@ -731,6 +748,56 @@ export async function runE2E(): Promise<number> {
     're-enabling puts the files back with their own bytes',
     fs.existsSync(subFile) && (await fsp.readFile(subFile, 'utf8')) === 'handling lines',
     (await walk(path.join(game, 'modloader', 'Sub Mod Pack'))).map((f) => f.rel)
+  )
+
+
+  // --- field audit 12 + 20: the whole-mod toggle is a rename, and load order ---
+  //
+  // The sub-mod toggle above is one level down; this is the one the Library's
+  // switch calls. Disabling used to `dematerialise` - it removed the
+  // materialised files and trusted the store to put them back, which is nothing
+  // at all for an adopted install and a re-link of gigabytes for every other.
+  // Now it renames the folder to ". <name>", which Mod Loader skips.
+  const beforeToggle = await snapshotDir(game)
+  await setEnabled(packApplied.installId, false)
+  check(
+    'field audit 20: disabling a mod renames its folder to ". Sub Mod Pack" instead of removing it',
+    fs.existsSync(path.join(game, 'modloader', '. Sub Mod Pack', 'models', 'wheel.dff')) &&
+      !fs.existsSync(path.join(game, 'modloader', 'Sub Mod Pack')),
+    await fsp.readdir(path.join(game, 'modloader'))
+  )
+  check(
+    'field audit 20: the priority line follows the folder name Mod Loader will actually see',
+    (await fsp.readFile(path.join(game, 'modloader', 'modloader.ini'), 'latin1')).includes('. Sub Mod Pack=0'),
+    (await fsp.readFile(path.join(game, 'modloader', 'modloader.ini'), 'latin1'))
+      .split(/\r?\n/)
+      .filter((l) => /Sub Mod Pack/.test(l))
+  )
+  await setEnabled(packApplied.installId, true)
+  check(
+    'field audit 20: enabling it again round-trips the whole game folder, byte for byte',
+    sameTree(beforeToggle, await snapshotDir(game)),
+    diff(beforeToggle, await snapshotDir(game))
+  )
+
+  // Load order is a separate mechanism from priority, and has its own lever.
+  await setLoadFirst(packApplied.installId, true)
+  check(
+    'field audit 12: "load first" is the "$" prefix on the mod folder, not a priority number',
+    fs.existsSync(path.join(game, 'modloader', '$Sub Mod Pack', 'models', 'wheel.dff')),
+    await fsp.readdir(path.join(game, 'modloader'))
+  )
+  const loadFirstRow = listInstalled(adopted.profileId).find((m) => m.installId === packApplied.installId)!
+  check(
+    'field audit 12: and it is reported as load order, with priority left exactly where it was',
+    loadFirstRow.loadFirst && loadFirstRow.loadOrderRank === 1 && loadFirstRow.priority === 50,
+    { rank: loadFirstRow.loadOrderRank, priority: loadFirstRow.priority }
+  )
+  await setLoadFirst(packApplied.installId, false)
+  check(
+    'field audit 12: taking the prefix off puts the folder back under its own name',
+    sameTree(beforeToggle, await snapshotDir(game)),
+    diff(beforeToggle, await snapshotDir(game))
   )
 
   await uninstall(packApplied.installId)

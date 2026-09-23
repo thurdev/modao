@@ -176,6 +176,24 @@ export function rulesFor<T>(kind: RuleKind, subjects: string[]): KnowledgeRule<T
   return rankRules(rows.map((r) => toRule<T>(r)))
 }
 
+/**
+ * Every rule of one kind, whatever its subject, strongest first.
+ *
+ * For the kinds that are a LIST rather than a lookup - which .asi files belong
+ * in the ASI directory, say, where the caller has no subject to ask about and
+ * wants what the app has learned so far.
+ */
+export function allRulesOf<T>(kind: RuleKind, limit = 500): KnowledgeRule<T>[] {
+  ensureUpgraded()
+  const rows = getDb()
+    .prepare(
+      `SELECT * FROM knowledge_rule WHERE kind = ?
+        ORDER BY weight DESC, times_seen DESC, id DESC LIMIT ?`
+    )
+    .all(kind, limit) as Row[]
+  return rankRules(rows.map((r) => toRule<T>(r)))
+}
+
 /** The one rule that should win for a subject, or nothing. */
 export function bestRule<T>(kind: RuleKind, subjects: string[]): KnowledgeRule<T> | null {
   return rulesFor<T>(kind, subjects)[0] ?? null

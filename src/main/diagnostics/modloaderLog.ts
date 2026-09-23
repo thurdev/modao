@@ -3,6 +3,7 @@ import fsp from 'node:fs/promises'
 import iconv from 'iconv-lite'
 import { exists } from '../util/fsx'
 import type { ModLoaderCrash, ModLoaderLogReport, ModLoaderModReport } from '@shared/types'
+import { baseFolderName } from '@shared/loadOrder'
 
 /**
  * Mod Loader keeps a log of what it actually did, and it is the only honest
@@ -41,7 +42,10 @@ const NO_HANDLER = /No handler or callme for file "?([^"\r\n]+)"?/i
 /** modloader\<Mod>\rest -> <Mod> */
 function modFolderOf(relative: string): string | null {
   const m = /modloader[\\/]([^\\/]+)[\\/]/i.exec(relative) ?? /modloader[\\/]([^\\/]+)[\\/]?$/i.exec(relative)
-  return m ? m[1].replace(/[\\/]+$/, '') : null
+  // Canonical, so a folder spelled "$VHud" to load first is still the VHud the
+  // profile records. (". VHud" cannot appear here at all - Mod Loader skips a
+  // folder with that prefix and never writes a line about it.)
+  return m ? baseFolderName(m[1].replace(/[\\/]+$/, '')) : null
 }
 
 /**

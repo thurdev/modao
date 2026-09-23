@@ -54,6 +54,7 @@ import {
   readInstallReadme,
   recoverStaleVariantSwaps,
   setEnabled,
+  setLoadFirst,
   setPriority,
   setSubModEnabled,
   switchVariant
@@ -75,7 +76,7 @@ import { crawl, refreshMod } from './catalog/mixmods'
 import { analyzeTxd } from './formats/txd'
 import { analyzeImg } from './formats/img'
 import { compareWithVanilla } from './formats/ifp'
-import { runHealthCheck, scanTextures } from './diagnostics/health'
+import { reuniteOrphans, runHealthCheck, scanTextures } from './diagnostics/health'
 import { forgetHealthReport, freshHealthReport } from './diagnostics/healthCache'
 import { planLaunch } from './game/launch'
 import { listCrashes, listIncidents, scanCrashes, setCrashResolved } from './diagnostics/eventlog'
@@ -643,6 +644,11 @@ export function registerIpc(): void {
     await requireIdleGame()
     return setPriority(installId, priority)
   })
+  // Renames the mod folder, so the game must not be reading it.
+  ipcMain.handle('library:setLoadFirst', async (_e, installId: number, loadFirst: boolean) => {
+    await requireIdleGame()
+    return setLoadFirst(installId, loadFirst)
+  })
   ipcMain.handle('library:uninstall', async (_e, installId: number) => {
     await requireIdleGame()
     const result = await uninstall(installId)
@@ -908,6 +914,12 @@ export function registerIpc(): void {
       path.join(Paths.quarantine(), 'stream-ini')
     )
     toast('success', t('messages.installDeps.streamingFixed', { from: String(result.from ?? '?'), to: result.to }))
+    return result
+  })
+  ipcMain.handle('health:reuniteOrphans', async (_e, profileId: number | null) => {
+    await requireIdleGame()
+    const result = await reuniteOrphans(profileId)
+    toast('success', t('health.reunited', { moved: result.moved.length, quarantined: result.quarantined.length }))
     return result
   })
   ipcMain.handle('health:logs', () => collectLogs())

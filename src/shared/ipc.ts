@@ -118,6 +118,12 @@ export interface ModãoApi {
     list(profileId: number): Promise<InstalledMod[]>
     setEnabled(installId: number, enabled: boolean): Promise<void>
     setPriority(installId: number, priority: number): Promise<void>
+    /**
+     * Spells the mod folder with, or without, the "$" that makes its .asi load
+     * first. LOAD ORDER, not priority - the two are separate calls because they
+     * are separate Mod Loader mechanisms.
+     */
+    setLoadFirst(installId: number, loadFirst: boolean): Promise<void>
     uninstall(installId: number): Promise<{ restored: number; quarantined: string[] }>
     rollbackPreview(installId: number): Promise<{ relativePath: string; action: string }[]>
     readme(installId: number): Promise<string | null>
@@ -186,6 +192,11 @@ export interface ModãoApi {
     modLoaderReport(profileId: number): Promise<ModLoaderLogReport | null>
     /** Writes a streaming-memory value the game can survive, keeping a backup. */
     fixStreamingMemory(memoryMb?: number): Promise<{ file: string; backup: string; from: number | null; to: number }>
+    /**
+     * Moves an orphaned config's plugin back to the ASI directory, or puts the
+     * stray config in quarantine when no plugin exists. Never deletes.
+     */
+    reuniteOrphans(profileId: number | null): Promise<{ moved: string[]; quarantined: string[]; refused: string[] }>
     bisectStart(profileId: number): Promise<BisectSession>
     bisectResult(sessionId: string, result: 'good' | 'bad'): Promise<BisectSession>
     bisectAbort(sessionId: string): Promise<void>
@@ -244,6 +255,7 @@ export const IPC_CHANNELS = [
   'library:list',
   'library:setEnabled',
   'library:setPriority',
+  'library:setLoadFirst',
   'library:uninstall',
   'library:rollbackPreview',
   'library:readme',
@@ -287,6 +299,7 @@ export const IPC_CHANNELS = [
   'health:logs',
   'health:modLoaderReport',
   'health:fixStreamingMemory',
+  'health:reuniteOrphans',
   'health:bisectStart',
   'health:bisectResult',
   'health:bisectAbort',

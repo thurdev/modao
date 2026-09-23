@@ -5,6 +5,8 @@ import { Paths } from '../util/paths'
 import { copyRecursive, exists, isDirectory, isLink, linkOrCopyFile, sha256File, walk } from '../util/fsx'
 import { requireActiveGame } from '../game/detect'
 import { storeDir, storeKey } from '../store/contentStore'
+import { existsUnderAnySpelling, resolveSpelledPath } from '../store/folderSpelling'
+import { spellFolderName } from '@shared/loadOrder'
 import type {
   SnapshotEntry,
   SwitchFilePlan,
@@ -33,6 +35,8 @@ interface InstallRow {
   folder_name: string | null
   enabled: number
   priority: number
+  /** The folder wears the "$" load-first prefix. Load order, not priority. */
+  load_first: number
   destination_class: string
 }
 
@@ -168,7 +172,7 @@ export async function planSwitch(toProfileId: number): Promise<SwitchPlan> {
       continue
     }
     if (!row.store_key) {
-      const live = files.filter((f) => exists(path.join(game.path, f.relative_path)))
+      const live = files.filter((f) => existsUnderAnySpelling(game.path, f.relative_path))
       if (live.length === 0) {
         unresolved.push({
           installId: row.id,
@@ -369,8 +373,12 @@ export async function ingestUnstoredInstalls(
     let copied = 0
     const absent: string[] = []
     for (const r of rels) {
-      const from = path.join(gamePath, r.relative_path)
-      if (!exists(from)) {
+      // Read through whatever spelling the folder wears: a mod the user has
+      // switched off sits at "modloader\. <name>\...", and an adopted one that
+      // was never copied into the store is the single most irreplaceable thing
+      // in the game folder. Ingesting it is what makes it survivable at all.
+      const from = resolveSpelledPath(gamePath, r.relative_path)
+      if (!from) {
         absent.push(r.relative_path)
         continue
       }
@@ -604,7 +612,7 @@ export async function verifySwitch(profileId: number): Promise<SwitchVerificatio
       missingMods.push({ installId: row.id, label, reason: 'no files are recorded for this install' })
       continue
     }
-    const present = files.filter((f) => exists(path.join(game.path, f.relative_path))).length
+    const present = files.filter((f) => existsUnderAnySpelling(game.path, f.relative_path)).length
     if (present === 0) {
       missingMods.push({ installId: row.id, label, reason: 'not one of its files is in the game folder' })
       continue
@@ -630,9 +638,17 @@ export async function verifySwitch(profileId: number): Promise<SwitchVerificatio
     const ini = await readIniFile(iniPath)
     const written = readPriorities(ini, iniProfileName(profile.name))
     iniParsed = true
-    const expected = new Set(rows.filter((r) => r.folder_name).map((r) => r.folder_name!))
+    // Compared under the name the folder actually has in modloader\: a mod that
+    // is switched off is spelled ". <name>" and one set to load first "$<name>",
+    // and that is the key `syncProfileIni` writes, because it is the key Mod
+    // Loader matches. Comparing canonical names here would report every one of
+    // them as a line naming a mod the profile does not have, and block the
+    // switch on a rename.
+    const spelled = (r: { folder_name: string | null; enabled: number; load_first: number }): string =>
+      spellFolderName(r.folder_name!, { enabled: !!r.enabled, loadFirst: !!r.load_first })
+    const expected = new Set(rows.filter((r) => r.folder_name).map(spelled))
     const all = installsOf(profileId).filter((r) => r.folder_name)
-    const knownToProfile = new Set(all.map((r) => r.folder_name!))
+    const knownToProfile = new Set(all.map(spelled))
     iniMissingKeys = [...expected].filter((k) => !(k in written))
     iniStaleKeys = Object.keys(written).filter((k) => !knownToProfile.has(k))
   } catch (e) {
@@ -787,7 +803,7 @@ export function forgetMissingInstalls(profileId: number): ForgottenInstall[] {
     const files = db.prepare('SELECT relative_path FROM install_file WHERE install_id = ?').all(row.id) as {
       relative_path: string
     }[]
-    const anyLive = files.some((f) => exists(path.join(game.path, f.relative_path)))
+    const anyLive = files.some((f) => existsUnderAnySpelling(game.path, f.relative_path))
     const hasPayload = row.store_key
       ? files.some((f) => exists(path.join(storeDir(row.store_key as string), f.relative_path)))
       : false

@@ -107,6 +107,23 @@ import { satisfiesRange } from '../src/shared/versionRange'
 import { gameRootPlacements } from '../src/shared/asiData'
 import type { ReadmeParse } from '../src/shared/types'
 import { findSplitModels, modelStem } from '../src/shared/splitModels'
+import {
+  baseFolderName,
+  belongsInAsiDirectory,
+  canonicalGameRelative,
+  compareLoadOrder,
+  folderNameState,
+  loadOrderOf,
+  matchEarlyHook,
+  spellFolderName
+} from '../src/shared/loadOrder'
+import { findOrphanConfigs, orphanPluginFolder } from '../src/shared/orphanConfigs'
+import {
+  disableOnDisk,
+  enableOnDisk,
+  listModFolders,
+  setSubFolderEnabled
+} from '../src/main/store/folderSpelling'
 
 let failures = 0
 function check(name: string, cond: boolean, extra?: unknown): void {
@@ -3438,13 +3455,14 @@ const kindSamples: Record<RuleKind, unknown> = {
   'priority-override': { folder: 'Loadscreens', priority: 90, defaultPriority: 50 },
   redundancy: { obsoletes: ['Old Pack'], reason: 'the newer pack ships every file it did' },
   'crash-correlation': { address: '0x004C0C3A', folders: ['Cool Cars'], profileId: 1 },
-  verdict: { verdict: 'active', explanation: 'Mod Loader loaded it' }
+  verdict: { verdict: 'active', explanation: 'Mod Loader loaded it' },
+  'asi-placement': { plugin: 'SilentPatchSA.asi', placement: 'asi-directory', role: 'patch', bare: true }
 }
 
 const kindStore = fakeKnowledgeStore()
 check(
   'knowledge: every rule kind - the three that had no writer included - round-trips through the store',
-  RULE_KINDS.length === 8 &&
+  RULE_KINDS.length === 9 &&
     RULE_KINDS.every((kind) => {
       const written = kindStore.learn({
         kind,
@@ -3809,6 +3827,266 @@ check(
     )
   })()
 )
+
+
+// ───────────── field audit 12 + 20: load order, ". " disable, orphans ─────────────
+//
+// Three separate rules, three separate tests, each of which fails if its rule is
+// taken away:
+//  - load order is alphabetical by folder name and reads NOTHING from priority;
+//  - disable is Mod Loader's ". " rename and removes no file and changes no byte;
+//  - an orphaned .ini names the .asi it belongs with and where that .asi went.
+
+// --- 1. load order is not priority ----------------------------------------
+{
+  const mods = [
+    { folder: 'Zebra Textures', enabled: true, loadFirst: false, priority: 100 },
+    { folder: 'Arma', enabled: true, loadFirst: false, priority: 1 },
+    { folder: 'VHud', enabled: true, loadFirst: true, priority: 50 },
+    { folder: 'Old Pack', enabled: false, loadFirst: false, priority: 90 },
+    { folder: 'Ignored', enabled: true, loadFirst: false, priority: 0 }
+  ]
+  const order = loadOrderOf(mods)
+  const rankOf = (folder: string): number | null => order.find((e) => e.folder === folder)?.rank ?? null
+  check(
+    'field audit 12: "$" loads first, then plain alphabetical order of the mod folder name',
+    rankOf('VHud') === 1 && rankOf('Arma') === 2 && rankOf('Zebra Textures') === 3,
+    order.map((e) => `${e.spelled}:${e.rank}`)
+  )
+  check(
+    'field audit 12: a folder Mod Loader will not read - ". " disabled, or priority 0 - has no place in the load order',
+    rankOf('Old Pack') === null && rankOf('Ignored') === null,
+    order.map((e) => `${e.spelled}:${e.rank}`)
+  )
+  // The rule itself: swap every priority and the load order does not move.
+  const swapped = loadOrderOf(mods.map((m) => ({ ...m, priority: m.priority === 0 ? 0 : 101 - m.priority })))
+  check(
+    'field audit 12: load order is reported independently of priority - inverting every priority changes no rank',
+    JSON.stringify(order.map((e) => [e.folder, e.rank])) === JSON.stringify(swapped.map((e) => [e.folder, e.rank])),
+    swapped.map((e) => `${e.folder}:${e.rank}`)
+  )
+  check(
+    'field audit 12: "$" is compared ordinally, not with locale collation that would ignore it',
+    compareLoadOrder('$VHud', 'Arma') < 0 && compareLoadOrder('$VHud', 'VHud') < 0,
+    [compareLoadOrder('$VHud', 'Arma'), compareLoadOrder('$VHud', 'VHud')]
+  )
+}
+
+// --- 2. the prefixes are recognised on read, not only written -------------
+{
+  check(
+    'field audit 20: a folder a user disabled by hand is read as the mod it is',
+    folderNameState('. GInput').disabled &&
+      folderNameState('. GInput').base === 'GInput' &&
+      folderNameState('$VHud').loadFirst &&
+      folderNameState('. $VHud').base === 'VHud' &&
+      folderNameState('. $VHud').disabled &&
+      folderNameState('. $VHud').loadFirst,
+    folderNameState('. $VHud')
+  )
+  check(
+    'field audit 20: ".variants" and ".git" are hidden folders, not disabled mods - the prefix is a dot AND a space',
+    !folderNameState('.variants').disabled && baseFolderName('.variants') === '.variants',
+    folderNameState('.variants')
+  )
+  check(
+    'field audit 20: spelling round-trips, and both prefixes can be worn at once',
+    spellFolderName('VHud', { enabled: false, loadFirst: true }) === '. $VHud' &&
+      spellFolderName('. $VHud', { enabled: true, loadFirst: false }) === 'VHud',
+    spellFolderName('VHud', { enabled: false, loadFirst: true })
+  )
+  check(
+    'field audit 20: records stay canonical - a path read off a disabled folder maps back to the row that owns it',
+    canonicalGameRelative('modloader/. VHud/data/blips.dat') === 'modloader/VHud/data/blips.dat' &&
+      canonicalGameRelative('modloader/$VHud/. Widgets/a.txd') === 'modloader/VHud/Widgets/a.txd' &&
+      canonicalGameRelative('scripts/MixSets.asi.disabled') === 'scripts/MixSets.asi',
+    canonicalGameRelative('modloader/$VHud/. Widgets/a.txd')
+  )
+}
+
+// --- 3. disable is a rename: no file removed, no byte changed -------------
+{
+  const game = path.join(tmp, 'disable-roundtrip')
+  const write = (rel: string, body: string): void => {
+    const p = path.join(game, rel)
+    fs.mkdirSync(path.dirname(p), { recursive: true })
+    fs.writeFileSync(p, body)
+  }
+  write('modloader/VHud/VHud.asi', 'MZ-vhud')
+  write('modloader/VHud/data/blips.dat', 'blips')
+  write('modloader/VHud/. Widgets/clock.txd', 'clock')
+  // An adopted loose plugin: no store payload, no recorded hash. Disabling one
+  // of these used to be a silent no-op that reported success.
+  write('scripts/MixSets.asi', 'MZ-mixsets')
+  // A file that displaced a stock one, with the backup Modao took.
+  write('data/handling.cfg', 'modded handling')
+  const backup = path.join(tmp, 'disable-backup', 'handling.cfg')
+  fs.mkdirSync(path.dirname(backup), { recursive: true })
+  fs.writeFileSync(backup, 'stock handling')
+
+  const target = {
+    folderName: 'VHud',
+    loadFirst: false,
+    files: [
+      { relativePath: 'modloader/VHud/VHud.asi', backupPath: null, sha256: null },
+      { relativePath: 'modloader/VHud/data/blips.dat', backupPath: null, sha256: null },
+      { relativePath: 'scripts/MixSets.asi', backupPath: null, sha256: null },
+      { relativePath: 'data/handling.cfg', backupPath: backup, sha256: null }
+    ]
+  }
+
+  const snapshot = (dir: string, prefix = ''): Map<string, string> => {
+    const out = new Map<string, string>()
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const rel = prefix ? `${prefix}/${e.name}` : e.name
+      if (e.isDirectory()) for (const [k, v] of snapshot(path.join(dir, e.name), rel)) out.set(k, v)
+      else out.set(rel, fs.readFileSync(path.join(dir, e.name)).toString('base64'))
+    }
+    return out
+  }
+  const before = snapshot(game)
+
+  await disableOnDisk(game, target)
+  const off = snapshot(game)
+  check(
+    'field audit 20: disabling renames the mod folder to ". VHud" - Mod Loader skips it and every byte stays',
+    fs.existsSync(path.join(game, 'modloader', '. VHud', 'VHud.asi')) &&
+      !fs.existsSync(path.join(game, 'modloader', 'VHud')) &&
+      fs.readFileSync(path.join(game, 'modloader', '. VHud', 'data', 'blips.dat'), 'utf8') === 'blips',
+    [...off.keys()]
+  )
+  check(
+    'field audit 20: an adopted loose .asi is renamed aside rather than silently left loading',
+    !fs.existsSync(path.join(game, 'scripts', 'MixSets.asi')) &&
+      fs.readFileSync(path.join(game, 'scripts', 'MixSets.asi.disabled'), 'utf8') === 'MZ-mixsets',
+    [...off.keys()].filter((k) => k.startsWith('scripts/'))
+  )
+  check(
+    'field audit 20: a file that displaced a stock one gives the stock file back while the mod is off',
+    fs.readFileSync(path.join(game, 'data', 'handling.cfg'), 'utf8') === 'stock handling' &&
+      fs.readFileSync(path.join(game, 'data', 'handling.cfg.disabled'), 'utf8') === 'modded handling',
+    [...off.keys()].filter((k) => k.startsWith('data/'))
+  )
+  check(
+    'field audit 20: nothing the mod shipped left the disk - every byte of it is still there under the new name',
+    [...before.values()].every((sha) => [...off.values()].includes(sha)),
+    { before: before.size, off: off.size }
+  )
+
+  await enableOnDisk(game, target)
+  const after = snapshot(game)
+  check(
+    'field audit 20: disable then enable round-trips through ". " and back with no file removed and no byte changed',
+    before.size === after.size && [...before].every(([rel, sha]) => after.get(rel) === sha),
+    { missing: [...before.keys()].filter((k) => !after.has(k)), extra: [...after.keys()].filter((k) => !before.has(k)) }
+  )
+  check(
+    'field audit 20: and the hand-disabled sub-folder inside it was never touched',
+    fs.readFileSync(path.join(game, 'modloader', 'VHud', '. Widgets', 'clock.txd'), 'utf8') === 'clock'
+  )
+}
+
+// --- 4. a sub-mod toggle never reaches through the junction into the store -
+{
+  const store = path.join(tmp, 'submod-store', 'VHud')
+  fs.mkdirSync(path.join(store, 'Widgets'), { recursive: true })
+  fs.writeFileSync(path.join(store, 'Widgets', 'clock.txd'), 'clock-bytes')
+  fs.writeFileSync(path.join(store, 'VHud.asi'), 'MZ')
+  const game = path.join(tmp, 'submod-game')
+  fs.mkdirSync(path.join(game, 'modloader'), { recursive: true })
+  await createJunction(path.join(game, 'modloader', 'VHud'), store)
+
+  await setSubFolderEnabled(game, 'VHud', 'Widgets', false)
+  check(
+    'field audit 20: disabling a sub-mod renames it through the junction - the content store keeps every byte',
+    fs.existsSync(path.join(store, '. Widgets', 'clock.txd')) &&
+      !fs.existsSync(path.join(store, 'Widgets')) &&
+      fs.readFileSync(path.join(store, '. Widgets', 'clock.txd'), 'utf8') === 'clock-bytes',
+    fs.readdirSync(store)
+  )
+  await setSubFolderEnabled(game, 'VHud', 'Widgets', true)
+  check(
+    'field audit 20: and enabling it back is a rename too, not a copy out of a path that was just deleted',
+    fs.readFileSync(path.join(store, 'Widgets', 'clock.txd'), 'utf8') === 'clock-bytes' &&
+      fs.readdirSync(store).sort().join(',') === 'VHud.asi,Widgets',
+    fs.readdirSync(store)
+  )
+  const seen = await listModFolders(path.join(game, 'modloader'))
+  check(
+    'field audit 20: the junctioned mod folder is still listed as the mod it is',
+    seen.length === 1 && seen[0].base === 'VHud' && !seen[0].disabled,
+    seen
+  )
+  await removeLinkOrDir(path.join(game, 'modloader', 'VHud'))
+}
+
+// --- 5. an orphaned .ini names the .asi it belongs with --------------------
+{
+  const found = findOrphanConfigs({
+    entries: [
+      'GInputSA.ini',
+      'SilentPatchSA.asi',
+      'SilentPatchSA.ini',
+      'FramerateVigilante.ini',
+      'modloader.ini',
+      'stream.ini',
+      'readme.txt'
+    ],
+    asiRelative: 'scripts',
+    tracked: [
+      'modloader/GInput/GInputSA.asi',
+      'modloader/GInput/GInput.ini',
+      'scripts/SilentPatchSA.asi',
+      'modloader/Cool Cars/infernus.dff'
+    ]
+  })
+  const byName = (n: string): (typeof found)[number] | undefined => found.find((f) => f.config === n)
+  check(
+    'field audit 12: an orphaned .ini in the ASI directory is detected, and a config whose .asi is beside it is not',
+    found.length === 2 && !!byName('GInputSA.ini') && !!byName('FramerateVigilante.ini') && !byName('SilentPatchSA.ini'),
+    found.map((f) => f.config)
+  )
+  check(
+    'field audit 12: the offered move-back names the .asi it belongs with and the folder it went to',
+    byName('GInputSA.ini')?.action === 'move-back' &&
+      byName('GInputSA.ini')?.plugin === 'GInputSA.asi' &&
+      byName('GInputSA.ini')?.pluginPath === 'modloader/GInput/GInputSA.asi' &&
+      orphanPluginFolder(byName('GInputSA.ini')!) === 'modloader\\GInput',
+    byName('GInputSA.ini')
+  )
+  check(
+    'field audit 12: a config with no plugin anywhere is reported as that, not as a move-back with nowhere to move from',
+    byName('FramerateVigilante.ini')?.action === 'no-plugin' && byName('FramerateVigilante.ini')?.pluginPath === null,
+    byName('FramerateVigilante.ini')
+  )
+  check(
+    'field audit 12: the game own configs are never orphans',
+    !byName('modloader.ini') && !byName('stream.ini')
+  )
+}
+
+// --- 6. the early-hooking seed list, and the hook a learned rule grows it by
+{
+  check(
+    'field audit 12: a bare early hooker belongs in the ASI directory',
+    belongsInAsiDirectory('SilentPatchSA.asi') &&
+      belongsInAsiDirectory('III.VC.SA.LimitAdjuster.asi') &&
+      matchEarlyHook('SilentPatchSA.asi')?.role === 'patch',
+    matchEarlyHook('SilentPatchSA.asi')
+  )
+  check(
+    'field audit 12: an early hooker that ships its own files is recognised but never lifted away from them',
+    matchEarlyHook('GInputSA.asi')?.role === 'input' && !belongsInAsiDirectory('GInputSA.asi'),
+    matchEarlyHook('GInputSA.asi')
+  )
+  check(
+    'field audit 12: a learned rule grows the list, and outranks the seeds',
+    belongsInAsiDirectory('WeirdHook.asi', [{ plugin: 'WeirdHook.asi', role: 'loader', bare: true }]) &&
+      !belongsInAsiDirectory('WeirdHook.asi') &&
+      matchEarlyHook('WeirdHook.asi', [{ plugin: 'WeirdHook.asi', role: 'loader', bare: true }])?.source === 'learned',
+    matchEarlyHook('WeirdHook.asi', [{ plugin: 'WeirdHook.asi', role: 'loader', bare: true }])
+  )
+}
 
 fs.rmSync(tmp, { recursive: true, force: true })
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`)

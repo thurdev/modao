@@ -5,6 +5,8 @@ import { timestampSlug } from '../util/fsx'
 import { activeGame, requireActiveGame } from '../game/detect'
 import { applyProfileToIni, readIniFile, writeIniFile } from '../game/modloaderIni'
 import { dematerialise, materialise, ownedKey, quarantineEdited } from '../store/contentStore'
+import { applyFolderSpelling, disableOnDisk, normaliseOnDisk } from '../store/folderSpelling'
+import { loadOrderOf, spellFolderName, type LoadOrderEntry } from '@shared/loadOrder'
 
 interface InstallRow {
   id: number
@@ -12,6 +14,7 @@ interface InstallRow {
   folder_name: string | null
   enabled: number
   priority: number
+  load_first: number
   destination_class: string
 }
 
@@ -62,10 +65,40 @@ function filesOf(installId: number): InstallFileRow[] {
     .all(installId) as InstallFileRow[]
 }
 
+/** How one install's mod folder is spelled in modloader\ right now. */
+export function spelledFolderOf(row: { folder_name: string | null; enabled: number; load_first: number }): string | null {
+  if (!row.folder_name) return null
+  return spellFolderName(row.folder_name, { enabled: !!row.enabled, loadFirst: !!row.load_first })
+}
+
+/**
+ * The profile's .asi LOAD ORDER, which is not its priority order.
+ *
+ * Alphabetical by the mod folder's spelled name, "$" first. Priority rides
+ * along on every entry and decides nothing here - it answers a different
+ * question (who wins a duplicated file) and the two are kept apart on purpose.
+ */
+export function profileLoadOrder(profileId: number): LoadOrderEntry[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT folder_name, priority, enabled, load_first FROM install
+        WHERE profile_id = ? AND folder_name IS NOT NULL`
+    )
+    .all(profileId) as { folder_name: string; priority: number; enabled: number; load_first: number }[]
+  return loadOrderOf(
+    rows.map((r) => ({
+      folder: r.folder_name,
+      enabled: !!r.enabled,
+      loadFirst: !!r.load_first,
+      priority: r.priority
+    }))
+  )
+}
+
 /**
  * Writes the profile's priority block into modloader.ini and points Mod
  * Loader's own [Folder.Config] Profile at the same name, so the game and
- * Modão never disagree about load order.
+ * Modão never disagree about which mod wins a duplicated file.
  */
 export async function syncProfileIni(profileId: number): Promise<string> {
   const game = activeGame()
@@ -74,13 +107,20 @@ export async function syncProfileIni(profileId: number): Promise<string> {
   const profile = db.prepare('SELECT name FROM profile WHERE id = ?').get(profileId) as { name: string } | undefined
   if (!profile) return ''
   const rows = db
-    .prepare('SELECT folder_name, priority, enabled FROM install WHERE profile_id = ? AND folder_name IS NOT NULL')
-    .all(profileId) as { folder_name: string; priority: number; enabled: number }[]
+    .prepare('SELECT folder_name, priority, enabled, load_first FROM install WHERE profile_id = ? AND folder_name IS NOT NULL')
+    .all(profileId) as { folder_name: string; priority: number; enabled: number; load_first: number }[]
 
   const priorities: Record<string, number> = {}
   for (const r of rows) {
-    // A disabled mod is written as 0, which is Mod Loader's own "ignore this" value.
-    priorities[r.folder_name] = r.enabled ? r.priority : 0
+    // Keyed by the name the folder actually has on disk: Mod Loader matches a
+    // priority line to a folder by string, so a "$VHud" folder needs a "$VHud"
+    // line or the number is silently applied to nothing.
+    //
+    // A disabled mod is still written as 0 - Mod Loader's own "ignore this"
+    // value - as a second signal beside the ". " prefix that already stops it
+    // being read. Two independent mechanisms both saying off, neither of which
+    // removes a file.
+    priorities[spelledFolderOf(r) ?? r.folder_name] = r.enabled ? r.priority : 0
   }
   const iniPath = path.join(game.path, 'modloader', 'modloader.ini')
   const ini = await readIniFile(iniPath)
@@ -115,12 +155,23 @@ export async function materialiseProfile(
       if (files.length === 0) skipped.push(`${row.folder_name ?? `install ${row.id}`}: no files are recorded for it`)
       continue
     }
+    // Defensive, and cheap: a folder left wearing a prefix from a previous run
+    // would be materialised beside itself under its canonical name.
+    if (row.folder_name) {
+      await applyFolderSpelling(path.join(game.path, 'modloader'), row.folder_name, { enabled: true, loadFirst: false })
+    }
     const result = await materialise(game, row.store_key, files, {
       allowJunction: files.every((f) => f.startsWith('modloader/')),
       backupDir: path.join(Paths.profileBackups(profileId), String(row.id)),
       ownedPaths: pathsOwnedByOtherInstalls(profileId, row.id),
       quarantineDir: displacedQuarantineDir(profileId, row.id, displacedAt)
     })
+    // Materialise always writes the canonical folder name; the "$" load-first
+    // spelling is applied afterwards, in one rename, so only one place in the
+    // app has to know how a folder is spelled.
+    if (row.folder_name && row.load_first) {
+      await applyFolderSpelling(path.join(game.path, 'modloader'), row.folder_name, { enabled: true, loadFirst: true })
+    }
     links += result.files
     backedUp += result.backedUp.length
     quarantined.push(...result.quarantined.map((q) => q.relativePath))
@@ -163,6 +214,20 @@ export async function dematerialiseProfile(
   const snapshotted = opts.snapshotted
   for (const row of rows) {
     const files = filesOf(row.id)
+    // A mod this profile has switched OFF is already sitting in modloader\ as
+    // ". <name>", which Mod Loader does not read. There is nothing to vacate,
+    // nothing is in the incoming profile's way (". Foo" and "Foo" are different
+    // names), and leaving it alone is what makes disable survive a profile
+    // round trip with no file touched. Switching away used to remove it.
+    if (!row.enabled) {
+      onProgress?.(++done, rows.length)
+      continue
+    }
+    // Everything below addresses the game folder by the recorded path, so a
+    // "$" load-first folder gets its plain name back first.
+    if (row.load_first) {
+      await normaliseOnDisk(game.path, { folderName: row.folder_name, files: [], loadFirst: false })
+    }
     quarantined.push(
       ...(await quarantineEdited(
         game.path,
@@ -186,7 +251,25 @@ export async function dematerialiseProfile(
   return { removed, restored, quarantined, leftInPlace }
 }
 
-/** Re-links one install after it was enabled or disabled, without touching the rest of the profile. */
+/**
+ * Puts one install's game-folder state back in line with its row, without
+ * touching the rest of the profile.
+ *
+ * DISABLING IS A RENAME. It removes nothing. Mod Loader skips any folder whose
+ * name starts with ". " (dot space), so switching a mod off renames
+ * modloader\<Mod> to modloader\. <Mod> and switching it back on renames it
+ * home. Every byte stays where it was, the junction into the content store is
+ * never unlinked, and a multi-gigabyte mod goes off and on in one filesystem
+ * operation.
+ *
+ * This used to call `dematerialise`, which removed the materialised files and
+ * leaned on the store to put them back. That was recoverable for a store-backed
+ * install and silently nothing at all for an adopted one - an adopted loose
+ * .asi has no store payload and no recorded hash, so the interlock refused
+ * every path, nothing moved, and the call reported success while the plugin
+ * went on loading. Both of those problems are gone because the mechanism is
+ * gone: nothing in the disable path can remove a file any more.
+ */
 export async function remateriliseInstall(installId: number): Promise<void> {
   const db = getDb()
   const row = db.prepare('SELECT * FROM install WHERE id = ?').get(installId) as InstallRow & { profile_id: number }
@@ -197,50 +280,63 @@ export async function remateriliseInstall(installId: number): Promise<void> {
     return
   }
   const files = filesOf(installId)
+  const target = {
+    folderName: row.folder_name,
+    loadFirst: !!row.load_first,
+    files: files.map((f) => ({ relativePath: f.relative_path, backupPath: f.backup_path, sha256: f.sha256 }))
+  }
   if (row.enabled) {
-    if (!row.store_key) return
-    await materialise(
-      game,
-      row.store_key,
-      files.map((f) => f.relative_path),
-      {
-        allowJunction: files.every((f) => f.relative_path.startsWith('modloader/')),
-        backupDir: path.join(Paths.profileBackups(row.profile_id), String(installId)),
-        ownedPaths: pathsOwnedByOtherInstalls(row.profile_id, installId),
-        quarantineDir: displacedQuarantineDir(row.profile_id, installId, timestampSlug())
-      }
-    )
+    // EVERY spelling comes off first, the "$" included. `materialise` writes
+    // the canonical paths its records name whatever is already on disk, so a
+    // folder left spelled "$Mod" here would end up beside a second, canonical
+    // copy of the same mod rather than being renamed into it.
+    await normaliseOnDisk(game.path, target)
+    if (row.store_key) {
+      await materialise(
+        game,
+        row.store_key,
+        files.map((f) => f.relative_path),
+        {
+          allowJunction: files.every((f) => f.relative_path.startsWith('modloader/')),
+          backupDir: path.join(Paths.profileBackups(row.profile_id), String(installId)),
+          ownedPaths: pathsOwnedByOtherInstalls(row.profile_id, installId),
+          quarantineDir: displacedQuarantineDir(row.profile_id, installId, timestampSlug())
+        }
+      )
+    }
+    // And the load-first spelling goes back on afterwards, once the canonical
+    // names are populated - for an adopted install too, which has no store
+    // payload to materialise but still owns a folder that can be renamed.
+    if (row.load_first && row.folder_name) {
+      await applyFolderSpelling(path.join(game.path, 'modloader'), row.folder_name, {
+        enabled: true,
+        loadFirst: true
+      })
+    }
   } else {
-    // A file the user edited after it was written is theirs, not ours to drop,
-    // whichever way it leaves the game folder. Uninstall has always done this;
-    // disabling a mod is the same removal and used not to.
-    await quarantineEdited(
-      game.path,
-      files.map((f) => ({ relativePath: f.relative_path, sha256: f.sha256 })),
-      path.join(Paths.quarantine(), 'disabled', String(installId))
-    )
-    // Disabling one mod must not take files another install still provides -
-    // and must not remove anything the store cannot put back.
-    const shared = new Set(
-      (
-        db
-          .prepare(
-            `SELECT DISTINCT f.relative_path p FROM install_file f
-               JOIN install i ON i.id = f.install_id
-              WHERE i.profile_id = ? AND i.id != ? AND i.enabled = 1`
-          )
-          .all(row.profile_id, installId) as { p: string }[]
-      ).map((r) => ownedKey(r.p))
-    )
-    const restorable = new Set(
-      files.filter((f) => f.sha256 || row.store_key).map((f) => ownedKey(f.relative_path))
-    )
-    await dematerialise(
-      game,
-      files.map((f) => f.relative_path),
-      files.filter((f) => f.backup_path).map((f) => ({ relativePath: f.relative_path, backupPath: f.backup_path! })),
-      { mayRemoveFile: (rel) => !shared.has(ownedKey(rel)) && restorable.has(ownedKey(rel)) }
-    )
+    await disableOnDisk(game.path, target)
   }
   await syncProfileIni(row.profile_id)
+}
+
+/**
+ * Puts an install's folders and files back under the names its records use.
+ *
+ * For the callers that address the game folder by the recorded path and know
+ * nothing about prefixes: an uninstall, a rollback. Returns what it renamed.
+ */
+export async function normaliseInstallSpelling(installId: number): Promise<void> {
+  const db = getDb()
+  const row = db.prepare('SELECT * FROM install WHERE id = ?').get(installId) as
+    | (InstallRow & { profile_id: number })
+    | undefined
+  if (!row) return
+  const game = activeGame()
+  if (!game) return
+  const files = filesOf(installId)
+  await normaliseOnDisk(game.path, {
+    folderName: row.folder_name,
+    loadFirst: false,
+    files: files.map((f) => ({ relativePath: f.relative_path, backupPath: f.backup_path, sha256: f.sha256 }))
+  })
 }

@@ -17,6 +17,15 @@ export const library = {
     colMod: 'Mod',
     colKind: 'Tipo',
     colPriority: 'Prioridade',
+    colLoadOrder: 'Ordem de carga',
+    loadFirst: 'Carregar primeiro ($)',
+    loadOrderHint:
+      'Ordem de carga não é prioridade. O Mod Loader carrega os .asi em ordem alfabética do nome da pasta do mod, e o prefixo "$" põe a pasta na frente de todas. Prioridade não mexe nisso — ela só decide quem ganha quando dois mods têm o mesmo arquivo.',
+    loadOrderNotLoaded: 'não carregado',
+    loadOrderPosition: '#{rank} — a pasta {folder} entra nessa posição',
+    loadOrderMeans:
+      'Quando o .asi deste mod engancha no jogo. Alfabético pelo nome da pasta; "$" vem antes de tudo. Não decide conflito de arquivo.',
+    priorityMeans: 'Quem ganha quando dois mods têm o mesmo arquivo. Não muda a ordem de carga dos .asi.',
     colSize: 'Tamanho',
     colVersion: 'Versão',
     colConflicts: 'Conflitos',
@@ -76,6 +85,15 @@ export const library = {
     colMod: 'Mod',
     colKind: 'Kind',
     colPriority: 'Priority',
+    colLoadOrder: 'Load order',
+    loadFirst: 'Load first ($)',
+    loadOrderHint:
+      'Load order is not priority. Mod Loader loads .asi plugins in alphabetical order of the mod folder name, and a "$" prefix puts a folder in front of all of them. Priority does not touch this - it only decides who wins a duplicated file.',
+    loadOrderNotLoaded: 'not loaded',
+    loadOrderPosition: '#{rank} - the {folder} folder hooks at that position',
+    loadOrderMeans:
+      'When this mod’s .asi hooks the game. Alphabetical by folder name; "$" comes before everything. It decides nothing about file conflicts.',
+    priorityMeans: 'Who wins when two mods ship the same file. It changes nothing about .asi load order.',
     colSize: 'Size',
     colVersion: 'Version',
     colConflicts: 'Conflicts',

@@ -59,6 +59,10 @@ export const checks = {
     orphanFound: '{count} arquivo(s) de configuração sem o .asi correspondente',
     orphanDetail:
       'Sobram quando um plugin é removido e o .ini dele fica. Não quebram o jogo, mas confundem o diagnóstico: o arquivo sugere um mod que não está mais lá.',
+    orphanReunite:
+      '{count} deles é porque o .asi foi movido para uma pasta de mod. O Modão pode trazer o plugin de volta para a pasta ASI — nada é apagado.',
+    orphanItemMoveBack: '{config} — {plugin} está na pasta {folder}, e o lugar dele é {where}',
+    orphanItemNoPlugin: '{config} — nenhum {plugin} neste perfil; nada lê esse arquivo',
     fpsTitle: 'Limite de FPS',
     fpsOk: '{value} FPS — dentro do que o motor aguenta',
     fpsHigh: '{value} FPS — acima de 60 o GTA SA quebra física, animação e missão',
@@ -196,6 +200,10 @@ export const checks = {
     orphanFound: '{count} config file(s) with no matching .asi',
     orphanDetail:
       'These are left when a plugin is removed and its .ini stays. They break nothing, but they confuse diagnosis: the file suggests a mod that is no longer there.',
+    orphanReunite:
+      '{count} of them are there because the .asi was moved into a mod folder. Modão can move the plugin back to the ASI directory - nothing is deleted.',
+    orphanItemMoveBack: '{config} - {plugin} is in the {folder} folder, and belongs in {where}',
+    orphanItemNoPlugin: '{config} - no {plugin} anywhere in this profile; nothing reads it',
     fpsTitle: 'FPS limit',
     fpsOk: '{value} FPS - within what the engine can take',
     fpsHigh: '{value} FPS - above 60 GTA SA breaks physics, animation and missions',

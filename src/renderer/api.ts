@@ -145,6 +145,7 @@ export const api = {
   library: (profileId: number) => call<InstalledMod[]>('library:list', profileId),
   setEnabled: (installId: number, enabled: boolean) => call<void>('library:setEnabled', installId, enabled),
   setPriority: (installId: number, priority: number) => call<void>('library:setPriority', installId, priority),
+  setLoadFirst: (installId: number, loadFirst: boolean) => call<void>('library:setLoadFirst', installId, loadFirst),
   uninstall: (installId: number) => call<{ restored: number; quarantined: string[] }>('library:uninstall', installId),
   rollbackPreview: (installId: number) => call<{ relativePath: string; action: string }[]>('library:rollbackPreview', installId),
   readme: (installId: number) => call<string | null>('library:readme', installId),
@@ -219,6 +220,8 @@ export const api = {
   deepAnalyze: (address: string) => call<DeepAnalysisResult>('health:deepAnalyze', address),
   fixStreamingMemory: (memoryMb?: number) =>
     call<{ file: string; backup: string; from: number | null; to: number }>('health:fixStreamingMemory', memoryMb),
+  reuniteOrphans: (profileId: number | null) =>
+    call<{ moved: string[]; quarantined: string[]; refused: string[] }>('health:reuniteOrphans', profileId),
   modLoaderReport: (profileId: number) => call<ModLoaderLogReport | null>('health:modLoaderReport', profileId),
   logs: (profileId: number) => call<LogEntry[]>('health:logs', profileId),
   bisectStart: (profileId: number) => call<BisectSession>('health:bisectStart', profileId),

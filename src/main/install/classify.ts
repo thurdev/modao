@@ -12,6 +12,7 @@ import { walk } from '../util/fsx'
 import { findVariantHint } from './readme'
 import { pluginEvidence, type PluginEvidence } from '../formats/strings'
 import { gameRootPlacements, type DataPlacement } from '@shared/asiData'
+import { belongsInAsiDirectory, matchEarlyHook, type LearnedEarlyHook } from '@shared/loadOrder'
 import {
   addOnParentName,
   addOnRelativePath,
@@ -36,6 +37,12 @@ export interface ClassifyContext {
   fallbackName: string
   /** Looks a file up in the provides index so overlays can be detected. */
   findOverlayTarget?: (relPathInsideArchive: string, basename: string) => OverlayMatch | null
+  /**
+   * Early-hooking plugins the knowledge store has learned, which grow the seed
+   * list in `@shared/loadOrder`. Empty in a test and whenever nothing has been
+   * learned yet; the seeds alone are then the whole answer.
+   */
+  learnedEarlyHooks?: readonly LearnedEarlyHook[]
 }
 
 export interface ClassifyResult {
@@ -178,16 +185,14 @@ function isGameExecutable(name: string): boolean {
  * no resources of their own, and several of them must load before Mod Loader
  * itself does.
  */
-const BARE_ASI_LOADERS = [
-  /^modloader\.asi$/i,
-  /^cleo\.asi$/i,
-  /^silentpatch/i,
-  /^.*limitadjuster.*$/i,
-  /^iii\.vc\.sa\./i,
-  /^ultimateasiloader/i,
-  /^widescreenfix/i,
-  /^gtasa?\.?fusionfix/i
-]
+/*
+ * The list itself now lives in `@shared/loadOrder` as EARLY_HOOK_SEEDS, with a
+ * role on every entry (input handler, loader, limit adjuster, patch) and a
+ * `bare` flag that is exactly the decision made here: a plugin that ships
+ * NOTHING of its own can be placed in the ASI directory, and one that ships
+ * files must never be separated from them. `matchEarlyHook` also reads rules
+ * the knowledge store has learned, so the list grows from what people do.
+ */
 
 /** Files that say nothing about whether an .asi owns the folder it sits in. */
 function isIncidental(node: Node): boolean {
@@ -217,8 +222,8 @@ function asiSiblings(parent: Node, asi: Node): Node[] {
 }
 
 /** True when this .asi brings its own files and must not be separated from them. */
-function asiOwnsResources(parent: Node, asi: Node): boolean {
-  if (BARE_ASI_LOADERS.some((re) => re.test(asi.name))) return false
+function asiOwnsResources(parent: Node, asi: Node, learned: readonly LearnedEarlyHook[] = []): boolean {
+  if (belongsInAsiDirectory(asi.name, learned)) return false
   const siblings = asiSiblings(parent, asi)
   if (siblings.length === 0) return false
   // An .asi plus a single .ini is a configured plugin, not a resource bundle,
@@ -679,7 +684,9 @@ export async function classifyTree(
     if (readmeDest && readmeDest !== 'modloader-folder') {
       // The readme says this folder goes somewhere other than modloader\ - but
       // never at the cost of separating a plugin from its own files.
-      const ownsResources = node.children.some((c) => !c.isDir && /\.asi$/i.test(c.name) && asiOwnsResources(node, c))
+      const ownsResources = node.children.some(
+        (c) => !c.isDir && /\.asi$/i.test(c.name) && asiOwnsResources(node, c, ctx.learnedEarlyHooks)
+      )
       if (!ownsResources) {
         await emitDir(node, readmeDest, destinationPrefix(readmeDest, asiPrefix))
         return
@@ -801,7 +808,7 @@ export async function classifyTree(
     const consumed = new Set<string>()
     const asis = parent.children.filter((c) => !c.isDir && /\.asi$/i.test(c.name))
     for (const asi of asis) {
-      if (isExcluded(asi.rel) || !asiOwnsResources(parent, asi)) continue
+      if (isExcluded(asi.rel) || !asiOwnsResources(parent, asi, ctx.learnedEarlyHooks)) continue
       const name = asiBundleName(parent, asi, fallback)
       const siblings = asiSiblings(parent, asi)
       const namedFolder = siblings.find((c) => c.isDir && c.name.toLowerCase() === name.toLowerCase())
@@ -899,7 +906,7 @@ export async function classifyTree(
     // whose - guessing would move one plugin's files out from under it, so
     // nothing is moved.
     const pileAsis = tree.children.filter(
-      (c) => !c.isDir && /\.asi$/i.test(c.name) && !isExcluded(c.rel) && asiOwnsResources(tree, c)
+      (c) => !c.isDir && /\.asi$/i.test(c.name) && !isExcluded(c.rel) && asiOwnsResources(tree, c, ctx.learnedEarlyHooks)
     )
     if (pileAsis.length === 1) {
       const evidence = await probeAsi(pileAsis[0])
@@ -1030,14 +1037,40 @@ export async function classifyTree(
   // name - not about priority, which only decides file conflicts.
   const wantsFirst = ctx.readmes.some((r) => /(carregar|load)\s+(primeiro|first|antes)/i.test(r.raw))
   if (wantsFirst && files.some((f) => /\.asi$/i.test(f.targetRelative))) {
+    const folder = /^modloader\/([^/]+)\//.exec(files.find((f) => f.targetRelative.startsWith('modloader/'))?.targetRelative ?? '')?.[1]
     warnings.push({
       severity: 'info',
       code: 'asi-load-order',
       message: 'The readme says this has to load before other plugins.',
       detail:
-        'Mod Loader loads .asi plugins in alphabetical order of their mod folder. Prefixing the folder with "$" ' +
-        'makes it load first. Priority does not affect load order - it only decides who wins a duplicated file.'
+        'Mod Loader loads .asi plugins in alphabetical order of their mod folder, so Modão is installing this one as ' +
+        `"$${folder ?? 'the mod folder'}" - "$" sorts before every letter and digit, which is what makes it load first. ` +
+        'Priority is a different mechanism and would do nothing here: it only decides who wins a duplicated file. ' +
+        'You can take the prefix off again from the Library.'
     })
+  }
+
+  // Early-hooking plugins - input handlers, loaders, limit adjusters, patches -
+  // belong in the ASI directory, not inside a mod folder. The ones that ship
+  // nothing of their own are already routed there by `asiOwnsResources`; this
+  // is for the ones that carry data, which must NOT be separated from it, so
+  // the person is told rather than the files moved.
+  for (const f of files) {
+    if (!/\.asi$/i.test(f.targetRelative)) continue
+    if (!f.targetRelative.toLowerCase().startsWith('modloader/')) continue
+    const hook = matchEarlyHook(f.targetRelative, ctx.learnedEarlyHooks)
+    if (!hook || hook.bare) continue
+    warnings.push({
+      severity: 'info',
+      code: 'asi-early-hook',
+      message: `${path.basename(f.targetRelative)} hooks the game early (${hook.role}).`,
+      detail:
+        `An early-hooking plugin - ${hook.why} - normally belongs in the ASI directory rather than a mod folder. ` +
+        'This one ships files of its own, so Modão is keeping it with them: separating a plugin from its data is ' +
+        'what leaves a mod installed and inert. If it does not work, move the .asi to the ASI directory by hand and ' +
+        'Modão will remember that you did.'
+    })
+    break
   }
 
   if (readmeSaysAsi && !files.some((f) => f.destination === 'asi-plugin')) {

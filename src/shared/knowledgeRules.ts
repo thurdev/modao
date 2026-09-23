@@ -34,6 +34,7 @@ export type RuleKind =
   | 'redundancy'
   | 'crash-correlation'
   | 'verdict'
+  | 'asi-placement'
 
 export const RULE_KINDS: RuleKind[] = [
   'install-layout',
@@ -43,7 +44,8 @@ export const RULE_KINDS: RuleKind[] = [
   'priority-override',
   'redundancy',
   'crash-correlation',
-  'verdict'
+  'verdict',
+  'asi-placement'
 ]
 
 export type RuleSource = 'readme' | 'binary' | 'modloader-log' | 'crash' | 'user' | 'seed' | 'inference'
@@ -157,6 +159,25 @@ export interface CrashCorrelationRule {
   folders: string[]
   /** Profile the crash belongs to, when the record named one. */
   profileId: number | null
+}
+
+/**
+ * Where an .asi belongs: the ASI directory, or the mod folder it shipped in.
+ *
+ * This is the growth path for the early-hooking seed list in
+ * `@shared/loadOrder`. The seeds are a starting point - input handlers, loaders,
+ * limit adjusters and patches that hook before anything else runs - and a
+ * person who moves a plugin by hand writes one of these, at user weight, which
+ * the next plan reads back.
+ */
+export interface AsiPlacementRule {
+  /** The plugin file name, as it was seen. */
+  plugin: string
+  placement: 'asi-directory' | 'mod-folder'
+  /** Which kind of early hooker it is, as far as the evidence says. */
+  role: 'input' | 'loader' | 'limit-adjuster' | 'patch'
+  /** True when the plugin ships nothing of its own and may simply be placed. */
+  bare: boolean
 }
 
 /** "Mod A obsoletes mods B, C, D" - the kind `learnCrash` used to borrow. */

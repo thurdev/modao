@@ -25,6 +25,7 @@ import {
   learnFromBinary,
   learnFromReadme,
   learnLayout,
+  learnedEarlyHooks,
   signatureForArchive
 } from '../knowledge/learn'
 import type { ModSignature } from '../knowledge/signature'
@@ -40,7 +41,7 @@ import {
 } from '../store/contentStore'
 import { buildPersistedVariantGroups } from '@shared/variantGroups'
 import { requireActiveGame } from '../game/detect'
-import { syncProfileIni } from '../profiles/materialize'
+import { normaliseInstallSpelling, syncProfileIni } from '../profiles/materialize'
 
 interface PlanState {
   plan: InstallPlan
@@ -150,7 +151,10 @@ async function buildPlan(planId: string, meta: BuildMeta): Promise<InstallPlan> 
       asiRelative,
       readmes,
       fallbackName,
-      findOverlayTarget: (rel, base) => findOverlay(profileId, rel, base)
+      findOverlayTarget: (rel, base) => findOverlay(profileId, rel, base),
+      // The seed list of early-hooking plugins, grown by what people have
+      // corrected by hand. Empty until something has been learned.
+      learnedEarlyHooks: learnedEarlyHooks()
     },
     state.selections,
     state.addOnSelections
@@ -508,12 +512,20 @@ export async function applyPlan(
   const folderName = primaryFolder(stored)
   const readmeText = state.readmes[0]?.raw ?? null
 
+  // "This has to load first" is a statement about LOAD ORDER, which is
+  // alphabetical by mod folder name - so it is answered with the "$" prefix the
+  // classifier's own warning names, and never with a priority number. Priority
+  // decides who wins a duplicated file and would do nothing at all here.
+  // The user can take it off again in the Library; nothing else sets this.
+  const loadFirst = !!folderName && plan.warnings.some((w) => w.code === 'asi-load-order')
+
   const installId = db.transaction(() => {
     const info = db
       .prepare(
         `INSERT INTO install (profile_id, mod_version_id, installed_at, destination_class, variant_choice,
-                              enabled, priority, store_key, folder_name, readme_text, source_archive, variant_groups_json)
-         VALUES (?,?,?,?,?,1,?,?,?,?,?,?)`
+                              enabled, priority, load_first, store_key, folder_name, readme_text, source_archive,
+                              variant_groups_json)
+         VALUES (?,?,?,?,?,1,?,?,?,?,?,?,?)`
       )
       .run(
         profileId,
@@ -522,6 +534,7 @@ export async function applyPlan(
         dominantClass(stored),
         variantChoice,
         50,
+        loadFirst ? 1 : 0,
         key,
         folderName,
         readmeText,
@@ -664,6 +677,14 @@ export async function uninstall(installId: number): Promise<UninstallResult> {
   const files = db
     .prepare('SELECT relative_path, backup_path, sha256 FROM install_file WHERE install_id = ?')
     .all(installId) as { relative_path: string; backup_path: string | null; sha256: string | null }[]
+
+  // Everything below addresses the game folder by the path on the record, and
+  // knows nothing about Mod Loader's ". " disable prefix or its "$" load-first
+  // prefix. So a mod that is currently switched off - or spelled to load first -
+  // gets its plain name back first; otherwise uninstall would find nothing at
+  // modloader\<Mod>, remove nothing, delete the rows, and leave the whole folder
+  // behind with no record of what it was.
+  await normaliseInstallSpelling(installId)
 
   // The user (or another tool) may have changed a file after we wrote it: keep it.
   const quarantined = await quarantineEdited(

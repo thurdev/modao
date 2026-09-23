@@ -69,6 +69,7 @@ export function HealthScreen(): JSX.Element {
 function PreLaunch(props: { profileId: number; pushToast: ToastFn }): JSX.Element {
   const t = useT()
   const [fixingStream, setFixingStream] = useState(false)
+  const [reuniting, setReuniting] = useState(false)
   const [launching, setLaunching] = useState(false)
   const report = useAsync(() => api.health(props.profileId), [props.profileId])
 
@@ -182,6 +183,28 @@ function PreLaunch(props: { profileId: number; pushToast: ToastFn }): JSX.Elemen
                     }}
                   >
                     {fixingStream ? t('health.fixing') : t('health.fixStreaming')}
+                  </Button>
+                </span>
+              ) : null}
+              {c.id === 'orphan-config' && c.status === 'warn' ? (
+                <span className="row">
+                  <Button
+                    size="sm"
+                    disabled={reuniting}
+                    onClick={async () => {
+                      setReuniting(true)
+                      try {
+                        const r = await api.reuniteOrphans(props.profileId)
+                        for (const why of r.refused) props.pushToast('info', why)
+                        report.reload()
+                      } catch (e) {
+                        props.pushToast('error', (e as Error).message)
+                      } finally {
+                        setReuniting(false)
+                      }
+                    }}
+                  >
+                    {reuniting ? t('health.reuniting') : t('health.reuniteOrphans')}
                   </Button>
                 </span>
               ) : null}

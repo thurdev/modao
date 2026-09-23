@@ -13,6 +13,7 @@ import {
   variantGroupRule,
   variantGroupsForLearning,
   variantGroupsFromArchive,
+  type AsiPlacementRule,
   type CrashCorrelationRule,
   type DependencyRule,
   type LayoutRule,
@@ -22,8 +23,9 @@ import {
   type VerdictRule
 } from '@shared/knowledgeRules'
 import type { PersistedVariantGroup } from '@shared/variantGroups'
-import { learn, rulesFor, type KnowledgeRule } from './store'
+import { allRulesOf, learn, rulesFor, type KnowledgeRule } from './store'
 import { signatureForArchive, subjectsOf, type ModSignature } from './signature'
+import { matchEarlyHook, type LearnedEarlyHook } from '@shared/loadOrder'
 
 export { signatureForArchive, subjectsOf }
 export type { LayoutRule, DependencyRule, VerdictRule, VariantGroupRule, PostInstallRule, PriorityOverrideRule }
@@ -138,8 +140,70 @@ export function learnLayout(
   const byUser = corrected.size > 0 ? files.filter((f) => corrected.has(f.sourcePath)) : []
   const rest = corrected.size > 0 ? files.filter((f) => !corrected.has(f.sourcePath)) : files
 
-  if (byUser.length > 0) writeLayout(signature, byUser, 'user', byUser.map((f) => f.sourcePath))
+  if (byUser.length > 0) {
+    writeLayout(signature, byUser, 'user', byUser.map((f) => f.sourcePath))
+    // A person who moved an .asi is answering the question the seed list asks:
+    // does this plugin belong in the ASI directory or in a mod folder? That is
+    // the strongest evidence there is, so it is recorded as its own rule and
+    // the next plan for ANY archive shipping that plugin reads it back.
+    for (const f of byUser) {
+      if (!/\.asi$/i.test(f.targetRelative)) continue
+      const plugin = f.targetRelative.split('/').pop() ?? f.targetRelative
+      const inModFolder = f.targetRelative.toLowerCase().startsWith('modloader/')
+      learnAsiPlacement(
+        plugin,
+        inModFolder ? 'mod-folder' : 'asi-directory',
+        `You placed ${plugin} at ${f.targetRelative} yourself`
+      )
+    }
+  }
   if (rest.length > 0) writeLayout(signature, rest, source, [])
+}
+
+/**
+ * "This .asi belongs in the ASI directory" - learned from the one source that
+ * settles it, a person putting it there.
+ *
+ * The seed list in `@shared/loadOrder` names the early hookers the app already
+ * knows about; this is how it grows. Keyed by the plugin's file name rather
+ * than by an archive signature, because the fact is about the plugin and
+ * survives a re-download of a different build of the same mod.
+ */
+export function learnAsiPlacement(
+  plugin: string,
+  placement: AsiPlacementRule['placement'],
+  evidence: string,
+  source: 'user' | 'modloader-log' = 'user'
+): void {
+  const known = matchEarlyHook(plugin)
+  learn<AsiPlacementRule>({
+    kind: 'asi-placement',
+    subject: plugin.toLowerCase(),
+    subjectKind: 'exact',
+    source,
+    evidence,
+    value: {
+      plugin,
+      placement,
+      role: known?.role ?? 'patch',
+      // Only a plugin the user moved OUT of its mod folder is safe to move on
+      // its own next time; one moved back INTO a folder ships files and must
+      // never be separated from them again.
+      bare: placement === 'asi-directory'
+    }
+  })
+}
+
+/**
+ * The early hookers the store has learned, in the shape `@shared/loadOrder`
+ * reads. This is the hook the seed list grows through - the classifier asks for
+ * it on every plan.
+ */
+export function learnedEarlyHooks(): LearnedEarlyHook[] {
+  return allRulesOf<AsiPlacementRule>('asi-placement')
+    .map((r) => r.value)
+    .filter((v) => !!v?.plugin)
+    .map((v) => ({ plugin: v.plugin, role: v.role, bare: v.bare }))
 }
 
 function writeLayout(signature: ModSignature, files: PlannedFile[], source: 'inference' | 'user', corrected: string[]): void {

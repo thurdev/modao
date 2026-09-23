@@ -10,6 +10,7 @@ import { clampPriority } from '../game/modloaderIni'
 import { providesKey } from '../conflicts'
 import { ownedKey, storeDir } from '../store/contentStore'
 import { dematerialiseProfile, iniProfileName, materialiseProfile, syncProfileIni } from './materialize'
+import { listModFolders } from '../store/folderSpelling'
 import {
   ingestUnstoredInstalls,
   lastRestorableSwitch,
@@ -658,16 +659,19 @@ export async function adoptIntoProfile(
   // whatever the user already set is what adoption must keep.
   const existingPriorities = readPriorities(ini, iniProfileName(profile.name), { inherit: true })
 
-  const folders = exists(modloaderPath)
-    ? (await fsp.readdir(modloaderPath, { withFileTypes: true })).filter((e) => e.isDirectory() && !e.name.startsWith('.'))
-    : []
+  // A folder the user disabled by hand is read as the mod it is. Mod Loader's
+  // own non-destructive disable is a ". " (dot space) prefix and its load-first
+  // lever is a "$" prefix; both are spellings of the same mod, so adoption
+  // indexes ". GInput" as GInput, switched off, rather than skipping it as a
+  // hidden folder or adopting a second mod literally called ". GInput".
+  const folders = exists(modloaderPath) ? await listModFolders(modloaderPath) : []
 
   const now = new Date().toISOString()
   let adopted = 0
   let done = 0
   for (const folder of folders) {
     const abs = path.join(modloaderPath, folder.name)
-    if (tracked.has(folder.name.toLowerCase())) {
+    if (tracked.has(folder.base.toLowerCase())) {
       onProgress?.(++done, folders.length)
       continue
     }
@@ -684,7 +688,7 @@ export async function adoptIntoProfile(
       onProgress?.(++done, folders.length)
       continue
     }
-    const slug = `adopted-${slugify(folder.name)}`
+    const slug = `adopted-${slugify(folder.base)}`
     let mod = db.prepare('SELECT id FROM mod WHERE slug = ?').get(slug) as { id: number } | undefined
     if (!mod) {
       mod = {
@@ -694,7 +698,7 @@ export async function adoptIntoProfile(
               `INSERT INTO mod (slug, title, author, category, source_url, description, first_seen_at, rating_inputs_json)
                VALUES (?,?,?,?,?,?,?,?)`
             )
-            .run(slug, folder.name, 'Unknown', 'Adopted', '', 'Adopted from an existing install.', now, '{}').lastInsertRowid
+            .run(slug, folder.base, 'Unknown', 'Adopted', '', 'Adopted from an existing install.', now, '{}').lastInsertRowid
         )
       }
     }
@@ -706,15 +710,27 @@ export async function adoptIntoProfile(
         files.reduce((a, f) => a + f.size, 0)
       ).lastInsertRowid
     )
-    const priority = existingPriorities[folder.name] ?? 50
+    // The priority line Mod Loader would apply is keyed by the folder's name on
+    // disk, prefixes included, so that is looked up first; the canonical name is
+    // the fallback for a block written before the folder was renamed.
+    const priority = existingPriorities[folder.name] ?? existingPriorities[folder.base] ?? 50
     const installId = Number(
       db
         .prepare(
           `INSERT INTO install (profile_id, mod_version_id, installed_at, destination_class, variant_choice,
-                                enabled, priority, store_key, folder_name, readme_text, source_archive)
-           VALUES (?,?,?,?,NULL,1,?,NULL,?,NULL,NULL)`
+                                enabled, priority, load_first, store_key, folder_name, readme_text, source_archive)
+           VALUES (?,?,?,?,NULL,?,?,?,NULL,?,NULL,NULL)`
         )
-        .run(profileId, versionId, now, 'modloader-folder', priority, folder.name).lastInsertRowid
+        .run(
+          profileId,
+          versionId,
+          now,
+          'modloader-folder',
+          folder.disabled ? 0 : 1,
+          priority,
+          folder.loadFirst ? 1 : 0,
+          folder.base
+        ).lastInsertRowid
     )
     const insertFile = db.prepare(
       `INSERT INTO install_file (install_id, relative_path, sha256, size, was_overwrite, backup_path, destination_class)
@@ -723,13 +739,20 @@ export async function adoptIntoProfile(
     const insertProvides = db.prepare('INSERT OR REPLACE INTO provides (install_id, relative_path, sha256, size) VALUES (?,?,NULL,?)')
     db.transaction(() => {
       for (const f of files) {
-        const rel = `modloader/${folder.name}/${f.rel}`
+        // Records are always canonical: the prefixes are a spelling on disk, and
+        // an install_file row that carried one would stop matching the moment the
+        // mod was switched back on.
+        const rel = `modloader/${folder.base}/${f.rel}`
         insertFile.run(installId, rel, f.size)
         insertProvides.run(installId, providesKey(rel), f.size)
       }
     })()
     adopted++
-    report.push(`${folder.name}: ${files.length} files, priority ${priority}`)
+    report.push(
+      `${folder.name}: ${files.length} files, priority ${priority}` +
+        (folder.disabled ? ' — disabled by its ". " prefix, adopted switched off' : '') +
+        (folder.loadFirst ? ' — "$" prefix, loads first' : '')
+    )
     onProgress?.(++done, folders.length)
   }
 
@@ -782,10 +805,11 @@ export async function unmanagedContent(profileId: number): Promise<UnmanagedCont
   const modloaderPath = path.join(game.path, 'modloader')
   const folders: string[] = []
   if (exists(modloaderPath)) {
-    for (const e of await fsp.readdir(modloaderPath, { withFileTypes: true })) {
-      if (!e.isDirectory() || e.name.startsWith('.')) continue
+    for (const e of await listModFolders(modloaderPath)) {
       const abs = path.join(modloaderPath, e.name)
-      if (trackedFolders.has(e.name.toLowerCase()) || isLink(abs)) continue
+      // Compared under the canonical name: a mod this profile already tracks is
+      // not untracked content just because it is currently switched off.
+      if (trackedFolders.has(e.base.toLowerCase()) || isLink(abs)) continue
       const files = await walk(abs, { maxFiles: 1 })
       if (files.length > 0) folders.push(e.name)
     }

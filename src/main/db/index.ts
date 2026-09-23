@@ -459,6 +459,23 @@ const MIGRATIONS: Migration[] = [
       d.exec("UPDATE switch_journal SET kind = 'variant-swap' WHERE variant_swap_json IS NOT NULL")
       d.exec('CREATE INDEX IF NOT EXISTS idx_switch_journal_kind ON switch_journal(kind, state)')
     }
+  },
+  {
+    version: 13,
+    name: 'load-order-is-not-priority',
+    up: (d) => {
+      // Load order and priority are two different Mod Loader mechanisms and the
+      // schema only ever had one of them. Priority (already here, 1-100) decides
+      // who wins a duplicated file. LOAD ORDER decides which .asi hooks the game
+      // first, it is alphabetical by mod folder name, and the only lever on it is
+      // the "$" prefix - which sorts before every letter and digit.
+      //
+      // One flag, because one flag is the whole mechanic: a folder either carries
+      // the prefix or it does not. Everything else about load order is derived
+      // from the folder names themselves (`@shared/loadOrder`), so there is no
+      // second ordering to keep in sync with the disk.
+      d.exec('ALTER TABLE install ADD COLUMN load_first INTEGER NOT NULL DEFAULT 0')
+    }
   }
 ]
 

@@ -123,6 +123,21 @@ export function LibraryScreen(): JSX.Element {
     }
   }
 
+  /**
+   * LOAD ORDER, which is not priority. It moves the mod folder's name - and so
+   * the moment its .asi hooks the game - and changes nothing about who wins a
+   * duplicated file.
+   */
+  async function setLoadFirst(mod: InstalledMod, loadFirst: boolean): Promise<void> {
+    try {
+      await api.setLoadFirst(mod.installId, loadFirst)
+    } catch (e) {
+      pushToast('error', (e as Error).message)
+    } finally {
+      mods.reload()
+    }
+  }
+
   async function bulk(enabled: boolean): Promise<void> {
     try {
       for (const id of selected) await api.setEnabled(id, enabled)
@@ -283,6 +298,9 @@ export function LibraryScreen(): JSX.Element {
                 <Th id="title" label={t('library.colMod')} />
                 <th>{t('library.colKind')}</th>
                 <Th id="priority" label={t('library.colPriority')} style={{ width: 92 }} />
+                <th style={{ width: 96 }} title={t('library.loadOrderHint')}>
+                  {t('library.colLoadOrder')}
+                </th>
                 <Th id="size" label={t('library.colSize')} style={{ width: 84 }} />
                 <th style={{ width: 130 }}>{t('library.colVersion')}</th>
                 <Th id="conflicts" label={t('library.colConflicts')} style={{ width: 92 }} />
@@ -332,6 +350,16 @@ export function LibraryScreen(): JSX.Element {
                   </td>
                   <td>
                     <Stepper value={m.priority} onCommit={(v) => void reprioritise(m, v)} />
+                  </td>
+                  <td className="faint num" title={t('library.loadOrderHint')}>
+                    {m.folderName ? (
+                      <Checkbox
+                        label={t('library.loadFirst')}
+                        on={m.loadFirst}
+                        onChange={(v) => void setLoadFirst(m, v)}
+                      />
+                    ) : null}
+                    {m.loadOrderRank === null ? t('library.loadOrderNotLoaded') : ` #${m.loadOrderRank}`}
                   </td>
                   <td className="faint num">{formatBytes(m.size)}</td>
                   <td>
@@ -465,10 +493,18 @@ function DetailModal(props: { mod: InstalledMod; onClose: () => void; onChanged:
       <dl className="kv">
         <dt>Destination class</dt>
         <dd>{t(DESTINATION_KEYS[m.destinationClass])}</dd>
-        <dt>Priority</dt>
+        <dt>{t('library.colPriority')}</dt>
         <dd className="num">
           {m.priority}
           {m.priority === 0 ? ' — ignored by Mod Loader' : m.priority === 50 ? ' — default' : ''}
+          <div className="faint">{t('library.priorityMeans')}</div>
+        </dd>
+        <dt>{t('library.colLoadOrder')}</dt>
+        <dd>
+          {m.loadOrderRank === null
+            ? t('library.loadOrderNotLoaded')
+            : t('library.loadOrderPosition', { rank: m.loadOrderRank, folder: m.folderName ?? '' })}
+          <div className="faint">{t('library.loadOrderMeans')}</div>
         </dd>
         <dt>Version</dt>
         <dd>

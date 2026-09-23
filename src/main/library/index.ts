@@ -3,6 +3,7 @@ import fsp from 'node:fs/promises'
 import type { DestinationClass, InstalledMod, InstalledVariantGroup, SubMod, VariantSwapRecord } from '@shared/types'
 import type { PersistedVariantGroup } from '@shared/variantGroups'
 import { decideVariantRecovery } from '@shared/switchJournal'
+import { loadOrderOf } from '@shared/loadOrder'
 import { getDb } from '../db'
 import { clampPriority } from '../game/modloaderIni'
 import { remateriliseInstall, syncProfileIni } from '../profiles/materialize'
@@ -10,6 +11,7 @@ import { recordEarlyDisable } from '../catalog/rating'
 import { requireActiveGame } from '../game/detect'
 import { exists, isDirectory, isLink, sha256File } from '../util/fsx'
 import { listVariantOption, quarantineEdited, storeDir } from '../store/contentStore'
+import { setSubFolderEnabled } from '../store/folderSpelling'
 import { openJournal, recordManifest, restoreFromJournal, setJournalState, snapshotFiles } from '../profiles/switchTx'
 import { providesKey } from '../conflicts'
 import { Paths } from '../util/paths'
@@ -29,6 +31,7 @@ interface Row {
   variant_choice: string | null
   enabled: number
   priority: number
+  load_first: number
   store_key: string | null
   folder_name: string | null
   variant_groups_json: string | null
@@ -50,7 +53,7 @@ export function listInstalled(profileId: number): InstalledMod[] {
     .prepare(
       `SELECT i.id AS install_id, m.id AS mod_id, i.mod_version_id, m.slug, m.title, m.author, m.source_url,
               mv.version_label, i.installed_at, i.destination_class, i.variant_choice, i.enabled, i.priority,
-              i.store_key, i.folder_name, i.variant_groups_json
+              i.load_first, i.store_key, i.folder_name, i.variant_groups_json
          FROM install i
          JOIN mod_version mv ON mv.id = i.mod_version_id
          JOIN mod m ON m.id = mv.mod_id
@@ -72,6 +75,24 @@ export function listInstalled(profileId: number): InstalledMod[] {
     )
     .all(profileId, profileId) as { install_id: number; c: number }[]
   for (const r of conflictRows) conflictCounts.set(r.install_id, r.c)
+
+  // LOAD ORDER, worked out once for the whole profile: Mod Loader loads .asi
+  // plugins in alphabetical order of the mod folder name, "$" first. It reads
+  // nothing from priority, and priority reads nothing from it - they answer
+  // different questions and the UI says so.
+  const rank = new Map<string, number | null>()
+  for (const e of loadOrderOf(
+    rows
+      .filter((r) => r.folder_name)
+      .map((r) => ({
+        folder: r.folder_name!,
+        enabled: !!r.enabled,
+        loadFirst: !!r.load_first,
+        priority: r.priority
+      }))
+  )) {
+    rank.set(e.folder.toLowerCase(), e.rank)
+  }
 
   return rows.map((r) => {
     const agg = db
@@ -102,6 +123,9 @@ export function listInstalled(profileId: number): InstalledMod[] {
       variantChoice: r.variant_choice,
       enabled: !!r.enabled,
       priority: r.priority,
+      folderName: r.folder_name,
+      loadFirst: !!r.load_first,
+      loadOrderRank: r.folder_name ? rank.get(r.folder_name.toLowerCase()) ?? null : null,
       fileCount: agg.c,
       size: agg.s,
       conflictCount: conflictCounts.get(r.install_id) ?? 0,
@@ -160,6 +184,27 @@ export async function setEnabled(installId: number, enabled: boolean): Promise<v
   await remateriliseInstall(installId)
 }
 
+/**
+ * Spells this mod's folder with - or without - the "$" that makes its .asi load
+ * before the others.
+ *
+ * LOAD ORDER IS NOT PRIORITY. This changes when the plugin hooks the game and
+ * nothing at all about which mod wins a duplicated file; `setPriority` is the
+ * other one and they are deliberately separate calls.
+ */
+export async function setLoadFirst(installId: number, loadFirst: boolean): Promise<void> {
+  const db = getDb()
+  const row = db.prepare('SELECT profile_id, folder_name FROM install WHERE id = ?').get(installId) as
+    | { profile_id: number; folder_name: string | null }
+    | undefined
+  if (!row) throw new Error('That install no longer exists.')
+  if (!row.folder_name) {
+    throw new Error('Load order is a mod-folder name. This install does not own a folder in modloader\.')
+  }
+  db.prepare('UPDATE install SET load_first = ? WHERE id = ?').run(loadFirst ? 1 : 0, installId)
+  await remateriliseInstall(installId)
+}
+
 export async function setPriority(installId: number, priority: number): Promise<void> {
   const db = getDb()
   const row = db.prepare('SELECT profile_id, folder_name FROM install WHERE id = ?').get(installId) as
@@ -200,7 +245,22 @@ export function readInstallReadme(installId: number): string | null {
   return row?.readme_text ?? null
 }
 
-/** Disabling a sub-mod removes only that nested folder from the game folder. */
+/**
+ * Turns one nested sub-mod on or off - by RENAMING it, never by removing it.
+ *
+ * Mod Loader treats a folder inside a mod folder as its own unit, so its own
+ * ". " (dot space) prefix works one level down exactly as it does at the top:
+ * modloader\<Mod>\<Sub> becomes modloader\<Mod>\. <Sub> and Mod Loader stops
+ * reading it.
+ *
+ * What was here before was the single most destructive line in the app:
+ * `fsp.rm(target, { recursive: true, force: true })` on a path inside a mod
+ * folder that is, for every junctioned install, THE CONTENT STORE ITSELF. It
+ * deleted the sub-mod out of Modão's only copy, and re-enabling then copied it
+ * back from the store path it had just destroyed - so a toggle off and on lost
+ * the sub-mod for good. A rename cannot do that: the bytes never move and the
+ * store is renamed with the game folder because they are the same directory.
+ */
 export async function setSubModEnabled(installId: number, relativePath: string, enabled: boolean): Promise<void> {
   const db = getDb()
   const install = db.prepare('SELECT profile_id, store_key, folder_name FROM install WHERE id = ?').get(installId) as
@@ -213,12 +273,15 @@ export async function setSubModEnabled(installId: number, relativePath: string, 
   ).run(installId, relativePath, enabled ? 1 : 0)
 
   const game = requireActiveGame()
-  const target = path.join(game.path, 'modloader', install.folder_name, relativePath)
-  if (!enabled) {
-    if (exists(target)) await fsp.rm(target, { recursive: true, force: true })
-  } else if (install.store_key) {
+  const change = await setSubFolderEnabled(game.path, install.folder_name, relativePath, enabled)
+  if (change.action === 'blocked') throw new Error(`Modão did not rename ${relativePath}: ${change.note}`)
+  // Only when the folder is not on disk under ANY spelling is the store asked
+  // for it - a profile that has never been materialised, say. The old code did
+  // this on every enable, from a path it had itself just deleted.
+  if (change.action === 'absent' && enabled && install.store_key) {
     const src = path.join(storeDir(install.store_key), 'modloader', install.folder_name, relativePath)
-    if (exists(src)) {
+    const target = path.join(game.path, 'modloader', install.folder_name, relativePath)
+    if (exists(src) && !exists(target)) {
       const { copyRecursive } = await import('../util/fsx')
       await copyRecursive(src, target)
     }
