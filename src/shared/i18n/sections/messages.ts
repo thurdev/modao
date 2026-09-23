@@ -88,6 +88,9 @@ export const messages = {
       pickArchiveTitle: 'Escolher um arquivo de mod',
       archiveFilterName: 'Arquivos de mod',
       installedSummary: 'Instalado {written} arquivo(s) ({mode}); {backedUp} arquivo(s) sobrescrito(s) salvo(s) em backup.',
+      readmeUnparsed: 'O leiame ({file}) veio junto, mas nenhuma instrução dele foi entendida.',
+      readmeUnparsedDetail:
+        'O autor escreveu instruções e o Modão não conseguiu lê-las, então o plano abaixo é palpite a partir do formato do arquivo. Leia o leiame bruto e confirme antes de instalar.',
       mode: {
         junction: 'junção',
         hardlink: 'hard link',
@@ -194,6 +197,9 @@ export const messages = {
       pickArchiveTitle: 'Select a mod archive',
       archiveFilterName: 'Mod archives',
       installedSummary: 'Installed {written} file(s) ({mode}); {backedUp} displaced file(s) backed up.',
+      readmeUnparsed: 'A readme ({file}) shipped with this archive, but none of its instructions were understood.',
+      readmeUnparsedDetail:
+        'The author wrote instructions and Modão could not read them, so the plan below is a guess from the archive shape. Read the raw readme and confirm before installing.',
       mode: {
         junction: 'junction',
         hardlink: 'hard link',

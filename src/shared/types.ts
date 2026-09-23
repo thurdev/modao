@@ -1,6 +1,7 @@
 import type { Language } from './i18n'
 import type { GameKind } from './games'
 import type { OutdatedBuild } from './upstream'
+import type { ActivationCode } from './activation'
 /** Shared domain types. Imported by main, preload and renderer. */
 
 export type DestinationClass =
@@ -291,6 +292,8 @@ export interface ReadmeParse {
   requirementUrls: string[]
   /** Requirements and conflicts the author stated in prose. */
   declared: DeclaredDependency[]
+  /** Codes the author says to type in-game to turn the mod on. */
+  activationCodes: ActivationCode[]
   confidence: number
 }
 

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { InstalledMod } from '@shared/types'
 import { DESTINATION_KEYS, DESTINATION_LABELS } from '@shared/types'
+import { extractActivationCodes } from '@shared/activation'
 import { api, formatBytes, relativeTime } from '../api'
 import { useApp } from '../state/store'
 import { useT } from '../lib/i18n'
@@ -407,6 +408,13 @@ export function LibraryScreen(): JSX.Element {
 function ReadmeModal(props: { mod: InstalledMod; onClose: () => void }): JSX.Element {
   const t = useT()
   const readme = useAsync(() => api.readme(props.mod.installId), [props.mod.installId])
+  // The readme is kept verbatim on the install row, so the codes it states can
+  // be read back at any time - long after the install dialog is gone, which is
+  // when someone actually wonders why the mod appears to do nothing.
+  const codes = useMemo(() => {
+    const found = extractActivationCodes(readme.data ?? '')
+    return [...new Map(found.map((a) => [a.code.toUpperCase(), a])).values()]
+  }, [readme.data])
   return (
     <Modal
       title={t('library.readmeTitle', { name: props.mod.title })}
@@ -417,9 +425,24 @@ function ReadmeModal(props: { mod: InstalledMod; onClose: () => void }): JSX.Ele
       {readme.loading ? (
         <Loading />
       ) : readme.data ? (
-        <pre className="pre" style={{ maxHeight: '58vh' }}>
-          {readme.data}
-        </pre>
+        <>
+          {codes.length > 0 ? (
+            <div className="col" style={{ gap: 4, marginBottom: 10 }}>
+              <div className="row wrap" style={{ gap: 8 }}>
+                <Badge tone="ok">{t('install.plan.activationTitle')}</Badge>
+                {codes.map((a) => (
+                  <code key={a.code} className="mono">
+                    {a.code}
+                  </code>
+                ))}
+              </div>
+              <span className="faint">{t('install.plan.activationHint')}</span>
+            </div>
+          ) : null}
+          <pre className="pre" style={{ maxHeight: '58vh' }}>
+            {readme.data}
+          </pre>
+        </>
       ) : (
         <p className="faint">{t('library.noReadme')}</p>
       )}

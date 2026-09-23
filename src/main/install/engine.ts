@@ -14,7 +14,7 @@ import { getDb } from '../db'
 import { Paths } from '../util/paths'
 import { exists, sha256File, slugify, walk } from '../util/fsx'
 import { archiveOrDirectory, effectiveRoot } from './archive'
-import { findReadmes, parseReadme } from './readme'
+import { findReadmes, parseReadme, unparsedReadmeWarning } from './readme'
 import { classifyTree, type OverlayMatch } from './classify'
 import { providesKey } from '../conflicts'
 import { flattenName, requirementMet } from '@shared/requirements'
@@ -235,6 +235,12 @@ async function buildPlan(planId: string, meta: BuildMeta): Promise<InstallPlan> 
 
   if (readmes.length === 0) {
     warnings.push({ severity: 'info', code: 'no-readme', message: 'This archive ships no readme; the plan comes from file inspection alone.' })
+  } else {
+    // A readme that exists and says nothing the parser understood is worse than
+    // no readme at all: the instructions are there and were missed. The plan
+    // says so, and the dialog holds the install until the user confirms.
+    const unparsed = unparsedReadmeWarning(readmes)
+    if (unparsed) warnings.push(unparsed)
   }
 
   const plan: InstallPlan = {

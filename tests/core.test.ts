@@ -31,8 +31,10 @@ import {
   canonicalDependencyName,
   decodeReadme,
   parseDeclaredDependencies,
-  parseReadmeText
+  parseReadmeText,
+  unparsedReadmeWarning
 } from '../src/main/install/readme'
+import { extractActivationCodes } from '../src/shared/activation'
 import { classifyTree } from '../src/main/install/classify'
 import { buildPersistedVariantGroups, configVariantParent, isAddonFolder } from '../src/shared/variantGroups'
 import { displaceForeign, isOwned, ownedKey } from '../src/main/store/displace'
@@ -2659,6 +2661,88 @@ check(
   satisfiesRange('4.4.4', '>=4.4') && !satisfiesRange('4.3', '>=4.4') && satisfiesRange('4.3', null),
   null
 )
+
+// --- how the mod is switched on, and what happens when nobody could read the
+// --- readme at all ------------------------------------------------------------
+// A script that installs perfectly and then sits there because a code has to be
+// typed in-game looks exactly like a script that failed to install.
+const activationBytes = iconv.encode(
+  [
+    'Mod de teste - ativação',
+    '',
+    'Extraia a pasta "Ammu Tags" para a pasta do ModLoader.',
+    'Para ativar o mod, digite "TAGS" durante o jogo (não precisa pausar).',
+    'Pressione F5 para abrir o menu de opções.'
+  ].join(CRLF),
+  'win1252'
+)
+const activationDecoded = decodeReadme(activationBytes)
+const activationParse = parseReadmeText('Leiame (ou morra).txt', activationDecoded.text, activationDecoded.encoding)
+check(
+  'readme: the activation code is pulled out of the prose',
+  activationParse.activationCodes.length === 1 && activationParse.activationCodes[0].code === 'TAGS',
+  activationParse.activationCodes
+)
+check(
+  'readme: the cp1252 line around the code survives with its accents',
+  activationParse.activationCodes[0]?.line.includes('não precisa pausar'),
+  activationParse.activationCodes[0]
+)
+check(
+  'readme: a keypress is not read as an activation code',
+  !activationParse.activationCodes.some((a) => a.code === 'F5'),
+  activationParse.activationCodes
+)
+const activationEn = parseReadmeText(
+  'Readme (or die).txt',
+  ['Extract the folder "Ammu Tags" to the modloader folder.', 'Type the code AEZAKMI in game to enable it.'].join(CRLF),
+  'ascii'
+)
+check(
+  'readme: the English phrasing yields the same shape of code',
+  activationEn.activationCodes.length === 1 && activationEn.activationCodes[0].code === 'AEZAKMI',
+  activationEn.activationCodes
+)
+check(
+  'readme: an install instruction is not mistaken for an activation code',
+  parsedReadme.activationCodes.length === 0,
+  parsedReadme.activationCodes
+)
+check(
+  'readme: "digite o nome do arquivo" names no code',
+  extractActivationCodes('Digite o nome do arquivo e aperte enter.').length === 0,
+  extractActivationCodes('Digite o nome do arquivo e aperte enter.')
+)
+
+// An archive that ships a readme nobody could parse is where silent guessing
+// has put files in the wrong place before: it has to ask first.
+const proseOnly = parseReadmeText(
+  'Leiame (ou morra).txt',
+  ['Obrigado por baixar meu mod!', 'Qualquer dúvida, comente no post.'].join(CRLF),
+  'windows-1252'
+)
+const proseWarning = unparsedReadmeWarning([proseOnly])
+check(
+  'readme: a readme that parses to nothing raises the ask-first warning',
+  proseWarning?.code === 'readme-unparsed' && proseWarning?.severity === 'warn',
+  proseWarning
+)
+check(
+  'readme: the warning names the file it could not read',
+  !!proseWarning?.message.includes('Leiame (ou morra).txt') && !proseWarning.message.includes('messages.install'),
+  proseWarning?.message
+)
+check(
+  'readme: a readme that DOES parse raises no such warning',
+  unparsedReadmeWarning([parsedReadme]) === null,
+  unparsedReadmeWarning([parsedReadme])
+)
+check(
+  'readme: one readable readme beside an unreadable one is enough',
+  unparsedReadmeWarning([proseOnly, parsedReadme]) === null,
+  unparsedReadmeWarning([proseOnly, parsedReadme])
+)
+check('readme: no readme at all is not this warning', unparsedReadmeWarning([]) === null)
 
 fs.rmSync(tmp, { recursive: true, force: true })
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`)

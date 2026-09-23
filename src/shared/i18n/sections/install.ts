@@ -79,6 +79,10 @@ export const install = {
       noInstructionLine:
         'Nenhuma linha de instrução de instalação foi reconhecida. O plano abaixo vem da inspeção do próprio arquivo.',
       folderNamedInReadme: 'Pasta citada no leiame: {folder}',
+      activationTitle: 'Como ativar no jogo',
+      activationHint: 'O leiame diz para digitar isto durante o jogo. Sem isso o mod fica instalado e parado.',
+      confirmUnparsedReadme: 'Li o leiame bruto e quero instalar assim mesmo',
+      confirmUnparsedReadmeFirst: 'Confirme que leu o leiame para continuar',
       linksInReadme: 'Links no leiame:',
       dependencyPlan: 'Plano de dependências',
       mustNotCoexist: 'não pode coexistir',
@@ -187,6 +191,10 @@ export const install = {
       noInstructionLine:
         'No install instruction line was recognised. The plan below comes from inspecting the archive itself.',
       folderNamedInReadme: 'Folder named in the readme: {folder}',
+      activationTitle: 'How to switch it on in-game',
+      activationHint: 'The readme says to type this while playing. Without it the mod sits installed and idle.',
+      confirmUnparsedReadme: 'I read the raw readme and want to install anyway',
+      confirmUnparsedReadmeFirst: 'Confirm you read the readme to continue',
       linksInReadme: 'Links in the readme:',
       dependencyPlan: 'Dependency plan',
       mustNotCoexist: 'must not coexist',
