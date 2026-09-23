@@ -90,7 +90,7 @@ export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | 
     if (!profile) return
     setBusy(true)
     try {
-      await api.applyPlan(plan!.planId, profile.id)
+      await api.applyPlan(plan!.planId, profile.id, readmeAck)
       setPlan(null)
       props.onDone()
     } catch (e) {
@@ -389,7 +389,13 @@ export function InstallPlanDialog(props: { onDone: () => void }): JSX.Element | 
               {plan.dependencies.map((d, i) => (
                 <div key={i} className="row top" style={{ gap: 9 }}>
                   <Badge tone={d.resolution === 'blocking' ? 'danger' : d.satisfied ? 'ok' : 'warn'}>
-                    {d.kind === 'conflicts' ? t('install.plan.mustNotCoexist') : d.kind === 'alt' ? t('install.plan.oneOf') : t('install.plan.requires')}
+                    {d.kind === 'conflicts'
+                      ? t('install.plan.mustNotCoexist')
+                      : d.kind === 'alt'
+                        ? t('install.plan.oneOf')
+                        : d.kind === 'provides'
+                          ? t('install.plan.provides')
+                          : t('install.plan.requires')}
                   </Badge>
                   <div style={{ minWidth: 0 }}>
                     <strong>{d.title}</strong>

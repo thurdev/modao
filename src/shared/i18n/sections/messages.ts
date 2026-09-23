@@ -39,6 +39,9 @@ export const messages = {
       exeNotFound: 'O executável de {game} não está em {path}.',
       launchBlocked:
         'O Modão não abriu o jogo: {names}. A checagem antes de jogar encontrou uma falha, e o que ela descreve é um crash que já aconteceu com outra pessoa. Abra a tela de Saúde para resolver — ou, de lá, para abrir assim mesmo.',
+      depRequires: '{mod} precisa de {dep}, e este perfil não atende esse requisito',
+      depConflicts: '{mod} não pode rodar junto com {dep}, e os dois estão neste perfil',
+      depProvides: '{dep} está vindo de {mod} e também de outro mod; deixe só uma cópia',
       activeElsewhere: 'O perfil "{profile}" está ativo em {path}. Troque para um perfil de outra instalação antes de remover esta.'
     },
     crashes: {
@@ -91,6 +94,8 @@ export const messages = {
       readmeUnparsed: 'O leiame ({file}) veio junto, mas nenhuma instrução dele foi entendida.',
       readmeUnparsedDetail:
         'O autor escreveu instruções e o Modão não conseguiu lê-las, então o plano abaixo é palpite a partir do formato do arquivo. Leia o leiame bruto e confirme antes de instalar.',
+      readmeUnparsedRefusal:
+        'Este arquivo traz um leiame que o Modão não conseguiu ler, e nada foi instalado. Leia o leiame bruto no plano e confirme que quer instalar assim mesmo.',
       mode: {
         junction: 'junção',
         hardlink: 'hard link',
@@ -149,6 +154,9 @@ export const messages = {
       exeNotFound: 'The executable for {game} is not in {path}.',
       launchBlocked:
         'Modão did not launch the game: {names}. The pre-launch check found a failure, and what it describes is a crash that already happened to somebody else. Open the Health screen to fix it - or, from there, to launch anyway.',
+      depRequires: '{mod} needs {dep}, and this profile does not satisfy that',
+      depConflicts: '{mod} cannot run alongside {dep}, and both are in this profile',
+      depProvides: '{dep} is supplied by {mod} and by another mod as well; keep one copy',
       activeElsewhere: 'The profile "{profile}" is active on {path}. Switch to a profile on another install before removing this one.'
     },
     crashes: {
@@ -200,6 +208,8 @@ export const messages = {
       readmeUnparsed: 'A readme ({file}) shipped with this archive, but none of its instructions were understood.',
       readmeUnparsedDetail:
         'The author wrote instructions and Modão could not read them, so the plan below is a guess from the archive shape. Read the raw readme and confirm before installing.',
+      readmeUnparsedRefusal:
+        'This archive ships a readme Modão could not read, and nothing was installed. Read the raw readme on the plan and confirm you want to install anyway.',
       mode: {
         junction: 'junction',
         hardlink: 'hard link',

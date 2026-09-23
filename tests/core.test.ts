@@ -30,6 +30,7 @@ import type { CrashReport } from '../src/shared/types'
 import {
   canonicalDependencyName,
   decodeReadme,
+  needsReadmeAcknowledgement,
   parseDeclaredDependencies,
   parseReadmeText,
   unparsedReadmeWarning
@@ -85,12 +86,21 @@ import {
 } from '../src/shared/upstream'
 import { createJunction, removeLinkOrDir, walk } from '../src/main/util/fsx'
 import { scanRoots } from '../src/main/diagnostics/duplicateAssets'
-import type { HealthCheck, HealthReport } from '../src/shared/types'
+import type { GameInstall, HealthCheck, HealthReport } from '../src/shared/types'
+import {
+  buildDependencyNodes,
+  dependencyLaunchBlockers,
+  planCuratedDependencies,
+  type CuratedDependencySeed,
+  type GraphDependencyRow
+} from '../src/shared/dependencyGraph'
 import { blockersFromReport, describeBlockers, launchGate, type LaunchBlocker } from '../src/shared/launchGate'
+import { launchDecision, reportIsReusable, reportKey, REPORT_MAX_AGE_MS } from '../src/shared/prelaunch'
 import { cleoPluginRequirements, cleoRequirementStatus } from '../src/shared/cleoPlugins'
 import { satisfiesRange } from '../src/shared/versionRange'
 import { gameRootPlacements } from '../src/shared/asiData'
 import type { ReadmeParse } from '../src/shared/types'
+import { findSplitModels, modelStem } from '../src/shared/splitModels'
 
 let failures = 0
 function check(name: string, cond: boolean, extra?: unknown): void {
@@ -2743,6 +2753,482 @@ check(
   unparsedReadmeWarning([proseOnly, parsedReadme])
 )
 check('readme: no readme at all is not this warning', unparsedReadmeWarning([]) === null)
+
+// The gate itself, read from the plan's own warnings so the dialog and
+// applyPlan can never disagree about when to ask.
+check(
+  'ask first: a plan carrying the warning needs an acknowledgement',
+  needsReadmeAcknowledgement([proseWarning!]),
+  proseWarning
+)
+check(
+  'ask first: a plan without it does not',
+  !needsReadmeAcknowledgement([{ severity: 'info', code: 'no-readme', message: 'x' }]),
+  null
+)
+check('ask first: and an empty plan does not', !needsReadmeAcknowledgement([]))
+
+// --- activation phrasings, each against the real corpus ----------------------
+// Every phrasing below is quoted from index/sa.json, this project's own scrape
+// of MixMods. A phrasing that reads plausibly and appears nowhere in the corpus
+// is an invented format, which is the thing this parser exists not to do.
+const corpusLine = (line: string): string[] => extractActivationCodes(line).map((a) => a.code)
+check(
+  'activation: "Para ativar digite “CLAYMORE”" (gta-sa-mod-claymore)',
+  corpusLine('As imagens mostram como funciona. Para ativar digite “CLAYMORE” ele irá funcionar como uma mina.')[0] ===
+    'CLAYMORE'
+)
+check(
+  'activation: "Digitando “TIMESTOP” o relógio do jogo vai parar." (timestop)',
+  corpusLine('Digitando “TIMESTOP” o relógio do jogo vai parar. Digite de novo para voltar.')[0] === 'TIMESTOP'
+)
+check(
+  'activation: "digitar (como cheat) “BKMR1”" - the parenthetical does not hide the code',
+  corpusLine('Durante o jogo, você pode digitar (como cheat) “BKMR1” até “BKMR9” para adicionar o marcador.')[0] ===
+    'BKMR1'
+)
+check(
+  'activation: "Basta digitar WEST para ligar" - unquoted, mid-sentence',
+  corpusLine('Basta digitar WEST para ligar e WESTO para desligar')[0] === 'WEST'
+)
+check(
+  'activation: "Basta escrever “FPS” e o mod se ativará." (first-person mod)',
+  corpusLine('Este mod cleo deixa o seu GTA SA um verdadeiro FPS. Basta escrever “FPS” e o mod se ativará.')[0] ===
+    'FPS'
+)
+check(
+  'activation: "type" is the English mirror, for the Readme (or die).txt half',
+  corpusLine('Type the code AEZAKMI in game to enable it.')[0] === 'AEZAKMI'
+)
+// The corpus's own counter-examples for the phrasings that were dropped or that
+// carry a risk of firing on prose.
+check(
+  'activation: "“Escreva-se” no canal" is subscribe, not a code',
+  corpusLine('Como o Lord diz… “Escreva-se” no canal para ajudar, e “siganos no twister” tbm: @Modjogos') .length === 0,
+  corpusLine('Como o Lord diz… “Escreva-se” no canal para ajudar')
+)
+check(
+  'activation: "se você escrever UU." is a mark on the map, not a code',
+  corpusLine('Um dos mais estranhos mistérios sobre esse UU. é que se você escrever UU.').length === 0,
+  corpusLine('Um dos mais estranhos mistérios sobre esse UU. é que se você escrever UU.')
+)
+check(
+  'activation: "pressione Enter para aceitar" is a key, not a code',
+  corpusLine('Agora você precisa pressionar Enter para aceitar (não é mais automático).').length === 0
+)
+check(
+  'activation: the corpus noun "Type" yields nothing - Infernus Type R, Type 99 LMG',
+  corpusLine('Gewehr 43 ZF Scoped; Type 5; Type 99 LMG; Johnson M1 | Infernus Type R | infernus-type-r').length === 0,
+  corpusLine('Gewehr 43 ZF Scoped; Type 5; Type 99 LMG; Johnson M1 | Infernus Type R | infernus-type-r')
+)
+check(
+  'activation: an HTML attribute is not an instruction',
+  corpusLine('<span data-mce-type="bookmark" style="display: inline-block; width: 0px;">').length === 0,
+  corpusLine('<span data-mce-type="bookmark" style="display: inline-block;">')
+)
+
+// And the whole corpus at once: what it yields has to be codes, not prose.
+const corpusPath = path.join(process.cwd(), 'index', 'sa.json')
+if (fs.existsSync(corpusPath)) {
+  const strings: string[] = []
+  const harvest = (node: unknown): void => {
+    if (typeof node === 'string') strings.push(node)
+    else if (Array.isArray(node)) node.forEach(harvest)
+    else if (node && typeof node === 'object') Object.values(node).forEach(harvest)
+  }
+  harvest(JSON.parse(fs.readFileSync(corpusPath, 'utf8')))
+  const corpusCodes = strings.flatMap((s) => extractActivationCodes(s).map((a) => a.code))
+  const unique = [...new Set(corpusCodes)]
+  check(
+    'activation: the real corpus yields the codes its posts actually state',
+    ['CLAYMORE', 'TIMESTOP', 'BKMR1', 'FPS', 'WEST', 'CHROMAKEY', 'AEZAKMI'].every((c) => unique.includes(c)),
+    unique
+  )
+  check(
+    'activation: and nothing else - every hit in 2.4 MB of posts is a code',
+    unique.length <= 24 && unique.every((c) => c === c.toUpperCase() && c.length >= 3),
+    unique
+  )
+}
+
+
+// --- the pre-launch report cache -------------------------------------------
+// Pressing Play is the most latency-sensitive thing in the app, and the gate
+// needs a report to consult. Reuse is what keeps the gate from being torn out
+// for making Play slow - so reuse has to be indistinguishable from a re-run.
+const stampKey = reportKey('C:\Games\GTA San Andreas', 7)
+const stampNow = 1_700_000_000_000
+const stamp = { at: stampNow, key: stampKey, fingerprint: 'i:3/2/9;s:1234/40;s:-' }
+check(
+  'report cache: a fresh report for the same profile and the same state is reused',
+  reportIsReusable(stamp, stampKey, stamp.fingerprint, stampNow + 5_000) === true
+)
+check(
+  'report cache: a report for another profile never answers for this one',
+  reportIsReusable(stamp, reportKey('C:\Games\GTA San Andreas', 8), stamp.fingerprint, stampNow + 5_000) === false
+)
+check(
+  'report cache: a mod installed or toggled since makes it a different answer',
+  reportIsReusable(stamp, stampKey, 'i:4/3/10;s:1234/40;s:-', stampNow + 5_000) === false
+)
+check(
+  'report cache: a rewritten stream.ini invalidates it at once, not at the end of the TTL',
+  reportIsReusable(stamp, stampKey, 'i:3/2/9;s:9999/38;s:-', stampNow + 5_000) === false,
+  null
+)
+check(
+  'report cache: past the age backstop it re-runs, for the inputs no fingerprint can see',
+  reportIsReusable(stamp, stampKey, stamp.fingerprint, stampNow + REPORT_MAX_AGE_MS + 1) === false
+)
+check(
+  'report cache: no stored report, and a clock that went backwards, are both "re-run"',
+  reportIsReusable(null, stampKey, stamp.fingerprint, stampNow) === false &&
+    reportIsReusable(stamp, stampKey, stamp.fingerprint, stampNow - 1) === false
+)
+check(
+  'report cache: the key is the game folder and the profile, case-insensitively',
+  reportKey('C:\Games\GTA San Andreas', 7) === reportKey('c:\games\gta san andreas', 7) &&
+    reportKey('C:\Games\GTA San Andreas', null) !== stampKey
+)
+
+// --- what the launch does with the report ----------------------------------
+const blockedForDecision = healthReportOf([
+  healthCheckRow('stream-ini', 'fail', 'stream.ini asks for 13500 MB with no limit adjuster'),
+  healthCheckRow('fps-cap', 'warn', 'frame limit is 120')
+])
+check(
+  'launch decision: without force, a standing blocker refuses',
+  launchDecision({ force: false, report: blockedForDecision }).allowed === false
+)
+check(
+  'launch decision: force is the user answering the refusal - it clears every blocker, not just the known ones',
+  launchDecision({ force: true, report: blockedForDecision }).allowed === true &&
+    launchDecision({ force: true, report: blockedForDecision }, [
+      { id: 'dependency:silentpatch', title: 'SilentPatch', summary: 'required and not installed' }
+    ]).allowed === true
+)
+check(
+  'launch decision: a reason from outside the report still refuses when nothing is forced',
+  launchDecision({ force: false, report: healthReportOf([healthCheckRow('exe', 'pass', 'v1.0 US')]) }, [
+    { id: 'dependency:silentpatch', title: 'SilentPatch', summary: 'required and not installed' }
+  ]).allowed === false
+)
+check(
+  'launch decision: with no report and nothing forced, nothing is invented',
+  launchDecision({ force: false, report: null }).allowed === true
+)
+
+// --- the dependency graph ---------------------------------------------------
+// The reasoning lives in @shared/dependencyGraph so it can be exercised here,
+// where there is no database and no Electron. Profile scope is not re-tested
+// at this level: the function is handed one profile's installs and has no way
+// to see another's.
+
+const depGame: GameInstall = {
+  id: -1,
+  path: 'C:/nonexistent',
+  label: 'unit',
+  kind: 'sa',
+  gameName: 'GTA: San Andreas',
+  supportsModLoader: true,
+  supportsCleo: true,
+  supportsAsi: true,
+  pakDir: null,
+  hasCrashList: true,
+  exeSize: 14_383_616,
+  exeSha256: '',
+  exeTimestamp: 0x427101ca,
+  isV1UsOriginal: true,
+  largeAddressAware: false,
+  asiDirectory: 'C:/nonexistent',
+  asiLoader: 'C:/nonexistent/vorbisFile.dll',
+  hasModLoader: true,
+  modLoaderVersion: '0.3.7',
+  cleoVersion: '4.4.4',
+  userFilesDir: '',
+  sameVolumeAsStore: true,
+  linkStrategy: 'hardlink',
+  access: { writable: true, probedPath: 'C:/nonexistent', code: null, reason: null, needsElevation: false }
+}
+
+const depRow = (over: Partial<GraphDependencyRow>): GraphDependencyRow => ({
+  kind: 'requires',
+  targetModId: null,
+  targetSlug: 'x',
+  targetTitle: 'X',
+  versionRange: null,
+  altGroup: null,
+  note: null,
+  ...over
+})
+
+// 1. A provides edge answers a requirement. Somebody else's mod needs gsx.asi;
+//    VehFuncs is installed and ships it; there is nothing to download.
+const answeredByProvider = buildDependencyNodes({
+  subjectSlug: 'some-vehicle-pack',
+  subjectTitle: 'Some Vehicle Pack',
+  rows: [depRow({ kind: 'requires', targetSlug: 'gsx.asi', targetTitle: 'gsx.asi' })],
+  installed: [{ id: 1, slug: 'sa-vehfuncs', title: 'VehFuncs', versionLabel: '2.0', enabled: true }],
+  providers: [{ artifact: 'gsx.asi', modSlug: 'sa-vehfuncs', modTitle: 'VehFuncs' }],
+  game: depGame
+})
+check(
+  'deps: a provides edge satisfies a requirement for the file it provides',
+  answeredByProvider.length === 1 &&
+    answeredByProvider[0].satisfied === true &&
+    answeredByProvider[0].resolution === 'already-installed' &&
+    /VehFuncs/.test(answeredByProvider[0].note ?? ''),
+  answeredByProvider
+)
+
+// The regression itself: an unmodelled kind fell through to the requires
+// branch, so VehFuncs reported a missing dependency called "gsx.asi".
+const loneProvider = buildDependencyNodes({
+  subjectSlug: 'sa-vehfuncs',
+  subjectTitle: 'VehFuncs',
+  rows: [depRow({ kind: 'provides', targetSlug: 'gsx.asi', targetTitle: 'gsx.asi', note: 'VehFuncs ships gsx.asi.' })],
+  installed: [{ id: 1, slug: 'sa-vehfuncs', title: 'VehFuncs', versionLabel: '2.0', enabled: true }],
+  providers: [{ artifact: 'gsx.asi', modSlug: 'sa-vehfuncs', modTitle: 'VehFuncs' }],
+  game: depGame
+})
+check(
+  'deps: a mod providing a file is never reported as missing that file',
+  loneProvider.length === 1 &&
+    loneProvider[0].kind === 'provides' &&
+    loneProvider[0].resolution === 'ok' &&
+    loneProvider[0].satisfied === true,
+  loneProvider
+)
+
+// 2. Two providers of the same file is a conflict, not a provision.
+const twoProviders = buildDependencyNodes({
+  subjectSlug: 'sa-vehfuncs',
+  subjectTitle: 'VehFuncs',
+  rows: [depRow({ kind: 'provides', targetSlug: 'gsx.asi', targetTitle: 'gsx.asi' })],
+  installed: [
+    { id: 1, slug: 'sa-vehfuncs', title: 'VehFuncs', versionLabel: '2.0', enabled: true },
+    { id: 2, slug: 'some-vehicle-pack', title: 'Some Vehicle Pack', versionLabel: '1.0', enabled: true }
+  ],
+  providers: [
+    { artifact: 'gsx.asi', modSlug: 'sa-vehfuncs', modTitle: 'VehFuncs' },
+    { artifact: 'GSX.asi', modSlug: 'some-vehicle-pack', modTitle: 'Some Vehicle Pack' }
+  ],
+  game: depGame
+})
+check(
+  'deps: a second provider of the same file blocks, and the note names both mods',
+  twoProviders.length === 1 &&
+    twoProviders[0].resolution === 'blocking' &&
+    twoProviders[0].satisfied === false &&
+    /VehFuncs/.test(twoProviders[0].note ?? '') &&
+    /Some Vehicle Pack/.test(twoProviders[0].note ?? ''),
+  twoProviders
+)
+
+// The field report: Proper Shaders with neither SilentPatch nor Open Limit
+// Adjuster in the profile. Both are hard requirements; both read as missing.
+const shaderRows = [
+  depRow({ targetSlug: 'sa-silentpatch', targetTitle: 'SilentPatch' }),
+  depRow({ targetSlug: 'open-limit-adjuster', targetTitle: 'Open Limit Adjuster' })
+]
+const shortProfile = buildDependencyNodes({
+  subjectSlug: 'sa-proper-shaders',
+  subjectTitle: 'Proper Shaders',
+  rows: shaderRows,
+  installed: [],
+  providers: [],
+  game: depGame
+})
+check(
+  'deps: an unsatisfied hard requirement is missing, and remembers which mod needs it',
+  shortProfile.length === 2 && shortProfile.every((n) => n.resolution === 'missing' && n.requiredBy === 'Proper Shaders'),
+  shortProfile
+)
+check(
+  'deps: the same profile with those plugins loose in the ASI folder is not missing them',
+  buildDependencyNodes({
+    subjectSlug: 'sa-proper-shaders',
+    subjectTitle: 'Proper Shaders',
+    rows: shaderRows,
+    installed: [],
+    providers: [],
+    evidence: ['SilentPatchSA.asi', 'OpenLimitAdjuster.asi'],
+    game: depGame
+  }).every((n) => n.resolution === 'already-installed')
+)
+
+// 4. The launch refusal, built from those nodes and handed to the one gate.
+const depBlockers = dependencyLaunchBlockers(shortProfile, {
+  requires: '{mod} needs {dep}, and this profile does not satisfy that',
+  conflicts: '{mod} cannot run alongside {dep}',
+  provides: '{dep} is supplied by {mod} and by another mod as well'
+})
+const depVerdict = launchGate(null, depBlockers)
+check(
+  'deps: an unsatisfied hard dependency refuses the launch through the same gate',
+  depVerdict.allowed === false && depVerdict.blockers.length === 2,
+  depVerdict
+)
+check(
+  'deps: the refusal names what needs what, not just what is missing',
+  describeBlockers(depVerdict.blockers).includes('Proper Shaders needs SilentPatch') &&
+    describeBlockers(depVerdict.blockers).includes('Proper Shaders needs Open Limit Adjuster'),
+  describeBlockers(depVerdict.blockers)
+)
+check(
+  'deps: a satisfied graph is not a reason to refuse anything',
+  launchGate(null, dependencyLaunchBlockers(loneProvider, { requires: '{mod}/{dep}', conflicts: '-', provides: '-' }))
+    .allowed === true
+)
+
+// 3. Every seeded edge survives the load. `more-radar-icons requires cleoplus`
+//    did not: the loader looked its SUBJECT up in the catalogue, found nothing
+//    and dropped the row without a word. Both ends are slug-addressed now.
+const seedFile = JSON.parse(
+  fs.readFileSync(path.join(process.cwd(), 'resources', 'seed', 'dependencies.json'), 'utf8')
+) as { dependencies: CuratedDependencySeed[] }
+const seedPlan = planCuratedDependencies(seedFile.dependencies)
+check(
+  'deps: every row of the seed file is loaded, none silently discarded',
+  seedPlan.rows.length === seedFile.dependencies.length && seedPlan.rejected.length === 0,
+  seedPlan.rejected
+)
+const seeded = (mod: string, kind: string, target: string): boolean =>
+  seedPlan.rows.some((r) => r.modSlug === mod && r.kind === kind && r.target === target)
+check(
+  'deps: the dropped seed loads - More Radar Icons requires CLEO+ though it is not a catalogue entry',
+  seeded('more-radar-icons', 'requires', 'cleoplus'),
+  seedPlan.rows.filter((r) => r.modSlug === 'more-radar-icons')
+)
+check(
+  'deps: the VehFuncs provision is loaded as a provision, not as a requirement',
+  seeded('sa-vehfuncs', 'provides', 'gsx.asi')
+)
+check(
+  'deps: the ItemFinders family is seeded against CLEO 4.4 and CLEO+ 1.0.7',
+  ['itemfinders', 'tag-finder', 'horseshoe-finder', 'snapshot-finder', 'oyster-finder'].every(
+    (m) =>
+      seedPlan.rows.some((r) => r.modSlug === m && r.target === 'cleo' && r.versionRange === '>=4.4') &&
+      seedPlan.rows.some((r) => r.modSlug === m && r.target === 'cleoplus' && r.versionRange === '>=1.0.7')
+  ),
+  seedPlan.rows.filter((r) => /finder/.test(r.modSlug))
+)
+check(
+  'deps: an icon or texture pack is seeded against the base mod it overlays',
+  seeded('weapon-icons-hd-repaint', 'requires', 'weapon-icons-txd') &&
+    seeded('icones-de-armas-fieis-desenhos-corrigidos', 'requires', 'sa-weapon-icons-txd') &&
+    seeded('proper-tattoos-retex-hd', 'requires', 'proper-player-retex')
+)
+const badSeed = planCuratedDependencies([
+  { mod: 'a', kind: 'suggests', target: 'b' },
+  { mod: 'c', kind: 'alt', target: 'd' },
+  { mod: '', kind: 'requires', target: 'e' }
+])
+check(
+  'deps: a kind no branch implements is reported, never turned into a phantom requirement',
+  badSeed.rows.length === 0 && badSeed.rejected.length === 3 && /unknown kind "suggests"/.test(badSeed.rejected[0].reason),
+  badSeed.rejected
+)
+
+// --- item 20: the Mod Loader mechanics that were still unencoded ------------
+// Each of these is a documented rule of the loader whose failure looks like a
+// broken mod rather than a misplaced file, so each one is a warning the user
+// acts on - nothing below moves a single file on the user's behalf.
+function mechTree(name: string, rels: string[]): string {
+  const root = path.join(tmp, name)
+  for (const rel of rels) {
+    const p = path.join(root, rel)
+    fs.mkdirSync(path.dirname(p), { recursive: true })
+    fs.writeFileSync(p, 'x')
+  }
+  return root
+}
+const codesOf = async (root: string, fallbackName: string): Promise<string[]> =>
+  (await classifyTree(root, { asiRelative: 'scripts', readmes: [], fallbackName }, {})).warnings.map((w) => w.code)
+
+// Rule: a sprite .txd is only a sprite when it sits in a folder named "txd".
+const spriteLoose = await codesOf(mechTree('sprite-loose', ['Clean HUD/hud.txd', 'Clean HUD/leiame.txt']), 'Clean HUD')
+check('mechanics: a sprite .txd outside a folder named "txd" is flagged - Mod Loader never loads it', spriteLoose.includes('txd-sprite-missing-folder'), spriteLoose)
+const spriteRight = await codesOf(mechTree('sprite-right', ['Clean HUD/txd/hud.txd']), 'Clean HUD')
+check('mechanics: the same sprite inside a "txd" folder is not flagged', !spriteRight.includes('txd-sprite-missing-folder'), spriteRight)
+check(
+  'mechanics: a vehicle texture is not mistaken for a sprite by name',
+  !mechOut.warnings.some((w) => w.code === 'txd-sprite-missing-folder'),
+  mechOut.warnings.map((w) => w.code)
+)
+
+// Rule: a whole data file and a .txt line-installing into it never compose.
+const dataMix = await codesOf(mechTree('data-mix', ['Fast Cars/data/handling.cfg', 'Fast Cars/data/handling.txt']), 'Fast Cars')
+check('mechanics: a full handling.cfg shipped with a handling.txt line-install is flagged', dataMix.includes('data-file-mixed'), dataMix)
+const dataWhole = await codesOf(mechTree('data-whole', ['Fast Cars/data/handling.cfg', 'Fast Cars/leiame.txt']), 'Fast Cars')
+check('mechanics: a full data file on its own is fine, and a readme is not a line-install', !dataWhole.includes('data-file-mixed'), dataWhole)
+
+// Rule: nodes#.dat is a member of an .img, so it needs a folder named after it.
+const nodesLoose = await codesOf(mechTree('nodes-loose', ['New Roads/nodes12.dat']), 'New Roads')
+check('mechanics: a loose nodes#.dat is flagged as needing a folder named after its .img', nodesLoose.includes('nodes-folder'), nodesLoose)
+const nodesRight = await codesOf(mechTree('nodes-right', ['New Roads/gta3.img/nodes12.dat']), 'New Roads')
+check('mechanics: the same nodes file inside gta3.img/ is not flagged', !nodesRight.includes('nodes-folder'), nodesRight)
+
+// Rule: white or invisible cars and peds are a .dff and .txd won by different
+// mods. Distinct from a starved streaming budget, which is not a priority
+// problem at all and is why this check only ever fires on a demonstrated split.
+const carPart = (installId: number, title: string, relativePath: string, priority: number, enabled = true): {
+  installId: number
+  title: string
+  folder: string
+  relativePath: string
+  priority: number
+  enabled: boolean
+} => ({ installId, title, folder: title, relativePath, priority, enabled })
+
+check('split model: a .dff/.txd pair is recognised whatever folder it sits in', modelStem('models/Infernus.DFF')?.stem === 'infernus', modelStem('models/Infernus.DFF'))
+const splitModel = findSplitModels(
+  [
+    carPart(1, 'Cool Cars', 'models/infernus.dff', 50),
+    carPart(1, 'Cool Cars', 'models/infernus.txd', 50),
+    carPart(2, 'Shiny Paint', 'infernus.txd', 70)
+  ],
+  (c) => resolveWinner(c)
+)
+check(
+  'mechanics: a model whose .dff and .txd resolve to different mods is reported',
+  splitModel.length === 1 && splitModel[0].dff.title === 'Cool Cars' && splitModel[0].txd.title === 'Shiny Paint',
+  splitModel
+)
+check(
+  'mechanics: both mods are offered, because the fix is a priority change on either',
+  splitModel[0]?.claimants.length === 2 && splitModel[0]?.shippedTogether[0]?.title === 'Cool Cars',
+  splitModel[0]?.claimants.map((c) => c.title)
+)
+check(
+  'mechanics: one mod winning both halves is not a split model',
+  findSplitModels(
+    [
+      carPart(1, 'Cool Cars', 'models/infernus.dff', 70),
+      carPart(1, 'Cool Cars', 'models/infernus.txd', 70),
+      carPart(2, 'Shiny Paint', 'infernus.txd', 50)
+    ],
+    (c) => resolveWinner(c)
+  ).length === 0
+)
+check(
+  'mechanics: a retexture that never shipped a mesh is a deliberate pairing, not a split',
+  findSplitModels([carPart(1, 'Mesh Pack', 'models/infernus.dff', 50), carPart(2, 'Retexture', 'infernus.txd', 70)], (c) =>
+    resolveWinner(c)
+  ).length === 0
+)
+check(
+  'mechanics: a mod at priority 0 cannot split a model, because Mod Loader ignores it',
+  findSplitModels(
+    [
+      carPart(1, 'Cool Cars', 'models/infernus.dff', 50),
+      carPart(1, 'Cool Cars', 'models/infernus.txd', 50),
+      carPart(2, 'Shiny Paint', 'infernus.txd', 0)
+    ],
+    (c) => resolveWinner(c)
+  ).length === 0
+)
+
 
 fs.rmSync(tmp, { recursive: true, force: true })
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`)

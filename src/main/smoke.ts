@@ -116,6 +116,38 @@ export async function runSmoke(): Promise<number> {
     shaderDeps
   )
 
+  // The seed file is the graph. A row that does not reach the table is a
+  // relationship the app does not know about, and until now one of them never
+  // did: `more-radar-icons requires cleoplus` was dropped at every startup
+  // because its SUBJECT is not one of the 127 catalogue entries.
+  const seedRows = (
+    JSON.parse(fs.readFileSync(path.join(Paths.resources(), 'dependencies.json'), 'utf8')) as {
+      dependencies: { mod: string; kind: string; target: string }[]
+    }
+  ).dependencies
+  const storedEdges = new Set(
+    (db.prepare('SELECT mod_slug, kind, requires_slug FROM dependency').all() as {
+      mod_slug: string | null
+      kind: string
+      requires_slug: string | null
+    }[]).map((r) => `${r.mod_slug}|${r.kind}|${r.requires_slug}`)
+  )
+  const lost = seedRows.filter((r) => !storedEdges.has(`${r.mod}|${r.kind}|${r.target}`))
+  check('every seeded dependency edge reaches the table', lost.length === 0, lost)
+  check(
+    'the edge that used to be dropped is loaded: More Radar Icons requires CLEO+',
+    storedEdges.has('more-radar-icons|requires|cleoplus')
+  )
+
+  const vehId = (db.prepare("SELECT id FROM mod WHERE slug = 'sa-vehfuncs'").get() as { id: number } | undefined)?.id ?? 0
+  const vehDeps = resolveDependencies({ modId: vehId, profileId: profile.id, game: fakeGame })
+  check(
+    'VehFuncs PROVIDES gsx.asi - it is never reported as a missing dependency named after the file',
+    vehDeps.some((d) => d.kind === 'provides' && d.slug === 'gsx.asi' && d.resolution === 'ok') &&
+      !vehDeps.some((d) => d.slug === 'gsx.asi' && d.resolution === 'missing'),
+    vehDeps
+  )
+
   // The worked example from the brief.
   const address = addressFromOffset('0x00349b7b')
   check('fault offset 0x00349b7b maps to 0x00749B7B', address === '0x00749B7B', address)

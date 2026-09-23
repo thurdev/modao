@@ -381,6 +381,63 @@ const MIGRATIONS: Migration[] = [
       // without ever needing the archive again.
       d.exec('ALTER TABLE install ADD COLUMN variant_groups_json TEXT')
     }
+  },
+  {
+    version: 10,
+    name: 'dependency-subject-addressed-by-slug',
+    up: (d) => {
+      // A curated edge's TARGET was always allowed to name a mod the catalogue
+      // has never heard of - `requires_slug` is text, and that is why
+      // "Proper Shaders conflicts ped-spec" works. Its SUBJECT was not: the
+      // loader looked the subject up, found nothing, and dropped the row
+      // without a word. `more-radar-icons requires cleoplus` was lost that way
+      // at every startup, and every ItemFinders edge would have been too.
+      //
+      // Both ends are text now. `mod_id` stays for edges whose subject IS in
+      // the catalogue (it carries the ON DELETE CASCADE), and becomes nullable
+      // so an edge can outlive - or precede - the mod row it is about. Nothing
+      // references `dependency`, so the rebuild is local to this table.
+      d.exec(`
+        CREATE TABLE dependency_rebuilt (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          mod_id INTEGER REFERENCES mod(id) ON DELETE CASCADE,
+          mod_slug TEXT,
+          requires_mod_id INTEGER REFERENCES mod(id) ON DELETE CASCADE,
+          requires_slug TEXT,
+          kind TEXT NOT NULL,
+          version_range TEXT,
+          alt_group TEXT,
+          note TEXT
+        );
+        INSERT INTO dependency_rebuilt
+          (id, mod_id, mod_slug, requires_mod_id, requires_slug, kind, version_range, alt_group, note)
+          SELECT d.id, d.mod_id, (SELECT slug FROM mod WHERE id = d.mod_id),
+                 d.requires_mod_id, d.requires_slug, d.kind, d.version_range, d.alt_group, d.note
+            FROM dependency d;
+        DROP TABLE dependency;
+        ALTER TABLE dependency_rebuilt RENAME TO dependency;
+        CREATE INDEX idx_dependency_mod ON dependency(mod_id);
+        CREATE INDEX idx_dependency_mod_slug ON dependency(mod_slug);
+      `)
+    }
+  },
+  {
+    version: 11,
+    name: 'variant-swap-journalled-like-a-profile-switch',
+    up: (d) => {
+      // Switching a variant moves bytes in the store and rows in the database,
+      // and for a junctioned mod the game folder shows the new bytes the
+      // instant the store has them - before those rows commit. A thrown error
+      // is rolled back in process; a kill or a power cut in that window used to
+      // leave the two disagreeing with nothing to recover from, which is less
+      // than a profile switch has offered since it was journalled.
+      //
+      // A swap now writes a switch_journal row like a switch does. This column
+      // is what marks it as one and carries what the recovery needs: which
+      // install and group, which option it was leaving, which it was going to,
+      // and the exact paths on both sides.
+      d.exec('ALTER TABLE switch_journal ADD COLUMN variant_swap_json TEXT')
+    }
   }
 ]
 

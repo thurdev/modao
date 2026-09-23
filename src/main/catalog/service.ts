@@ -8,6 +8,7 @@ import { computeRating, ratingInputsFor } from './rating'
 import { gamesOfMod, type GameKind } from '@shared/games'
 import { relevance } from '@shared/search'
 import { catalogKind } from '@shared/catalogKind'
+import { planCuratedDependencies, type CuratedDependencySeed } from '@shared/dependencyGraph'
 import { activeGame } from '../game/detect'
 
 interface SeedMod {
@@ -37,14 +38,8 @@ interface SeedFile {
   mods: SeedMod[]
 }
 
-interface CuratedDependency {
-  mod: string
-  kind: 'requires' | 'conflicts' | 'alt'
-  target: string
-  altGroup?: string
-  versionRange?: string | null
-  note?: string
-}
+/** The seed file's row shape lives with the graph that reads it. */
+type CuratedDependency = CuratedDependencySeed
 
 /**
  * The bundled catalogue is scraped from the public MixMods pages with the same
@@ -126,24 +121,36 @@ export async function loadSeedCatalog(force = false): Promise<number> {
  * can turn into a reliable graph, and getting this wrong either blocks a valid
  * install or lets a known-fatal pair through.
  */
-async function loadCuratedDependencies(): Promise<void> {
+export async function loadCuratedDependencies(): Promise<{ loaded: number; rejected: string[] }> {
   const db = getDb()
   const file = path.join(Paths.resources(), 'dependencies.json')
-  if (!exists(file)) return
+  if (!exists(file)) return { loaded: 0, rejected: [] }
   const raw = JSON.parse(await fsp.readFile(file, 'utf8')) as { dependencies: CuratedDependency[] }
   const idOf = (slug: string): number | null =>
     (db.prepare('SELECT id FROM mod WHERE slug = ?').get(slug) as { id: number } | undefined)?.id ?? null
 
+  // Subjects are slug-addressed now, the way targets always were: an edge for a
+  // mod outside the 127-entry catalogue - More Radar Icons, the ItemFinders -
+  // is stored and binds the moment that mod is installed. Anything the plan
+  // still refuses is said out loud rather than vanishing.
+  const plan = planCuratedDependencies(raw.dependencies)
+
   db.transaction(() => {
-    for (const d of raw.dependencies) {
-      const modId = idOf(d.mod)
-      if (!modId) continue
-      db.prepare('DELETE FROM dependency WHERE mod_id = ? AND requires_slug = ?').run(modId, d.target)
+    for (const d of plan.rows) {
+      db.prepare('DELETE FROM dependency WHERE mod_slug = ? AND requires_slug = ? AND kind = ?').run(
+        d.modSlug,
+        d.target,
+        d.kind
+      )
       db.prepare(
-        'INSERT INTO dependency (mod_id, requires_mod_id, requires_slug, kind, version_range, alt_group, note) VALUES (?,?,?,?,?,?,?)'
-      ).run(modId, idOf(d.target), d.target, d.kind, d.versionRange ?? null, d.altGroup ?? null, d.note ?? null)
+        'INSERT INTO dependency (mod_id, mod_slug, requires_mod_id, requires_slug, kind, version_range, alt_group, note) VALUES (?,?,?,?,?,?,?,?)'
+      ).run(idOf(d.modSlug), d.modSlug, idOf(d.target), d.target, d.kind, d.versionRange, d.altGroup, d.note)
     }
   })()
+
+  const rejected = plan.rejected.map((r) => `${r.seed.mod} ${r.seed.kind} ${r.seed.target}: ${r.reason}`)
+  for (const line of rejected) console.warn(`[deps] seed row not loaded - ${line}`)
+  return { loaded: plan.rows.length, rejected }
 }
 
 /**

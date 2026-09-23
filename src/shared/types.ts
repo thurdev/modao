@@ -308,13 +308,25 @@ export interface DependencyNode {
   modId: number | null
   slug: string
   title: string
-  kind: 'requires' | 'conflicts' | 'alt'
+  /**
+   * `provides` is a mod shipping a file others may need or may also ship -
+   * VehFuncs and gsx.asi. It was seeded before it was modelled, and an
+   * unmodelled kind fell through to the requires branch, so the provision was
+   * reported as a missing dependency named after the file.
+   */
+  kind: 'requires' | 'conflicts' | 'alt' | 'provides'
   versionRange: string | null
   satisfied: boolean
   /** For 'alt' groups: the alternatives that satisfy the requirement. */
   alternatives?: { slug: string; title: string; satisfied: boolean }[]
   resolution: 'already-installed' | 'will-install' | 'missing' | 'blocking' | 'ok'
   note: string | null
+  /**
+   * The installed mod this edge belongs to. A launch refusal has to name what
+   * needs what, and "SilentPatch is missing" does not say who is missing it.
+   */
+  requiredBy?: string
+  requiredBySlug?: string
 }
 
 export interface InstallPlan {
@@ -360,7 +372,15 @@ export interface ConflictClaimant {
 
 export interface FileConflict {
   relativePath: string
-  kind: 'modloader' | 'physical'
+  /**
+   * 'physical' - both mods wrote the same file on disk, one over the other.
+   * 'modloader' - both files exist and Mod Loader picks one at load time.
+   * 'split-model' - not a duplicated path at all: `<name>.dff` and
+   * `<name>.txd` resolve to DIFFERENT mods, which is what a white or
+   * invisible car or ped is. Same fix, same priority control (see
+   * `@shared/splitModels`).
+   */
+  kind: 'modloader' | 'physical' | 'split-model'
   claimants: ConflictClaimant[]
   winner: ConflictClaimant | null
   binaryNotes: string[]
@@ -443,7 +463,8 @@ export interface HealthCheck {
 
 export interface HealthReport {
   generatedAt: string
-  profileId: number
+  /** null when no profile is active - the game-level checks still ran. */
+  profileId: number | null
   gamePath: string
   checks: HealthCheck[]
   ok: boolean
