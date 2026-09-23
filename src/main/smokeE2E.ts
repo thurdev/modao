@@ -1813,6 +1813,62 @@ export async function runE2E(): Promise<number> {
     check('launch: an unsatisfied hard dependency refuses the launch', false, 'no enabled install to hang a dependency on')
   }
 
+  // --- copilot review: a CLEO range declared by a mod outside the catalogue ---
+  // Task 7's migration made `dependency.mod_id` nullable and added `mod_slug`
+  // on purpose, so an edge for a mod the bundled catalogue has never heard of
+  // still binds the moment that mod is installed - and `resolveDependencies`
+  // reads both. The pre-launch CLEO check joined on `mod_id` ALONE, so a
+  // locally installed plugin's declared floor was dropped and the launch gate
+  // waved through the fatal mismatch it exists to catch.
+  if (depProfileId && depSubject) {
+    const gameRow = activeGame()!
+    const subjectSlug = (
+      getDb()
+        .prepare(
+          `SELECT m.slug s FROM install i
+             JOIN mod_version mv ON mv.id = i.mod_version_id
+             JOIN mod m ON m.id = mv.mod_id
+            WHERE i.id = ?`
+        )
+        .get(depSubject.installId) as { s: string } | undefined
+    )?.s
+    if (subjectSlug) {
+      // A name deliberately absent from KNOWN_CLEO_REQUIREMENTS: the only thing
+      // that can produce a verdict for it is the slug-bound row below.
+      const localPlugin = 'cleo/E2ELocalPlugin.cleo'
+      getDb()
+        .prepare('INSERT INTO install_file (install_id, relative_path, sha256, size) VALUES (?, ?, NULL, 0)')
+        .run(depSubject.installId, localPlugin)
+      getDb()
+        .prepare(
+          `INSERT INTO dependency (mod_id, mod_slug, requires_mod_id, requires_slug, kind, version_range, alt_group, note)
+           VALUES (NULL, ?, NULL, 'cleo', 'requires', '>=4.4', NULL, NULL)`
+        )
+        .run(subjectSlug)
+      const cleoBefore = gameRow.cleoVersion
+      getDb().prepare('UPDATE game_install SET cleo_version = ? WHERE id = ?').run('4.3', gameRow.id)
+      forgetHealthReport()
+      const slugReport = await runHealthCheck(depProfileId)
+      const slugCleo = slugReport.checks.find((c) => c.id === 'cleo')
+      check(
+        'cleo gate: a range declared by slug, for a mod outside the catalogue, still reaches the check',
+        slugCleo?.status === 'fail' && !!slugCleo.items?.some((i) => i.includes('E2ELocalPlugin')),
+        { status: slugCleo?.status, items: slugCleo?.items }
+      )
+      check(
+        'cleo gate: and a report carrying it is not ok, so the launch gate can refuse',
+        slugReport.ok === false,
+        slugReport.checks.map((c) => `${c.id}:${c.status}`)
+      )
+      getDb().prepare("DELETE FROM dependency WHERE mod_slug = ? AND requires_slug = 'cleo'").run(subjectSlug)
+      getDb().prepare('DELETE FROM install_file WHERE install_id = ? AND relative_path = ?').run(depSubject.installId, localPlugin)
+      getDb().prepare('UPDATE game_install SET cleo_version = ? WHERE id = ?').run(cleoBefore, gameRow.id)
+      forgetHealthReport()
+    } else {
+      check('cleo gate: a range declared by slug, for a mod outside the catalogue, still reaches the check', false, 'no slug')
+    }
+  }
+
   // --- a variant swap must never be restorable as a profile switch ------------
   // Every other `restorePreviousState()` in this suite runs with a real
   // profile-switch journal as the newest row, so the right journal gets picked

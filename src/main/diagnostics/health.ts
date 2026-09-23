@@ -328,12 +328,22 @@ export async function runHealthCheck(profileId: number | null): Promise<HealthRe
 function cleoCheck(profileId: number, game: GameInstall): HealthCheck {
   const rows = getDb()
     .prepare(
-      `SELECT f.relative_path p, d.version_range r
+      // The subject is bound BY ID OR BY SLUG, exactly as `resolveDependencies`
+      // binds it. The dependency migration deliberately kept subject-slug rows
+      // for mods the bundled catalogue has never heard of - `mod_id` is
+      // nullable and `mod_slug` carries them - so a locally installed plugin's
+      // declared CLEO range lives on a row with no `mod_id` at all. Joining on
+      // `mod_id` alone dropped it silently, and this check is a launch gate:
+      // the fatal CLEO mismatch it exists to catch went unreported for exactly
+      // the mods that are not in the catalogue.
+      `SELECT DISTINCT f.relative_path p, d.version_range r
          FROM install_file f
          JOIN install i ON i.id = f.install_id
          LEFT JOIN mod_version mv ON mv.id = i.mod_version_id
+         LEFT JOIN mod sm ON sm.id = mv.mod_id
          LEFT JOIN dependency d
-                ON d.mod_id = mv.mod_id AND d.kind = 'requires'
+                ON (d.mod_id = mv.mod_id OR (d.mod_slug IS NOT NULL AND d.mod_slug = sm.slug))
+               AND d.kind = 'requires'
                AND lower(coalesce((SELECT m.slug FROM mod m WHERE m.id = d.requires_mod_id), d.requires_slug, ''))
                    IN ('cleo', 'cleo4', 'cleo-library', 'cleolibrary')
         WHERE i.profile_id = ? AND i.enabled = 1
