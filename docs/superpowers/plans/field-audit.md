@@ -457,3 +457,25 @@ Eight of thirteen are encoded. The `". "` disable is Task 11's. These four remai
 
 Tests: one unit test per rule, in `tests/core.test.ts`, using the existing
 classifier/conflict test style.
+
+## Task 16 — README.md brought up to date (LAST, after the final review)
+
+Runs only after every other task has landed and the final whole-branch review is
+clean. `README.md` predates this branch and no longer describes what the app does.
+
+Bring it up to date against the code as it stands at that point, not against this
+plan's prose. Cover what the audit added and changed:
+- the profile switch as a verified transaction — snapshot, hash check, quarantine
+  instead of deletion, restore-previous-state, and the rule that unmanaged files
+  are never removed;
+- the hard refusal on any write while the game is running;
+- crash diagnosis: image base applied once and only for `gta_sa.exe`, CrashList
+  lookup, modloader.log parsing and per-mod Active/Inert/Mis-installed verdicts;
+- whatever the remaining tasks ship (duplicate-`.asi` detection across junctions,
+  pre-launch blocking checks, outdated-build detection, the dependency graph,
+  variant groups and add-ons, `". "` non-destructive disable, the knowledge layer).
+
+Keep the existing tone, structure and language of the file. State plainly anything
+that is still a stub — in particular that the bundled `CrashList.txt` is an
+excerpt, not the full community list. Do not claim a capability no task shipped.
+No version bump, no changelog invention, no marketing copy.
