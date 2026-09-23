@@ -150,6 +150,18 @@ export function unparsedReadmeWarning(readmes: ReadmeParse[]): PlanWarning | nul
 }
 
 /**
+ * Whether a plan carries the unparsed-readme warning, and therefore may not be
+ * applied until the caller says the user was asked.
+ *
+ * It reads the warning the plan already carries rather than re-deriving the
+ * condition, so the thing the dialog shows and the thing `applyPlan` enforces
+ * can never drift apart.
+ */
+export function needsReadmeAcknowledgement(warnings: PlanWarning[]): boolean {
+  return warnings.some((w) => w.code === 'readme-unparsed')
+}
+
+/**
  * Words that describe a folder without naming one.
  *
  * "Extract the single folder to the ModLoader folder" names nothing: taking

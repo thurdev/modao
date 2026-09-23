@@ -177,8 +177,14 @@ export const api = {
     call<InstallPlan>('install:chooseAddOn', planId, addOnId, enabled),
   setDestination: (planId: string, sourcePath: string, destination: string) =>
     call<InstallPlan>('install:setDestination', planId, sourcePath, destination),
-  applyPlan: (planId: string, profileId: number) =>
-    call<{ installId: number; written: number; backedUp: number }>('install:apply', planId, profileId),
+  /** `acknowledgedUnparsedReadme` answers the readme-unparsed warning; without it the main process refuses. */
+  applyPlan: (planId: string, profileId: number, acknowledgedUnparsedReadme: boolean) =>
+    call<{ installId: number; written: number; backedUp: number }>(
+      'install:apply',
+      planId,
+      profileId,
+      acknowledgedUnparsedReadme
+    ),
   discardPlan: (planId: string) => call<void>('install:discard', planId),
 
   conflicts: (profileId: number) => call<FileConflict[]>('conflicts:list', profileId),

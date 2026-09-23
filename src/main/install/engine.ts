@@ -14,7 +14,7 @@ import { getDb } from '../db'
 import { Paths } from '../util/paths'
 import { exists, sha256File, slugify, walk } from '../util/fsx'
 import { archiveOrDirectory, effectiveRoot } from './archive'
-import { findReadmes, parseReadme, unparsedReadmeWarning } from './readme'
+import { findReadmes, needsReadmeAcknowledgement, parseReadme, unparsedReadmeWarning } from './readme'
 import { classifyTree, type OverlayMatch } from './classify'
 import { providesKey } from '../conflicts'
 import { flattenName, requirementMet } from '@shared/requirements'
@@ -409,6 +409,21 @@ export interface ApplyResult {
   mode: string
 }
 
+export interface ApplyPlanOptions {
+  /**
+   * The user was shown the "this archive's readme could not be parsed" warning
+   * and said to install anyway.
+   *
+   * Required, not optional, and required on the argument itself rather than
+   * defaulted: the spec's rule is that such an archive is never installed
+   * without asking first, and a checkbox in one renderer component is not that
+   * rule - every other caller installed silently. Making the field mandatory
+   * means a new call site has to state an answer instead of inheriting one.
+   */
+  acknowledgedUnparsedReadme: boolean
+  acceptMissingDependencies?: boolean
+}
+
 /**
  * Applies a plan as a single reversible transaction: every file written is
  * recorded, everything displaced is backed up, and nothing is ever deleted.
@@ -416,14 +431,19 @@ export interface ApplyResult {
 export async function applyPlan(
   planId: string,
   profileId: number,
-  onProgress?: (phase: string, current: number, total: number) => void,
-  opts: { acceptMissingDependencies?: boolean } = {}
+  opts: ApplyPlanOptions,
+  onProgress?: (phase: string, current: number, total: number) => void
 ): Promise<ApplyResult> {
   const state = PLANS.get(planId)
   if (!state) throw new Error('This install plan has expired. Start the install again.')
   const plan = state.plan
   const game = state.game
 
+  // Ask first, whoever is calling. The warning is on the plan; without an
+  // explicit acknowledgement the install refuses rather than guessing.
+  if (needsReadmeAcknowledgement(plan.warnings) && !opts.acknowledgedUnparsedReadme) {
+    throw new Error(t('messages.install.readmeUnparsedRefusal'))
+  }
   if (plan.requiresVariantChoice) throw new Error('Choose a variant before installing.')
   // The layout the user accepted is the layout to expect next time an archive
   // of this shape turns up.
