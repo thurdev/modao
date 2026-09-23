@@ -62,7 +62,6 @@ export const library = {
     subMods: 'Sub-mods',
     uninstallTitle: 'Desinstalar {name}?',
     variantGroupLabel: 'Variante',
-    switchVariant: 'Trocar',
     switchingVariant: 'Trocando…',
     variantSwitched: 'Trocado para {label}. Nada foi baixado de novo.'
   },
@@ -122,7 +121,6 @@ export const library = {
     subMods: 'Sub-mods',
     uninstallTitle: 'Uninstall {name}?',
     variantGroupLabel: 'Variant',
-    switchVariant: 'Switch',
     switchingVariant: 'Switching…',
     variantSwitched: 'Switched to {label}. Nothing was re-downloaded.'
   }

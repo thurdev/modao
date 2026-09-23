@@ -8,7 +8,9 @@ import { remateriliseInstall, syncProfileIni } from '../profiles/materialize'
 import { recordEarlyDisable } from '../catalog/rating'
 import { requireActiveGame } from '../game/detect'
 import { exists, sha256File } from '../util/fsx'
-import { findInVariantOption, storeDir } from '../store/contentStore'
+import { dematerialise, listVariantOption, quarantineEdited, storeDir } from '../store/contentStore'
+import { providesKey } from '../conflicts'
+import { Paths } from '../util/paths'
 
 interface Row {
   install_id: number
@@ -206,16 +208,75 @@ export async function setSubModEnabled(installId: number, relativePath: string, 
 }
 
 /**
+ * Maps the incoming option's files onto the destinations the outgoing option
+ * currently occupies.
+ *
+ * The outgoing option's targets and its own snapshot are both on record, so
+ * the prefix the installer put in front of each file can be read back off
+ * them: "modloader/Zone Text" + "zonetext.ini". A file the incoming option
+ * ships at the same relative path lands on the same target; one it ships under
+ * a different name lands under that prefix. Nothing is guessed - an outgoing
+ * target that cannot be traced back to a file, or a layout with more than one
+ * prefix and no exact match, throws rather than switching half the group.
+ */
+function planVariantSwap(
+  outgoingTargets: string[],
+  outgoingFiles: { rel: string }[],
+  incomingFiles: { rel: string; abs: string }[],
+  labels: { from: string; to: string }
+): { abs: string; target: string }[] {
+  if (outgoingTargets.length === 0) throw new Error(`Modão has no record of what "${labels.from}" installed, so it cannot replace it.`)
+  if (incomingFiles.length === 0) throw new Error(`"${labels.to}" has no files in the store, so Modão will not switch to it.`)
+
+  const byRel = new Map<string, string>()
+  const prefixes = new Set<string>()
+  for (const target of outgoingTargets) {
+    const t = target.toLowerCase()
+    const source = outgoingFiles.find((f) => t === f.rel.toLowerCase() || t.endsWith(`/${f.rel.toLowerCase()}`))
+    if (!source) {
+      throw new Error(
+        `Modão cannot tell which part of "${labels.from}" installed ${target}, so it will not guess what replaces it. ` +
+          'Reinstall the mod and pick the option you want.'
+      )
+    }
+    byRel.set(source.rel.toLowerCase(), target)
+    prefixes.add(target.slice(0, target.length - source.rel.length).replace(/\/+$/, ''))
+  }
+
+  const swap: { abs: string; target: string }[] = []
+  const claimed = new Set<string>()
+  for (const f of incomingFiles) {
+    const exact = byRel.get(f.rel.toLowerCase())
+    if (!exact && prefixes.size > 1) {
+      throw new Error(
+        `"${labels.to}" ships ${f.rel}, which "${labels.from}" did not, and this mod spreads that group over more ` +
+          'than one folder - Modão will not guess where it goes. Reinstall the mod and pick the option you want.'
+      )
+    }
+    const prefix = [...prefixes][0] ?? ''
+    const target = exact ?? (prefix ? `${prefix}/${f.rel}` : f.rel)
+    if (claimed.has(target.toLowerCase())) {
+      throw new Error(`"${labels.to}" would put two files at ${target}. Modão will not switch to it.`)
+    }
+    claimed.add(target.toLowerCase())
+    swap.push({ abs: f.abs, target })
+  }
+  return swap
+}
+
+/**
  * Switches an already-installed mutually-exclusive variant to another option,
  * without touching the archive - every option's bytes were snapshotted into
  * the store at install time (`contentStore.ingestVariantOptions`).
  *
- * Matched by basename: the group's current on-disk paths (`targetRelatives`,
- * recorded when the plan was applied) each get their bytes replaced by the
- * file of the same name in the new option's own snapshot. This is exact for
- * the cases the field audit found - Proper Shaders' quality ladder and a
- * "(configurações)" config folder both hold one identically-named file per
- * option - and best-effort for a group whose options do not share file names.
+ * The outgoing option's files are REMOVED - from the store, from the game
+ * folder and from this install's records - before the incoming option's are
+ * written. Exactly one option is live afterwards, which is the whole point of
+ * the group: a switch that left the old file beside the new one would be the
+ * "nine presets installed at once" bug wearing a different hat. It is also
+ * all-or-nothing. Everything is resolved before anything is moved, and a file
+ * that cannot be placed throws with the group untouched, rather than reporting
+ * success over a half-swapped install.
  */
 export async function switchVariant(installId: number, groupId: string, optionId: string): Promise<void> {
   const db = getDb()
@@ -228,35 +289,93 @@ export async function switchVariant(installId: number, groupId: string, optionId
   const groups = parseVariantGroups(row.variant_groups_json)
   const group = groups.find((g) => g.id === groupId)
   if (!group) throw new Error('That variant group is not recorded on this install.')
-  if (!group.options.some((o) => o.id === optionId)) throw new Error('That option does not belong to this group.')
+  const incoming = group.options.find((o) => o.id === optionId)
+  if (!incoming) throw new Error('That option does not belong to this group.')
   if (group.chosenOptionId === optionId) return
+  const outgoingLabel = group.options.find((o) => o.id === group.chosenOptionId)?.label ?? group.chosenOptionId
 
-  const storeRoot = storeDir(row.store_key)
-  const fileStmt = db.prepare('UPDATE install_file SET sha256 = ?, size = ? WHERE install_id = ? AND relative_path = ?')
-  const provStmt = db.prepare('UPDATE provides SET sha256 = ?, size = ? WHERE install_id = ? AND relative_path = ?')
-  for (const targetRelative of group.targetRelatives) {
-    const basename = path.basename(targetRelative)
-    const source = await findInVariantOption(row.store_key, optionId, basename)
-    if (!source) continue // this option never shipped a file of that name; the old one is left as-is
-    const dest = path.join(storeRoot, targetRelative)
+  // --- resolve everything first; nothing below this block may fail ----------
+  const storeKey = row.store_key
+  const swap = planVariantSwap(
+    group.targetRelatives,
+    await listVariantOption(storeKey, group.chosenOptionId),
+    await listVariantOption(storeKey, optionId),
+    { from: outgoingLabel, to: incoming.label }
+  )
+
+  const storeRoot = storeDir(storeKey)
+  const outgoingRows = db
+    .prepare('SELECT relative_path, backup_path, sha256, destination_class FROM install_file WHERE install_id = ?')
+    .all(installId) as { relative_path: string; backup_path: string | null; sha256: string | null; destination_class: string }[]
+  const mine = new Set(group.targetRelatives.map((t) => t.toLowerCase()))
+  const leaving = outgoingRows.filter((r) => mine.has(r.relative_path.toLowerCase()))
+  // Every file in the group shares one destination class - it is one folder in
+  // one place - so the outgoing rows say what the incoming ones are.
+  const destination = (leaving[0]?.destination_class ?? 'modloader-folder') as DestinationClass
+
+  // --- from here on it is a swap, and it completes ---------------------------
+  const profile = db.prepare('SELECT is_active FROM profile WHERE id = ?').get(row.profile_id) as { is_active: number } | undefined
+  if (profile?.is_active) {
+    const game = requireActiveGame()
+    // A file the user edited by hand is theirs, whichever way it leaves.
+    await quarantineEdited(
+      game.path,
+      leaving.map((r) => ({ relativePath: r.relative_path, sha256: r.sha256 })),
+      path.join(Paths.quarantine(), 'variant', String(installId))
+    )
+    // The store copy goes first, so removing a path that reaches the store
+    // through a junction cannot take the incoming bytes with it.
+    for (const r of leaving) await fsp.rm(path.join(storeRoot, r.relative_path), { force: true })
+    await dematerialise(
+      game,
+      leaving.map((r) => r.relative_path),
+      leaving.filter((r) => r.backup_path).map((r) => ({ relativePath: r.relative_path, backupPath: r.backup_path! })),
+      // Every path here is one this install wrote and this switch is replacing;
+      // anything the user edited went to quarantine three lines up.
+      { mayRemoveFile: () => true }
+    )
+  } else {
+    for (const r of leaving) await fsp.rm(path.join(storeRoot, r.relative_path), { force: true })
+  }
+
+  const written: { target: string; sha256: string; size: number }[] = []
+  for (const s of swap) {
+    const dest = path.join(storeRoot, s.target)
     await fsp.mkdir(path.dirname(dest), { recursive: true })
-    await fsp.copyFile(source, dest)
-    const sha = await sha256File(dest)
-    const size = (await fsp.stat(dest)).size
-    fileStmt.run(sha, size, installId, targetRelative)
-    provStmt.run(sha, size, installId, targetRelative)
+    await fsp.copyFile(s.abs, dest)
+    written.push({ target: s.target, sha256: await sha256File(dest), size: (await fsp.stat(dest)).size })
   }
 
   group.chosenOptionId = optionId
-  const chosenLabel = group.options.find((o) => o.id === optionId)?.label ?? optionId
-  db.prepare('UPDATE install SET variant_groups_json = ?, variant_choice = ? WHERE id = ?').run(
-    JSON.stringify(groups),
-    chosenLabel,
-    installId
-  )
+  group.targetRelatives = written.map((w) => w.target)
+  // Every group's choice, not just this one: an install with two groups used to
+  // lose the other one's label the moment either was switched.
+  const variantChoice = groups.map((g) => g.chosenOptionId).join(' + ') || null
 
-  // The store now holds the new bytes; re-link (or re-copy) so the game
-  // folder picks them up too. Junctioned mod folders already see the change
-  // for free since they point straight at the store.
+  db.transaction(() => {
+    const dropFile = db.prepare('DELETE FROM install_file WHERE install_id = ? AND relative_path = ?')
+    const dropProvides = db.prepare('DELETE FROM provides WHERE install_id = ? AND relative_path = ?')
+    for (const r of leaving) {
+      dropFile.run(installId, r.relative_path)
+      dropProvides.run(installId, providesKey(r.relative_path))
+    }
+    const addFile = db.prepare(
+      `INSERT INTO install_file (install_id, relative_path, sha256, size, was_overwrite, backup_path, destination_class)
+       VALUES (?,?,?,?,0,NULL,?)`
+    )
+    const addProvides = db.prepare('INSERT OR REPLACE INTO provides (install_id, relative_path, sha256, size) VALUES (?,?,?,?)')
+    for (const w of written) {
+      addFile.run(installId, w.target, w.sha256, w.size, destination)
+      addProvides.run(installId, providesKey(w.target), w.sha256, w.size)
+    }
+    db.prepare('UPDATE install SET variant_groups_json = ?, variant_choice = ? WHERE id = ?').run(
+      JSON.stringify(groups),
+      variantChoice,
+      installId
+    )
+  })()
+
+  // The store now holds the new bytes; re-link (or re-copy) so the game folder
+  // picks them up too. A junctioned mod folder sees the change for free.
   await remateriliseInstall(installId)
 }

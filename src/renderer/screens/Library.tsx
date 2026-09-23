@@ -474,6 +474,7 @@ function DetailModal(props: { mod: InstalledMod; onClose: () => void; onChanged:
                   setBusy(`variant:${g.id}`)
                   try {
                     await api.setVariant(m.installId, g.id, o.id)
+                    pushToast('success', t('library.variantSwitched', { label: o.label }))
                     props.onChanged()
                   } catch (e) {
                     pushToast('error', (e as Error).message)

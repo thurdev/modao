@@ -85,15 +85,20 @@ export async function ingestVariantOptions(
   }
 }
 
-/** Finds a file by basename anywhere under a variant option's stored snapshot. */
-export async function findInVariantOption(key: string, optionId: string, basename: string): Promise<string | null> {
+/**
+ * Everything one variant option shipped, as it shipped it: each file's path
+ * relative to the option's own folder, plus where its bytes are in the store.
+ *
+ * A switch maps these paths onto the destinations the outgoing option occupies,
+ * which is what lets a group whose options ship DIFFERENTLY NAMED files switch
+ * exactly. Basename matching cannot: it silently leaves the outgoing file on
+ * disk beside the incoming one, which is the "all nine presets at once" bug
+ * this whole item exists to remove.
+ */
+export async function listVariantOption(key: string, optionId: string): Promise<{ rel: string; abs: string }[]> {
   const dir = variantOptionDir(key, optionId)
-  if (!exists(dir)) return null
-  const needle = basename.toLowerCase()
-  for (const f of await walk(dir)) {
-    if (path.basename(f.rel).toLowerCase() === needle) return f.abs
-  }
-  return null
+  if (!exists(dir)) return []
+  return (await walk(dir)).map((f) => ({ rel: f.rel.replace(/\\/g, '/'), abs: f.abs }))
 }
 
 export async function storeSize(key: string): Promise<number> {

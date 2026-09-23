@@ -262,6 +262,73 @@ export async function runE2E(): Promise<number> {
     diff(beforeShaders, await snapshotDir(game))
   )
 
+  // --- field audit 09, the dangerous half: a group found by a NAME RULE whose
+  // options ship DIFFERENTLY NAMED files. Proper Shaders is safe by
+  // construction - every preset holds one ProperShaders.ini, so replacing the
+  // file of that name is the whole switch. Here the outgoing file has no
+  // counterpart in the incoming option, and a switch that only wrote the new
+  // one would leave both on disk: two options live at once, which is the bug
+  // item 09 exists to remove, wearing a different hat.
+  const beforeHud = await snapshotDir(game)
+  const hudSource = path.join(tmp, 'HUD Pack')
+  await fsp.mkdir(path.join(hudSource, 'HUD 2K', 'models'), { recursive: true })
+  await fsp.mkdir(path.join(hudSource, 'HUD 4K', 'models'), { recursive: true })
+  await fsp.writeFile(path.join(hudSource, 'HUD 2K', 'models', 'hud2k.txd'), 'two kay')
+  await fsp.writeFile(path.join(hudSource, 'HUD 4K', 'models', 'hud4k.txd'), 'four kay')
+
+  const hudPlan = await createPlan({
+    archivePath: hudSource,
+    profileId: adopted.profileId,
+    modId: null,
+    modVersionId: null,
+    title: 'HUD Pack',
+    author: 'Unknown',
+    sourceUrl: null
+  })
+  const hudGroupPlan = hudPlan.variants[0]
+  check(
+    'field audit 09: differently-named options are still one exclusive group',
+    hudGroupPlan?.options.length === 2,
+    hudPlan.variants
+  )
+  const hud2k = hudGroupPlan.options.find((o) => o.label.includes('2K'))!
+  const hud4k = hudGroupPlan.options.find((o) => o.label.includes('4K'))!
+  const hudApplied = await applyPlan((await choose(hudPlan.planId, hudGroupPlan.id, hud2k.id)).planId, adopted.profileId)
+  const hudOld = path.join(game, 'modloader', 'HUD 2K', 'models', 'hud2k.txd')
+  const hudNew = path.join(game, 'modloader', 'HUD 2K', 'models', 'hud4k.txd')
+  check('field audit 09: the 2K option installed', fs.existsSync(hudOld), hudApplied)
+
+  await fsp.rm(hudSource, { recursive: true, force: true })
+  const hudMod = listInstalled(adopted.profileId).find((m) => m.installId === hudApplied.installId)!
+  await switchVariant(hudMod.installId, hudMod.variantGroups[0].id, hud4k.id)
+  check(
+    'field audit 09: switching to a differently-named option removes the file the old one installed',
+    !fs.existsSync(hudOld),
+    (await walk(path.join(game, 'modloader', 'HUD 2K'))).map((f) => f.rel)
+  )
+  check(
+    'field audit 09: and writes the new one in its place',
+    fs.existsSync(hudNew) && (await fsp.readFile(hudNew, 'utf8')) === 'four kay'
+  )
+  const hudAfter = listInstalled(adopted.profileId).find((m) => m.installId === hudApplied.installId)!
+  check(
+    'field audit 09: the install tracks exactly the files of the option now live',
+    hudAfter.fileCount === 1 && hudAfter.variantGroups[0]?.chosenOptionId === hud4k.id,
+    { fileCount: hudAfter.fileCount, group: hudAfter.variantGroups[0] }
+  )
+
+  const hudUninstalled = await uninstall(hudMod.installId)
+  check(
+    'field audit 09: uninstalling a differently-named switch quarantines nothing either',
+    hudUninstalled.quarantined.length === 0,
+    hudUninstalled
+  )
+  check(
+    'field audit 09: and the game folder comes back byte-for-byte',
+    sameTree(beforeHud, await snapshotDir(game)),
+    diff(beforeHud, await snapshotDir(game))
+  )
+
   // --- profiles and saves -----------------------------------------------------
   await fsp.writeFile(path.join(saves, 'GTASAsf1.b'), 'adopted profile save')
 
