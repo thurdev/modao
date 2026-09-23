@@ -46,6 +46,18 @@ export function forgetHealthReport(): void {
  * `switchVariant` rewrites only `variant_choice` on a row already counted - and
  * stream.ini, the file the whole gate exists for, which the offered fix
  * rewrites. Everything slower-moving is left to the age backstop.
+ *
+ * KNOWN LIMITATION, pre-existing and deliberately shipped: an IN-PLACE EDIT of
+ * a file inside an install does not invalidate anything here. Nothing in this
+ * fingerprint reads the content of an installed file - doing that means hashing
+ * or stat-ing every file of every install on the path to the Play button, which
+ * is the cost this cache exists to avoid. So for up to REPORT_MAX_AGE_MS after
+ * a report is taken, a .cleo, .asi or .ini rewritten by an external editor (or
+ * by the user in Notepad) is judged by the report taken before the edit. It
+ * needs a tool outside Modão to reach - every mutation the app itself performs
+ * either moves a row above or rewrites stream.ini - and it expires on its own
+ * within two minutes. Anything that changes this trade-off should widen what is
+ * fingerprinted rather than lengthen the TTL.
  */
 function fingerprint(profileId: number | null, gamePath: string): string {
   const parts: string[] = []
