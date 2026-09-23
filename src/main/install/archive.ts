@@ -46,12 +46,17 @@ function run(args: string[], onLine?: (line: string) => void, signal?: AbortSign
 export interface ExtractOptions {
   onProgress?: (percent: number, file: string) => void
   signal?: AbortSignal
+  /** MixMods ships some archives locked with the site's own name. */
+  password?: string
 }
+
+/** The password MixMods puts in its file names, for the archives that carry one. */
+export const MIXMODS_PASSWORD = 'mixmods.com.br'
 
 export async function extractArchive(archive: string, dest: string, opts: ExtractOptions = {}): Promise<string> {
   await fsp.mkdir(dest, { recursive: true })
   await run(
-    ['x', archive, `-o${dest}`, '-y', '-bsp1', '-bb1'],
+    ['x', archive, `-o${dest}`, '-y', '-bsp1', '-bb1', `-p${opts.password ?? ''}`],
     (line) => {
       const pm = /(\d+)%/.exec(line)
       const fm = /^- (.+)$/.exec(line)
